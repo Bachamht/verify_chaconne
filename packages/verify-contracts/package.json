@@ -1,0 +1,20 @@
+{
+  "name": "@chaconne/verify-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chaconne Verify Guard \u2014 X Layer constrained execution contract (Foundry)",
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test",
+    "test:gas": "forge test --gas-report",
+    "abi:export": "forge build --silent && node scripts/exportAbi.mjs",
+    "deploy:xlayer": "forge script script/Deploy.s.sol:Deploy --rpc-url ${XLAYER_RPC_URL:-https://rpc.xlayer.tech} --broadcast -vvv",
+    "configure:xlayer": "forge script script/Configure.s.sol:Configure --rpc-url ${XLAYER_RPC_URL:-https://rpc.xlayer.tech} --broadcast -vvv",
+    "deploy:planguard:xlayer": "forge script script/DeployPlanGuard.s.sol:DeployPlanGuard --rpc-url ${XLAYER_RPC_URL:-https://rpc.xlayer.tech} --broadcast -vvv",
+    "configure:planguard:xlayer": "forge script script/ConfigurePlanGuard.s.sol:ConfigurePlanGuard --rpc-url ${XLAYER_RPC_URL:-https://rpc.xlayer.tech} --broadcast -vvv"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.4.0",
+    "forge-std": "github:foundry-rs/forge-std#v1.9.7"
+  }
+}

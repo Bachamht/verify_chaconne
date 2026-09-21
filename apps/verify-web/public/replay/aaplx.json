@@ -1,0 +1,23 @@
+{
+  "mode": "REPLAY",
+  "label": "REPLAY · constructed sample",
+  "assetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+  "displaySymbol": "AAPLx",
+  "before": {
+    "observedAt": null,
+    "observedLabel": { "en": "launch value (constructed)", "zh": "发行初值（构造）" },
+    "ratio": "1.000000",
+    "stockPriceUsd": "333.62",
+    "quote": { "amountInRaw": "5000000", "expectedOutRaw": "14987111000000000", "executableUsdPerShare": "333.62" },
+    "unitNote": { "en": "1 token = 1.000000 shares (launch value, constructed)", "zh": "1 代币 = 1.000000 股（发行初值，构造）" }
+  },
+  "after": {
+    "observedAt": "2026-09-21T02:20:41Z",
+    "observedLabel": null,
+    "ratio": "1.003269",
+    "stockPriceUsd": "333.62",
+    "quote": { "amountInRaw": "5000000", "expectedOutRaw": "14983578260014962", "executableUsdPerShare": "333.62" },
+    "unitNote": { "en": "1 token = 1.003269 shares (2026-09-21: on-chain getCurrentMultiplier, OKX ratio and xStocks API agree)", "zh": "1 代币 = 1.003269 股（2026-09-21：链上 getCurrentMultiplier、OKX ratio、xStocks API 三源一致）" }
+  },
+  "reasonCodes": ["UNIT_CHANGED"]
+}

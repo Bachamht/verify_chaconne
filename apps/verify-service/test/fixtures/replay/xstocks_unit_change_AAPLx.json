@@ -1,0 +1,39 @@
+{
+  "schema": "replay-unit-change/1",
+  "mode": "REPLAY",
+  "constructed": true,
+  "note": "Before-state is CONSTRUCTED (launch multiplier 1.0 per docs.xstocks.fi/developers/multipliers.md). After-state values are real LIVE observations on 2026-09-21 (on-chain getCurrentMultiplier() via OKLink-verified BackedAutoFeeTokenImplementation; OKX RWA tokenToAssetRatio; xStocks public API /token/AAPLx/multiplier?network=XLayer). No real corporate-action date is asserted; xStocks corporate-actions endpoints require an API key (probe 2026-09-21: 'Unauthenticated').",
+  "asset": {
+    "assetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+    "displaySymbol": "AAPLx",
+    "underlyingId": "us-equity:AAPL"
+  },
+  "before": {
+    "observedAt": "CONSTRUCTED",
+    "onchainMultiplier": "1.000000000000000000",
+    "okxRatio": "1",
+    "xstocksApiMultiplier": 1.0
+  },
+  "after": {
+    "observedAt": "2026-09-21T08:40:00.000Z",
+    "onchainMultiplier": "1.003269012539818700",
+    "onchainMultiplierRaw": "1003269012539818700",
+    "okxRatio": "1.003269",
+    "xstocksApiMultiplier": 1.0032690125398187,
+    "okxQuoteLatestMultiplier": "1.003269012539818700"
+  },
+  "sources": [
+    {
+      "source": "X Layer RPC eth_call getCurrentMultiplier() on 0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "verifiedAt": "2026-09-21T08:40:00.000Z"
+    },
+    {
+      "source": "OKX GET /api/v6/dex/market/rwa/tokens (issuer=36, category=47) tokenToAssetRatio",
+      "verifiedAt": "2026-09-20T22:17:41.359Z"
+    },
+    {
+      "source": "xStocks GET https://api.xstocks.fi/api/v1/token/AAPLx/multiplier?network=XLayer",
+      "verifiedAt": "2026-09-21T08:35:00.000Z"
+    }
+  ]
+}

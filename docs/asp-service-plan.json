@@ -1,0 +1,38 @@
+{
+  "note": "Second OKX AI ASP service (A2MCP) — Plan & Monitor. Submission deferred until ASP #13803 review completes (D-083). No secrets in this file.",
+  "agentId": "13803",
+  "service": {
+    "type": "A2MCP",
+    "name": "Plan & Monitor — tokenized stock trade tasks",
+    "fee": "0",
+    "feeNote": "Free during listing review; priced later via x402 on the network stated in GET /v1/products.",
+    "endpoints": {
+      "plan": "https://verify.chaconne.xyz/a2mcp/plan",
+      "monitorRegister": "https://verify.chaconne.xyz/a2mcp/monitor",
+      "monitorStatus": "https://verify.chaconne.xyz/a2mcp/monitor/{mandateId}"
+    },
+    "description": "Turns a goal (assets, budget, limits, deadline) into a finite set of checked candidates, then keeps the intent alive: it re-verifies continuously and issues a 60-second step certificate only while conditions hold. The user signs one TradeMandate; every step is executed by the user's own wallet or agent through the PlanGuard contract on X Layer. The service never holds funds and never sends transactions.",
+    "whatYouGet": [
+      "Up to 12 deterministic candidates per goal: amount ladder x funding asset x three policies, each with completion ratio, adverse price impact, blocking reason codes and an explicit next step.",
+      "A recommended candidate only when it is eligible under the chosen policy; shrinking the amount is never counted as completing the original goal.",
+      "Continuous monitoring with a plain-language delta on every evaluation: what changed, what it affects, what happens next.",
+      "Step certificates (EIP-712) bound to the mandate, the evidence hash and the exact router calldata; expired certificates are void, never reused.",
+      "A signed evidence bundle that a third party can verify offline (hashes, signatures, rule re-run) and online (receipt vs. event)."
+    ],
+    "whatNoResultMeans": "A plan with no feasible candidate, a window that stays in WAIT, or a rejected policy check is a delivered service: it tells you which limit or condition blocks the goal. Nothing is executed and no execution fee is charged.",
+    "inputs": {
+      "plan": ["ownerAddress", "inputAssetKeys[]", "outputAssetKey or legs[]", "amountInRaw", "policyId", "maxSlippageBps", "maxPriceImpactBps?", "maxReferenceDeviationBps?", "side?", "deadline?", "ladderBps?"],
+      "monitor": ["signed TradeMandate (EIP-712, domain ChaconneVerifyPlanGuard v1)", "signature", "inputAssetKey", "legs[]", "policyId", "policyVersion", "limits", "sku"]
+    },
+    "policies": ["STRICT_LIVE", "REFERENCE_CONTEXT", "QUOTE_ONLY"],
+    "chain": "X Layer mainnet (196)",
+    "contracts": { "guard": "0x02834e26bbd851eedb888bafba666bc0af72770c", "planGuard": "see docs/deployments.json contracts.planGuard" },
+    "limits": [
+      "One issuer (xStocks), EOA wallets only (no EIP-1271).",
+      "Reference price source is Finnhub; a close taken from the 16:00 ET last trade is labelled close_last_tick until the next day confirms it.",
+      "The service holds exactly one key: the attestation signer. It cannot move user funds.",
+      "Admin can pause, rotate the signer epoch and edit allowlists - a stated trust boundary, not trustlessness."
+    ],
+    "disclaimer": "Verification of data comparability and execution constraints only. Not investment advice; no guarantee of fill or profit."
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "@chaconne/verify-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "start": "tsx --env-file-if-exists=.env src/index.ts",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "probe": "tsx --env-file-if-exists=.env --env-file-if-exists=../../.env scripts/probe.ts",
+    "fork:execute": "tsx --env-file-if-exists=.env scripts/forkExecute.ts",
+    "mainnet:execute": "tsx --env-file-if-exists=../../.qa-live/demo-wallet.env scripts/mainnetExecute.ts",
+    "x402:buy": "tsx --env-file-if-exists=../../.qa-live/demo-wallet.env scripts/x402Buy.ts",
+    "ops": "tsx --env-file-if-exists=.env scripts/ops.ts",
+    "probe:v5": "tsx --env-file-if-exists=.env scripts/probeV5.ts",
+    "fork:mandate": "tsx --env-file-if-exists=.env scripts/forkMandate.ts",
+    "rotate:owner": "tsx --env-file-if-exists=../../packages/verify-contracts/.env scripts/rotateOwner.ts",
+    "plan:live": "tsx --env-file-if-exists=.env scripts/planLive.ts",
+    "abi:drift": "tsx scripts/abiDrift.mjs",
+    "e2e:mandate": "tsx --env-file-if-exists=.env --env-file-if-exists=../../.qa-live/demo-wallet.env scripts/e2eMandate.ts",
+    "market:probe": "tsx --env-file-if-exists=.env scripts/marketProbe.ts"
+  },
+  "dependencies": {
+    "@chaconne/core": "workspace:*",
+    "@chaconne/db": "workspace:*",
+    "@okxweb3/x402-core": "0.1.0",
+    "@okxweb3/x402-evm": "0.2.1",
+    "@okxweb3/x402-express": "0.1.1",
+    "drizzle-orm": "^0.45.2",
+    "express": "^5.2.1",
+    "tsx": "^4.22.5",
+    "viem": "^2.54.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.4",
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
+  }
+}

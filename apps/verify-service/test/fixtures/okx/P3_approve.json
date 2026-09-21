@@ -1,0 +1,16 @@
+{
+ "call": {
+  "status": 200,
+  "code": "0",
+  "msg": "",
+  "endpoint": "/api/v6/dex/aggregator/approve-transaction?chainIndex=196&tokenContractAddress=0x4ae46a509f6b1d9056937ba4500cb143933d2dc8&approveAmount=1000000"
+ },
+ "data": [
+  {
+   "data": "0x095ea7b30000000000000000000000008b773d83bc66be128c60e07e17c8901f7a64f00000000000000000000000000000000000000000000000000000000000000f4240",
+   "dexContractAddress": "0x8b773D83bc66Be128c60e07E17C8901f7a64F000",
+   "gasLimit": "70000",
+   "gasPrice": "27000001"
+  }
+ ]
+}

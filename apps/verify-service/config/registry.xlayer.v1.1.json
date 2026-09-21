@@ -1,0 +1,246 @@
+{
+  "version": "xlayer-registry/1.1.0",
+  "chainId": 196,
+  "entries": [
+    {
+      "assetKey": "eip155:196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+      "chainId": 196,
+      "tokenAddress": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+      "tokenDecimals": 6,
+      "issuerId": "paxos",
+      "displaySymbol": "USDG",
+      "underlyingId": "fiat:USD",
+      "tokenForm": "plain",
+      "registryVersion": "xlayer-registry/1.1.0",
+      "role": "stable_input",
+      "sharesPerToken": null,
+      "unitSource": null,
+      "usdPegSource": "okx_quote_from_token_unit_price+paxos_usdg",
+      "provenance": [
+        {
+          "source": "OKX Payments supported-networks doc (USDG on X Layer)",
+          "url": "https://web3.okx.com/onchainos/dev-docs/payments/supported-networks",
+          "verifiedAt": "2026-09-20T11:40:00.000Z"
+        },
+        {
+          "source": "X Layer RPC eth_call: symbol=USDG, name=Global Dollar, decimals=6 (EIP-1967 proxy)",
+          "verifiedAt": "2026-09-20T11:31:00.000Z"
+        },
+        {
+          "source": "OKX DEX quote accepted as fromToken with USD unit price",
+          "verifiedAt": "2026-09-20T11:31:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "chainId": 196,
+      "tokenAddress": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenDecimals": 6,
+      "issuerId": "circle",
+      "displaySymbol": "USDC",
+      "underlyingId": "fiat:USD",
+      "tokenForm": "plain",
+      "registryVersion": "xlayer-registry/1.1.0",
+      "role": "stable_input",
+      "sharesPerToken": null,
+      "unitSource": null,
+      "usdPegSource": "okx_quote_from_token_unit_price+circle_usdc",
+      "provenance": [
+        {
+          "source": "OKX Payments supported-networks doc (USDC on X Layer)",
+          "url": "https://web3.okx.com/onchainos/dev-docs/payments/supported-networks",
+          "verifiedAt": "2026-09-20T11:40:00.000Z"
+        },
+        {
+          "source": "X Layer RPC eth_call: symbol=USDC, name=USDC, decimals=6",
+          "verifiedAt": "2026-09-20T11:31:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x779ded0c9e1022225f8e0630b35a9b54be713736",
+      "chainId": 196,
+      "tokenAddress": "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+      "tokenDecimals": 6,
+      "issuerId": "tether-usdt0",
+      "displaySymbol": "USD₮0",
+      "underlyingId": "fiat:USD",
+      "tokenForm": "plain",
+      "registryVersion": "xlayer-registry/1.1.0",
+      "role": "stable_input",
+      "sharesPerToken": null,
+      "unitSource": null,
+      "usdPegSource": "okx_quote_from_token_unit_price+x402_default_asset",
+      "provenance": [
+        {
+          "source": "OKX Payments supported-networks doc (USD₮0 on X Layer)",
+          "url": "https://web3.okx.com/onchainos/dev-docs/payments/supported-networks",
+          "verifiedAt": "2026-09-20T11:40:00.000Z"
+        },
+        {
+          "source": "@okxweb3/x402-evm 0.2.1 DEFAULT_STABLECOINS eip155:196",
+          "verifiedAt": "2026-09-20T10:20:00.000Z"
+        },
+        {
+          "source": "X Layer RPC eth_call: symbol=USD₮0, decimals=6",
+          "verifiedAt": "2026-09-20T11:31:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "chainId": 196,
+      "tokenAddress": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "AAPLx",
+      "underlyingId": "us-equity:AAPL",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.1.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks docs: EVM xStocks are rebasing ERC-20; balanceOf() returns the equity-adjusted balance, so 1 transferable unit = 1 share of economic exposure at the current multiplier (OKX RWA tokenToAssetRatio 1.003269 on 2026-09-20 is the cumulative multiplier, already reflected in balances). Corporate-action re-check required before each execution.",
+        "verifiedAt": "2026-09-20T11:45:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA token list API (issuer=36 xStocks, chainIndex=196): tokenSymbol AAPLx, stockCode AAPL",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-20T11:31:36.000Z"
+        },
+        {
+          "source": "OKX token page X Layer AAPLx",
+          "url": "https://web3.okx.com/token/x-layer/0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+          "verifiedAt": "2026-09-20T11:45:00.000Z"
+        },
+        {
+          "source": "X Layer RPC eth_call: symbol=AAPLx, name=Apple xStock, decimals=18; EIP-1967 proxy impl 0x65c40d624af3b18c109fbf87b7deff34cdc5f19b",
+          "verifiedAt": "2026-09-20T11:45:00.000Z"
+        },
+        {
+          "source": "OKLink verified source (chainShortName=xlayer): BackedTokenProxy → BackedAutoFeeTokenImplementation 0x65c40d624af3b18c109fbf87b7deff34cdc5f19b, getCurrentMultiplier() 1e18; on-chain value read 2026-09-21 matches OKX RWA tokenToAssetRatio (6dp)",
+          "url": "https://www.oklink.com/api/v5/explorer/contract/verify-contract-info?chainShortName=xlayer&contractAddress=0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+          "verifiedAt": "2026-09-21T08:40:00.000Z"
+        },
+        {
+          "source": "xStocks public API GET /api/v1/token?limit=… lists XLayer deployment address for this symbol (network enum 'XLayer')",
+          "url": "https://api.xstocks.fi/api/v1/token",
+          "verifiedAt": "2026-09-21T08:35:00.000Z"
+        },
+        {
+          "source": "OKX DEX sell-direction swap probe (stock→USDG, receiver=Guard, selector 0x0c307f76 dagSwapTo) decoded and checked",
+          "verifiedAt": "2026-09-20T22:17:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "chainId": 196,
+      "tokenAddress": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "NVDAx",
+      "underlyingId": "us-equity:NVDA",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.1.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "Same rebasing semantics as AAPLx (xStocks EVM); OKX tokenToAssetRatio 1.001701 on 2026-09-20.",
+        "verifiedAt": "2026-09-20T11:45:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA token list API (issuer=36, chainIndex=196): NVDAx / NVDA",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-20T11:31:36.000Z"
+        },
+        {
+          "source": "X Layer RPC eth_call: symbol=NVDAx, name=NVIDIA xStock, decimals=18",
+          "verifiedAt": "2026-09-20T11:31:36.000Z"
+        },
+        {
+          "source": "OKLink verified source (chainShortName=xlayer): BackedTokenProxy → BackedAutoFeeTokenImplementation 0x65c40d624af3b18c109fbf87b7deff34cdc5f19b, getCurrentMultiplier() 1e18; on-chain value read 2026-09-21 matches OKX RWA tokenToAssetRatio (6dp)",
+          "url": "https://www.oklink.com/api/v5/explorer/contract/verify-contract-info?chainShortName=xlayer&contractAddress=0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+          "verifiedAt": "2026-09-21T08:40:00.000Z"
+        },
+        {
+          "source": "xStocks public API GET /api/v1/token?limit=… lists XLayer deployment address for this symbol (network enum 'XLayer')",
+          "url": "https://api.xstocks.fi/api/v1/token",
+          "verifiedAt": "2026-09-21T08:35:00.000Z"
+        },
+        {
+          "source": "OKX DEX sell-direction swap probe (stock→USDG, receiver=Guard, selector 0x0c307f76 dagSwapTo) decoded and checked",
+          "verifiedAt": "2026-09-20T22:17:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48",
+      "chainId": 196,
+      "tokenAddress": "0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "SPYx",
+      "underlyingId": "us-equity:SPY",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.1.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "Same rebasing semantics as AAPLx (xStocks EVM); OKX tokenToAssetRatio 1.005714 on 2026-09-20. decimals to be confirmed on-chain before executionAllowed.",
+        "verifiedAt": "2026-09-20T11:45:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA token list API (issuer=36, chainIndex=196): SPYx / SPY",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-20T11:31:36.000Z"
+        },
+        {
+          "source": "OKLink verified source (chainShortName=xlayer): BackedTokenProxy → BackedAutoFeeTokenImplementation 0x65c40d624af3b18c109fbf87b7deff34cdc5f19b, getCurrentMultiplier() 1e18; on-chain value read 2026-09-21 matches OKX RWA tokenToAssetRatio (6dp)",
+          "url": "https://www.oklink.com/api/v5/explorer/contract/verify-contract-info?chainShortName=xlayer&contractAddress=0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48",
+          "verifiedAt": "2026-09-21T08:40:00.000Z"
+        },
+        {
+          "source": "xStocks public API GET /api/v1/token?limit=… lists XLayer deployment address for this symbol (network enum 'XLayer')",
+          "url": "https://api.xstocks.fi/api/v1/token",
+          "verifiedAt": "2026-09-21T08:35:00.000Z"
+        }
+      ],
+      "executionAllowed": false,
+      "executionSides": []
+    }
+  ],
+  "notes": "v1.1.0: additive field executionSides (stock entries: sell allowed = stock→stable via PlanGuard v2). Hash differs from v1.0.0 only by version string (registryHash() ignores executionSides). v1 Guard keeps registry.xlayer.json (1.0.0)."
+}

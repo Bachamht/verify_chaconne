@@ -1,0 +1,263 @@
+{
+  "updatedAt": "2026-09-21",
+  "roles": {
+    "attestationSigner": {
+      "address": "0x757fdc93fd8db505529680b2c6c5364263f5e615",
+      "keyLocation": "apps/verify-service/.env ATTESTATION_PRIVATE_KEY",
+      "funds": "none; signs VerificationCertificate only"
+    },
+    "merchantRecipient": {
+      "address": "0x5e7914a9fb0243d22d863107b994d58f6043e1bc",
+      "keyLocation": "OKX Agentic Wallet (TEE, Google login)",
+      "funds": "receives x402 settlements"
+    },
+    "guardDeployer": {
+      "address": "0xf023c55709015357ffba79270c2e403dfcccd152",
+      "keyLocation": "packages/verify-contracts/.env DEPLOYER_PRIVATE_KEY (delete after deploy)",
+      "funds": "X Layer mainnet OKB for deployment gas"
+    },
+    "demoUser": {
+      "address": "0xbacb138e0e9e1444bae9b401c4615378c57c0381",
+      "keyLocation": ".qa-live/demo-wallet.env DEMO_USER_PRIVATE_KEY (client-side demo wallet, not a service key)",
+      "funds": "X Layer mainnet OKB + stablecoin <= $20"
+    }
+  },
+  "networks": {
+    "xlayerMainnet": {
+      "chainId": 196,
+      "rpc": [
+        "https://rpc.xlayer.tech",
+        "https://xlayerrpc.okx.com"
+      ],
+      "explorer": "https://www.okx.com/web3/explorer/xlayer"
+    },
+    "xlayerTestnet": {
+      "chainId": 1952,
+      "rpc": [
+        "https://testrpc.xlayer.tech/terigon",
+        "https://xlayertestrpc.okx.com/terigon"
+      ],
+      "explorer": "https://www.okx.com/web3/explorer/xlayer-test"
+    }
+  },
+  "contracts": {
+    "guard": {
+      "address": "0x02834e26bbd851eedb888bafba666bc0af72770c",
+      "chainId": 196,
+      "deployTx": "0x92c08aa2e3bd0967863e7b65ac96614368a936c26c0055fce01e68f396e894d9",
+      "deployBlock": 71140213,
+      "owner": "0xf023c55709015357ffba79270c2e403dfcccd152",
+      "attestationSigner": "0x757fdc93fd8db505529680b2c6c5364263f5e615",
+      "signerEpoch": 1,
+      "maxCertificateTtl": 120,
+      "compiler": "solc 0.8.28, via-IR, optimizer 800, evm cancun",
+      "source": "packages/verify-contracts/src/ChaconneVerifyGuard.sol",
+      "allowlist": "packages/verify-contracts/config/xlayer.json (applied 2026-09-20, broadcast/Configure.s.sol/196/run-latest.json); 2026-09-21 追加：policies v1.1.0 ×3（tx 0x49adc11b…, 0x4b4b5aeb…, 0x9e600334…）+ registry v1.1.0 0x8ea0c841…（tx 0xb08ccc83…），读回 true",
+      "explorer": "https://www.okx.com/web3/explorer/xlayer/address/0x02834e26bbd851eedb888bafba666bc0af72770c",
+      "sourcify": "exact_match (creation + runtime), matchId 51370154, https://sourcify.dev/server/v2/contract/196/0x02834E26bbd851EEdB888bAfbA666bc0AF72770C"
+    },
+    "planGuard": {
+      "address": "0xE8517f296211F4b9175796bAAB47979FB14Fd2F0",
+      "chainId": 196,
+      "deployTx": "0x5986d7476cebb0d55c09cc733b422412f14fc416a0b961e13e7f06d0d2f14ffd",
+      "deployBlock": 71203420,
+      "owner": "0xf023c55709015357ffba79270c2e403dfcccd152",
+      "attestationSigner": "0x757fdc93fd8db505529680b2c6c5364263f5e615",
+      "signerEpoch": 1,
+      "maxCertificateTtl": 120,
+      "compiler": "solc 0.8.28, via-IR, optimizer 800, evm cancun",
+      "source": "packages/verify-contracts/src/ChaconneVerifyPlanGuard.sol (+ GuardCore.sol)",
+      "eip712": {
+        "name": "ChaconneVerifyPlanGuard",
+        "version": "1"
+      },
+      "allowlist": "packages/verify-contracts/config/xlayer.planguard.json (applied 2026-09-21, broadcast/ConfigurePlanGuard.s.sol/196/run-latest.json; policies v1.0.0+v1.1.0 ×6, registries v1.0.0+v1.1.0, 5 tokens, route+2 selectors, AAPLx/NVDAx inputShortfallTolerance 1e6 wei — all read back true)",
+      "configureTxCount": 18,
+      "explorer": "https://www.okx.com/web3/explorer/xlayer/address/0xE8517f296211F4b9175796bAAB47979FB14Fd2F0",
+      "sourcify": "exact_match (creation + runtime), matchId 51410234, verified 2026-09-21T06:35:55Z, https://sourcify.dev/server/v2/contract/196/0xE8517f296211F4b9175796bAAB47979FB14Fd2F0",
+      "forkEvidence": {
+        "block": 71187079,
+        "steps": [
+          {
+            "buy": "5 USDG → 0.01493 AAPLx",
+            "gas": 640843
+          },
+          {
+            "buy": "5 USDG → 0.02238 NVDAx",
+            "gas": 548343
+          },
+          {
+            "sell": "0.01493 AAPLx → 4.994981 USDG",
+            "gas": 634977
+          }
+        ],
+        "executor": "third-party address, balance delta 0"
+      },
+      "e2eEvidence": "真实服务+分叉：规划→一次授权→两步买入→COMPLETED→证据包 24/24 离线校验（probes/*_E2E_mandate.json）",
+      "status": "deployed + configured + verified (2026-09-21)"
+    }
+  },
+  "services": {
+    "verify": {
+      "url": "https://verify.chaconne.xyz",
+      "a2mcpEndpoint": "https://verify.chaconne.xyz/a2mcp/verify",
+      "status": "live (redeployed 2026-09-21T07:03Z: v5 @ 42932fa, planGuard 0xE851…d2F0, registry 1.1.0, A2MCP 200 contract)",
+      "port": 8790,
+      "healthz": "https://verify.chaconne.xyz/healthz"
+    },
+    "verifyWeb": {
+      "url": "https://verify.chaconne.xyz/",
+      "port": 3110,
+      "status": "live (v5 pages, redeployed 2026-09-21)"
+    }
+  },
+  "toolchain": {
+    "node": "22.22.2",
+    "pnpm": "11.9.0",
+    "foundry": "1.7.1",
+    "@okxweb3/x402-express": "0.1.1",
+    "@okxweb3/x402-core": "0.1.0",
+    "@okxweb3/x402-evm": "0.2.1",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "onchainos": "4.6.2",
+    "@okxweb3/a2a-node": "0.2.15"
+  },
+  "route": {
+    "router": "0x7c5bee2a8091c3ef39072f64f18fac913060aeaf",
+    "spender": "0x8b773d83bc66be128c60e07e17c8901f7a64f000",
+    "selectors": [
+      "0xf2c42696",
+      "0x0c307f76"
+    ],
+    "source": "docs/the address-approval log (internal) #7-#9b"
+  },
+  "registry": {
+    "file": "apps/verify-service/config/registry.xlayer.json",
+    "version": "xlayer-registry/1.0.0",
+    "hash": "0xb6d23cf356b27cf528529efc5af256f27c61d62d98fa91f55d9e32955a1d9fb6",
+    "v1_1": {
+      "file": "apps/verify-service/config/registry.xlayer.v1.1.json",
+      "version": "xlayer-registry/1.1.0",
+      "hash": "0x8ea0c841891c81598b5eb7c55e4965d40ebc5ee5943bc0a3844289d1fbcc799a",
+      "change": "executionSides on stock entries (sell allowed for AAPLx/NVDAx)"
+    }
+  },
+  "forkEvidence": {
+    "mode": "FORK",
+    "forkBlock": "71135641",
+    "chainId": 196,
+    "note": "real OKX route calldata executed through Guard on anvil fork; 5 USDG -> 0.01499 AAPLx"
+  },
+  "okxAi": {
+    "aspAgentId": "13803",
+    "name": "Chaconne Verify",
+    "createdTx": "0xa92f820d1064ec0a5a616e00603bd991cf489bf218a264dadbfb722701554a2b",
+    "chainIndex": 196,
+    "service": {
+      "type": "A2MCP",
+      "name": "StockProof Trade Verification",
+      "fee": "0",
+      "endpoint": "https://verify.chaconne.xyz/a2mcp/verify",
+      "id": 40806,
+      "serviceId": "f3ffac46-8f54-48ca-94d5-f32810983f42"
+    },
+    "listing": "RESUBMITTED 2026-09-21T07:04Z after fix (CV-D10): platform shows \"Listing under review\" (approvalStatus 2). First review REJECTED 2026-09-21 (bare probe got HTTP 400). Public re-check via OKX CLI before resubmit: bare probe → input_required; AAPLx amount=100 → delivered (LIVE)."
+  },
+  "mainnetEvidence": {
+    "mode": "LIVE",
+    "chainId": 196,
+    "date": "2026-09-20T13:12Z",
+    "policy": "REFERENCE_CONTEXT",
+    "approveTx": "0x493636775649744afae42dfa2caef005e93a8ceeb142ab6ecce5be1d984e4a05",
+    "executeTx": "0x333a6e41742f046d478e6a074f80d148d678e5baf8ab7f0c0736041c20245449",
+    "block": 71140882,
+    "gasUsed": 551123,
+    "event": {
+      "amountIn": "5000000",
+      "spent": "5000000",
+      "received": "14983578260014962",
+      "refunded": "0",
+      "intentDigest": "0xa2ce063a098593e3d7f4708535de32e9ade3acb0ddfca8d33060daf1553159c6",
+      "evidenceHash": "0x5c8f0f5591139e3c6ee9dae9bc3fe8e8f046b187c8db847c7d89acc069dd1765"
+    },
+    "postState": {
+      "guardUsdg": "0",
+      "guardAaplxDustWei": "1",
+      "demoUsdgDelta": "-5000000",
+      "demoAaplxDelta": "+14983578260014961"
+    },
+    "serverVerified": "receipt verifier CONFIRMED at 413 confirmations (required 6)",
+    "note": "script-driven fill (scripts/mainnetExecute.ts) against local LIVE service; browser-wallet fill for video pending (B4)"
+  },
+  "receiptVerifier": {
+    "source": "apps/verify-service/src/execution/receipts.ts",
+    "confirmations": 6,
+    "unknownAfterMs": 600000,
+    "intervalMs": 10000,
+    "terminal": [
+      "CONFIRMED",
+      "REVERTED"
+    ]
+  },
+  "x402Evidence": {
+    "mode": "LIVE",
+    "network": "eip155:1952",
+    "date": "2026-09-20T21:13Z",
+    "facilitator": "OKX (syncSettle=true)",
+    "asset": "USD₮0 0x9e29b3aada05bf2d2c827af80bd28dc0b9b4fb0c",
+    "priceUsd": "0.01",
+    "payer": "0xbacb138e0e9e1444bae9b401c4615378c57c0381",
+    "merchant": "0x5e7914a9fb0243d22d863107b994d58f6043e1bc",
+    "settlements": [
+      {
+        "path": "/a2mcp/verify",
+        "policy": "QUOTE_ONLY",
+        "tx": "0x9a136580e53328b0feb6026d0535055566e88c551872d12ce4e6c5457e4bc0cf",
+        "paymentId": "16321213"
+      },
+      {
+        "path": "/v1/jobs/:id/report",
+        "policy": "REFERENCE_CONTEXT",
+        "tx": "0x1426fea9eafd6de99025cd9ec1e2dc5932674854c64d6bff465f0dc8cfbe6b8d",
+        "paymentId": "16321221"
+      }
+    ],
+    "failedBeforeFunding": [
+      "0x06dd8144335e231329fe094d1be2fff1d248ef4f61fe2bb93e3416b818484618",
+      "0x1cd289de72a9eeab9bdca4115be6be0a531bc33d16c893727dad4387e19eca65"
+    ]
+  },
+  "policies": {
+    "v1_0_0": "packages/verify-contracts/config/xlayer.json",
+    "v1_1_0": {
+      "STRICT_LIVE": "0x544c81492e9e352862df3bd3101510fe3b8ed2f2948e4fa49fb521b6b79f9859",
+      "REFERENCE_CONTEXT": "0xaa36358277924589142b26b0d077e1ca7f3e864f20ba65d22d5098d8330e84ba",
+      "QUOTE_ONLY": "0x32b19b0d03387b2056603455d7581f1a018030c2f4bb853a54be90ec180dc857"
+    }
+  },
+  "mainnetEvidence2": {
+    "mode": "LIVE",
+    "chainId": 196,
+    "date": "2026-09-21T07:2xZ",
+    "via": "deployed verify-service (v5) + scripts/mainnetExecute.ts on server, operator-approved",
+    "policy": "REFERENCE_CONTEXT v1.1.0 (close_last_tick, deviation -36 bps)",
+    "jobId": "job_56379f0a6b14af72999f5079",
+    "executeTx": "0x2f59caa2b6f8591a5245150ff6ae3c3752b9acc57f27d785793b8cf43f394d78",
+    "block": 71206523,
+    "gasUsed": 516920,
+    "event": {
+      "amountIn": "5000000",
+      "spent": "5000000",
+      "received": "14929447506450266",
+      "refunded": "0"
+    },
+    "serverVerified": "receipt verifier SUBMITTED→CONFIRMED automatically at 07:26:05Z",
+    "publicUrl": "https://verify.chaconne.xyz/jobs/job_56379f0a6b14af72999f5079"
+  },
+  "reviewerEvidence": {
+    "source": "server nginx access.log + verify-service a2mcp request log",
+    "client": "Java-http-client/17.0.8.1 from 8.212.100-101.x (Alibaba Cloud HK)",
+    "before_fix": "2026-09-20 13:17:43/45/47Z three POST /a2mcp/verify → 400 (with params, rejected by strict input layer)",
+    "after_fix": "2026-09-21 07:04:58Z POST fields [ownerAddress, outputAssetKey, amount] → 200 delivered:eligible in 577 ms"
+  }
+}

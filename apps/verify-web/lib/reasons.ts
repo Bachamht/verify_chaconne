@@ -1,0 +1,35 @@
+/** 原因码 → 人话（zh/en）。工程字段留给开发者详情。 */
+import type { Locale } from "./i18n";
+
+const R: Record<string, { en: string; zh: string }> = {
+  ASSET_UNSUPPORTED: { en: "Asset is not in the verified registry (chain + contract).", zh: "资产不在已核验登记表内（链+合约）。" },
+  REGISTRY_MISMATCH: { en: "Registry data does not match the request or the chain.", zh: "登记数据与请求或链上不一致。" },
+  SOURCE_TIME_MISSING: { en: "Reference source did not provide a publish time — cannot claim it is live.", zh: "参考源没有给出发布时间 — 不能称为实时。" },
+  SOURCE_TIME_FUTURE: { en: "A source timestamp is in the future beyond tolerance.", zh: "源时间超前本地时钟超出容忍。" },
+  REFERENCE_MISSING: { en: "No stock reference price available.", zh: "没有可用的股票参考价。" },
+  REFERENCE_STALE: { en: "Stock reference is older than the policy allows.", zh: "股票参考价比策略允许的更旧。" },
+  REFERENCE_PROVISIONAL: { en: "Only a provisional / unofficial close is available — not accepted as an official close.", zh: "只有临时/非正式收盘 — 不作为正式收盘接受。" },
+  REFERENCE_DEVIATION_EXCEEDED: { en: "Executable price deviates from the reference beyond your limit.", zh: "可执行单价相对参考价的偏差超过你的上限。" },
+  MARKET_OUTSIDE_REGULAR: { en: "US market is outside regular hours — STRICT_LIVE refuses (this is correct, not a failure).", zh: "美股不在常规时段 — STRICT_LIVE 拒绝（这是正确结果，不是故障）。" },
+  CLOSE_SESSION_MISMATCH: { en: "The close on file is not the most recent completed trading day.", zh: "收盘记录不是最近一个已完成交易日。" },
+  SOURCE_CONFLICT: { en: "Two sources disagree beyond tolerance.", zh: "两个来源冲突超过容忍。" },
+  TOKEN_UNIT_UNVERIFIED: { en: "Token-to-share conversion is not verified.", zh: "代币与股数换算未核验。" },
+  USD_CONVERSION_UNKNOWN: { en: "Stablecoin USD price unavailable — not assumed to be 1.", zh: "稳定币美元价不可得 — 不默认为 1。" },
+  QUOTE_UNAVAILABLE: { en: "No executable route/quote for this amount.", zh: "该金额没有可成交路由/报价。" },
+  QUOTE_TOO_OLD: { en: "Quote is older than allowed — re-verify.", zh: "报价过旧 — 请再核验。" },
+  PRICE_IMPACT_UNKNOWN: { en: "Price impact unknown — not treated as zero.", zh: "价格冲击未知 — 不当作 0。" },
+  PRICE_IMPACT_EXCEEDED: { en: "Price impact exceeds your limit.", zh: "价格冲击超过你的上限。" },
+  ROUTE_UNSUPPORTED: { en: "Route is not in the verified set for Guard execution.", zh: "路由不在 Guard 已验证范围。" },
+  MIN_OUT_INVALID: { en: "Minimum output rounds to zero.", zh: "最小到账量为 0。" },
+  AMOUNT_OUT_OF_RANGE: { en: "Amount out of range.", zh: "金额越界。" },
+  POLICY_PARAM_OUT_OF_RANGE: { en: "A policy parameter is out of range.", zh: "策略参数越界。" },
+  COMPARISON_NOT_REQUESTED: { en: "QUOTE_ONLY: stock reference comparison not performed by design.", zh: "QUOTE_ONLY：按设计不做股票参考比较。" },
+  CLOSE_CROSS_VERIFIED: { en: "Close cross-verified by two sources.", zh: "收盘价经两源交叉核验。" },
+  UNIT_CHANGED: { en: "The token's unit multiplier changed during the monitoring window; the plan must be recomputed.", zh: "监测窗口内代币单位乘数发生变化，需要重新规划。" },
+  CLOSE_UNCONFIRMED: { en: "Close taken from the 16:00 ET last trade; not yet confirmed by the next session's previous close.", zh: "收盘价取自 16:00 ET 最后一笔成交，尚未经次日前收确认。" },
+  STEP_AWAITING_CONFIRMATION: { en: "This step is already submitted; the next step waits for its on-chain confirmation.", zh: "本步已提交，下一步要等它链上确认后才发出。" },
+};
+
+export function reasonText(code: string, locale: Locale): string {
+  return R[code]?.[locale] ?? code;
+}

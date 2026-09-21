@@ -1,0 +1,18 @@
+.probes/
+node_modules/
+.next/
+dist/
+.turbo/
+coverage/
+*.tsbuildinfo
+out/
+cache/
+broadcast/
+.pgdata*/
+*.log
+.DS_Store
+
+# secrets never enter this repo; only *.env.example (names + comments) is tracked
+.env
+.env.*
+!.env.example

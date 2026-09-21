@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #8b5cf6;
+  --color-ok: #22c55e;
+  --color-warn: #f59e0b;
+  --color-bad: #f04e5e;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+body {
+  @apply bg-neutral-950 text-neutral-100 antialiased;
+}
+/* 投屏模式：大字 */
+html[data-demo="1"] body {
+  font-size: 1.25rem;
+}
+html[data-demo="1"] .demo-hide {
+  display: none;
+}
+.card {
+  @apply rounded-xl border border-neutral-800 bg-neutral-900/60 p-5;
+}
+.btn {
+  @apply inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40;
+}
+.btn-ghost {
+  @apply inline-flex items-center justify-center rounded-lg border border-neutral-700 px-4 py-2 font-medium text-neutral-200 transition hover:border-neutral-500 disabled:opacity-40;
+}
+.field {
+  @apply w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 outline-none focus:border-brand;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

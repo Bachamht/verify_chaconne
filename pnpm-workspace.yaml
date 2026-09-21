@@ -1,0 +1,19 @@
+packages:
+  - apps/*
+  - packages/*
+# build scripts allowed: esbuild (tsx/vitest), sharp (next/image)
+allowBuilds:
+  # relay-kit-ui 传递依赖（FIX-073）：fontawesome postinstall 为提示性脚本，无需执行
+  '@fortawesome/fontawesome-common-types': false
+  '@fortawesome/fontawesome-svg-core': false
+  '@fortawesome/free-solid-svg-icons': false
+  '@reown/appkit': false
+  bigint-buffer: false
+  bufferutil: false
+  esbuild: true
+  keccak: false
+  sharp: true
+  utf-8-validate: false
+minimumReleaseAgeExclude:
+  - '@electric-sql/pglite@0.5.4'
+  - tsx@4.22.5

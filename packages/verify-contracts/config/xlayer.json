@@ -1,0 +1,30 @@
+{
+  "_comment": "运营者预批准 B1（docs/devday-2026/the address-approval log (internal) #1-#9）。guard 在部署后填写。policies = core 三策略 v1.0.0 定义哈希；registries = config/registry.xlayer.json 的 registryHash。",
+  "guard": "0x02834E26bbd851EEdB888bAfbA666bc0AF72770C",
+  "policies": [
+    "0x81c56d2d456b5acfb9f3d8acfca19d112ee162c58f5d4ee7f39b86bb6f15291d",
+    "0x174d0b9210b48a69ddba5ea8f1fc13b96f680b128f2a5c0fface0ac943973f78",
+    "0xefd39a8cfd949074c41ee6b9c0b7a3d585a966a64ed970fd060bda7fcd6bec34"
+  ],
+  "registries": [
+    "0xb6d23cf356b27cf528529efc5af256f27c61d62d98fa91f55d9e32955a1d9fb6"
+  ],
+  "tokens": [
+    "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+    "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+    "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+    "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+    "0xc845b2894dbddd03858fd2d643b4ef725fe0849d"
+  ],
+  "routeCount": 1,
+  "routes": [
+    {
+      "router": "0x7c5bee2a8091c3ef39072f64f18fac913060aeaf",
+      "spender": "0x8b773d83bc66be128c60e07e17c8901f7a64f000",
+      "selectors": [
+        "0xf2c42696",
+        "0x0c307f76"
+      ]
+    }
+  ]
+}

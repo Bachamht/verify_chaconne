@@ -1,0 +1,30 @@
+{
+  "name": "@chaconne/verify-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Chaconne Verify MCP server — thin tool wrapper over verify-service; optional user-side agent-wallet mode (CV-D08)",
+  "bin": {
+    "chaconne-verify-mcp": "./bin/chaconne-verify-mcp.mjs",
+    "verify-bundle": "./bin/verify-bundle.mjs"
+  },
+  "scripts": {
+    "start": "tsx --env-file-if-exists=.env src/stdio.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "verify-bundle": "tsx src/verifyBundleCli.ts"
+  },
+  "dependencies": {
+    "@chaconne/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "tsx": "^4.22.5",
+    "viem": "^2.54.1",
+    "zod": "^4.4.3",
+    "@chaconne/verify-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
+  }
+}

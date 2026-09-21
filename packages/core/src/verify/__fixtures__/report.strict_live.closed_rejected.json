@@ -1,0 +1,229 @@
+{
+  "evidence": [
+    {
+      "evidenceId": "ev_quote_001",
+      "provider": "okx-dex",
+      "endpoint": "aggregator/quote",
+      "requestFingerprint": "0x20cf48fe91b63cdd64a0a4b4692c2646a4ddf7321fb6a85dd0b729574a4acf07",
+      "time": {
+        "requestedAt": "2026-09-20T01:59:54.800Z",
+        "receivedAt": "2026-09-20T01:59:55.000Z",
+        "sourcePublishedAt": null,
+        "sourceTimeKind": "not_provided"
+      },
+      "block": null,
+      "rawHash": "0x2c9ea4073f19f2f518a7bde7f9d3ff68c563d0c186e60d8319cdabbea6fcd0a2",
+      "parserVersion": "okx-quote/1",
+      "mode": "FIXTURE",
+      "payload": {
+        "kind": "okx_quote",
+        "chainId": 196,
+        "fromToken": "0x1111111111111111111111111111111111111111",
+        "toToken": "0x2222222222222222222222222222222222222222",
+        "amountInRaw": "100000000",
+        "expectedOutRaw": "400000000000000000",
+        "priceImpactPercentRaw": "-0.12",
+        "adverseImpactBps": 12,
+        "routeSummary": [
+          "fixture-amm"
+        ],
+        "routeSupported": true
+      }
+    },
+    {
+      "evidenceId": "ev_close_002",
+      "provider": "chaconne-ref-closes",
+      "endpoint": "ref_closes",
+      "requestFingerprint": "0x4fda9b38c8ecc34526bd9b8e688b126e3647229383eaa0d113f1b6bb016f9384",
+      "time": {
+        "requestedAt": "2026-09-20T01:59:56.800Z",
+        "receivedAt": "2026-09-20T01:59:57.000Z",
+        "sourcePublishedAt": "2026-09-18T19:59:58.000Z",
+        "sourceTimeKind": "published"
+      },
+      "block": null,
+      "rawHash": "0x37be2fb6eb283f2da85c5e4700546ea6f78e2185b42e5cdf816e517d492ff1e3",
+      "parserVersion": "ref-close/1",
+      "mode": "FIXTURE",
+      "payload": {
+        "kind": "ref_close",
+        "underlyingId": "us-equity:FAKE",
+        "closeUsd": "250",
+        "tradingDate": "2026-09-18",
+        "closeSource": "pyth"
+      }
+    },
+    {
+      "evidenceId": "ev_rwa_003",
+      "provider": "okx-market",
+      "endpoint": "dex/market/rwa/tokens",
+      "requestFingerprint": "0xd076414d38aa37cea4ff60583870f80034f38c04d1c9da1f8fcf4833d52c1415",
+      "time": {
+        "requestedAt": "2026-09-20T01:59:53.800Z",
+        "receivedAt": "2026-09-20T01:59:54.000Z",
+        "sourcePublishedAt": null,
+        "sourceTimeKind": "not_provided"
+      },
+      "block": null,
+      "rawHash": "0x590c56df65fd646f12bdd170ff60a394d02084f4b6ca919fc425a1964fbf9d3d",
+      "parserVersion": "okx-rwa/1",
+      "mode": "FIXTURE",
+      "payload": {
+        "kind": "okx_rwa_token",
+        "chainId": 196,
+        "tokenAddress": "0x2222222222222222222222222222222222222222",
+        "issuer": "fixture-stock-issuer",
+        "priceUsd": "250.3",
+        "stockPriceUsd": "250.05"
+      }
+    },
+    {
+      "evidenceId": "ev_stable_004",
+      "provider": "fixture-peg",
+      "endpoint": "peg",
+      "requestFingerprint": "0x3d06bbf3344e7ea32709e6370e93a08e0a74f6640e8076d3ccb9b9bc873af206",
+      "time": {
+        "requestedAt": "2026-09-20T01:59:39.800Z",
+        "receivedAt": "2026-09-20T01:59:40.000Z",
+        "sourcePublishedAt": null,
+        "sourceTimeKind": "not_provided"
+      },
+      "block": null,
+      "rawHash": "0x28ac494fd703863a55593d69cdcc30cfdacde6e7ead24b1c0c15a636e2c6d6d0",
+      "parserVersion": "peg/1",
+      "mode": "FIXTURE",
+      "payload": {
+        "kind": "stablecoin_usd",
+        "tokenAddress": "0x1111111111111111111111111111111111111111",
+        "chainId": 196,
+        "usdPerToken": "1",
+        "method": "fixture-attestation"
+      }
+    },
+    {
+      "evidenceId": "ev_meta_005",
+      "provider": "xlayer-rpc",
+      "endpoint": "eth_call:decimals",
+      "requestFingerprint": "0x85b87b95a629b56deef8b9232b43d2bcdfc4c9d8233010584a586baeb86dff2a",
+      "time": {
+        "requestedAt": "2026-09-20T01:58:59.800Z",
+        "receivedAt": "2026-09-20T01:59:00.000Z",
+        "sourcePublishedAt": null,
+        "sourceTimeKind": "block"
+      },
+      "block": {
+        "chainId": 196,
+        "blockNumber": "1",
+        "blockHash": null,
+        "blockTimestamp": null
+      },
+      "rawHash": "0x7f10a8fd770ac6df6b622fe568422e2e3feb41075cebf76d00dcb23c9196d945",
+      "parserVersion": "erc20-meta/1",
+      "mode": "FIXTURE",
+      "payload": {
+        "kind": "token_meta",
+        "chainId": 196,
+        "tokenAddress": "0x2222222222222222222222222222222222222222",
+        "decimals": 18,
+        "symbol": "FAKEx",
+        "multiplier": null
+      }
+    }
+  ],
+  "report": {
+    "schemaVersion": "1",
+    "jobId": "job_fixture_live_closed",
+    "reportVersion": 1,
+    "requestHash": "0xe5648c919a5bd822068f33b70ed7104b379e6fda3b931413436c7e67e06947f0",
+    "policyDefinitionHash": "0x81c56d2d456b5acfb9f3d8acfca19d112ee162c58f5d4ee7f39b86bb6f15291d",
+    "effectivePolicyHash": "0xf2cd67d737a41f5395d6084c1b3b734f11eddbd5c411cc2ef3200167606bc775",
+    "registryHash": "0xfa11b5544df245c969185db4798c3c7d0b783238abc1f82ad648b8810a0009c4",
+    "evaluatedAt": "2026-09-20T02:00:00.000Z",
+    "verdict": "rejected",
+    "executionEligible": false,
+    "comparisonStatus": "unverified",
+    "marketSession": "CLOSED",
+    "reasons": [
+      {
+        "code": "MARKET_OUTSIDE_REGULAR",
+        "severity": "block",
+        "evidenceIds": [],
+        "detail": {
+          "session": "CLOSED",
+          "nyDate": "2026-09-19"
+        }
+      },
+      {
+        "code": "REFERENCE_MISSING",
+        "severity": "block",
+        "evidenceIds": [],
+        "detail": {
+          "underlyingId": "us-equity:FAKE"
+        }
+      }
+    ],
+    "normalizedQuote": {
+      "amountInRaw": "100000000",
+      "expectedOutRaw": "400000000000000000",
+      "minOutRaw": "398000000000000000",
+      "priceImpactPercent": "-0.12",
+      "adverseImpactBps": 12,
+      "requestedAt": "2026-09-20T01:59:54.800Z",
+      "receivedAt": "2026-09-20T01:59:55.000Z",
+      "sourcePublishedAt": null,
+      "executableUsdPerShare": null
+    },
+    "reference": null,
+    "evidenceIds": [
+      "ev_close_002",
+      "ev_meta_005",
+      "ev_quote_001",
+      "ev_rwa_003",
+      "ev_stable_004"
+    ],
+    "evidenceHash": "0x7198ea0deac31ffb8c8e61b23d9195ee1971077e8deb3ab87bc6e7a1ee544533",
+    "policySnapshot": {
+      "definition": {
+        "policyId": "STRICT_LIVE",
+        "version": "1.0.0",
+        "engineVersion": "verify-engine/1.0.0",
+        "mode": "exactIn",
+        "quoteMaxAgeSeconds": 30,
+        "liveReferenceMaxAgeSeconds": 90,
+        "closeMaxSessionsSinceClose": 0,
+        "closeCrossVerifyToleranceBps": 50,
+        "certificateTtlSeconds": 60,
+        "futureSkewToleranceSeconds": 5,
+        "requireImpactKnown": true,
+        "referenceRequirement": "live",
+        "sessionRequirement": "regular",
+        "paramRanges": {
+          "maxSlippageBps": {
+            "min": 1,
+            "max": 300,
+            "default": 50,
+            "required": true
+          },
+          "maxPriceImpactBps": {
+            "min": 1,
+            "max": 1000,
+            "default": 100,
+            "required": true
+          },
+          "maxReferenceDeviationBps": {
+            "min": 1,
+            "max": 2000,
+            "default": 300,
+            "required": true
+          }
+        }
+      },
+      "params": {
+        "maxSlippageBps": 50,
+        "maxPriceImpactBps": 100,
+        "maxReferenceDeviationBps": 300
+      }
+    }
+  },
+  "reportHash": "0xfc6da49ac4054e837551ad7a11e5321d4af3fa7b1ebcda29f02ac05492b39e1f"
+}

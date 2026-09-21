@@ -1,0 +1,209 @@
+{
+  "schemaVersion": "1",
+  "planId": "plan_1",
+  "goalHash": "0x6fc2bdaf33c94f13613eaf0c8006d1e51b2e8edc8f0b2d477dfc815801e0c48f",
+  "evaluatedAt": "2026-09-18T15:00:00.000Z",
+  "registryHash": "0xfa11b5544df245c969185db4798c3c7d0b783238abc1f82ad648b8810a0009c4",
+  "policyDefinitionHash": "0x81c56d2d456b5acfb9f3d8acfca19d112ee162c58f5d4ee7f39b86bb6f15291d",
+  "effectivePolicyHash": "0xf2cd67d737a41f5395d6084c1b3b734f11eddbd5c411cc2ef3200167606bc775",
+  "candidates": [
+    {
+      "candidateId": "cand_0_10000_7086dba0",
+      "legIndex": 0,
+      "inputAssetKey": "eip155:196:0x1111111111111111111111111111111111111111",
+      "amountInRaw": "100000000",
+      "expectedOutRaw": "400000000000000000",
+      "adverseImpactBps": 12,
+      "feeEstimate": {
+        "gasNative": null,
+        "routeFeeBps": null
+      },
+      "completionBps": 10000,
+      "verdictByPolicy": {
+        "STRICT_LIVE": {
+          "verdict": "eligible",
+          "blocking": []
+        },
+        "REFERENCE_CONTEXT": {
+          "verdict": "limited",
+          "blocking": [
+            "REFERENCE_MISSING"
+          ]
+        },
+        "QUOTE_ONLY": {
+          "verdict": "eligible",
+          "blocking": []
+        }
+      },
+      "chosenPolicyVerdict": "eligible",
+      "reasons": [],
+      "evidenceIds": [
+        "ev_meta_005",
+        "ev_pyth_002",
+        "ev_q_cand_0_10000_7086dba0",
+        "ev_rwa_003",
+        "ev_stable_004"
+      ],
+      "nextStep": "READY"
+    },
+    {
+      "candidateId": "cand_0_7500_7086dba0",
+      "legIndex": 0,
+      "inputAssetKey": "eip155:196:0x1111111111111111111111111111111111111111",
+      "amountInRaw": "75000000",
+      "expectedOutRaw": "300000000000000000",
+      "adverseImpactBps": 12,
+      "feeEstimate": {
+        "gasNative": null,
+        "routeFeeBps": null
+      },
+      "completionBps": 7500,
+      "verdictByPolicy": {
+        "STRICT_LIVE": {
+          "verdict": "eligible",
+          "blocking": []
+        },
+        "REFERENCE_CONTEXT": {
+          "verdict": "limited",
+          "blocking": [
+            "REFERENCE_MISSING"
+          ]
+        },
+        "QUOTE_ONLY": {
+          "verdict": "eligible",
+          "blocking": []
+        }
+      },
+      "chosenPolicyVerdict": "eligible",
+      "reasons": [],
+      "evidenceIds": [
+        "ev_meta_005",
+        "ev_pyth_002",
+        "ev_q_cand_0_7500_7086dba0",
+        "ev_rwa_003",
+        "ev_stable_004"
+      ],
+      "nextStep": "ACCEPT_PARTIAL"
+    },
+    {
+      "candidateId": "cand_0_5000_7086dba0",
+      "legIndex": 0,
+      "inputAssetKey": "eip155:196:0x1111111111111111111111111111111111111111",
+      "amountInRaw": "50000000",
+      "expectedOutRaw": "200000000000000000",
+      "adverseImpactBps": 12,
+      "feeEstimate": {
+        "gasNative": null,
+        "routeFeeBps": null
+      },
+      "completionBps": 5000,
+      "verdictByPolicy": {
+        "STRICT_LIVE": {
+          "verdict": "eligible",
+          "blocking": []
+        },
+        "REFERENCE_CONTEXT": {
+          "verdict": "limited",
+          "blocking": [
+            "REFERENCE_MISSING"
+          ]
+        },
+        "QUOTE_ONLY": {
+          "verdict": "eligible",
+          "blocking": []
+        }
+      },
+      "chosenPolicyVerdict": "eligible",
+      "reasons": [],
+      "evidenceIds": [
+        "ev_meta_005",
+        "ev_pyth_002",
+        "ev_q_cand_0_5000_7086dba0",
+        "ev_rwa_003",
+        "ev_stable_004"
+      ],
+      "nextStep": "ACCEPT_PARTIAL"
+    },
+    {
+      "candidateId": "cand_0_2500_7086dba0",
+      "legIndex": 0,
+      "inputAssetKey": "eip155:196:0x1111111111111111111111111111111111111111",
+      "amountInRaw": "25000000",
+      "expectedOutRaw": "100000000000000000",
+      "adverseImpactBps": 12,
+      "feeEstimate": {
+        "gasNative": null,
+        "routeFeeBps": null
+      },
+      "completionBps": 2500,
+      "verdictByPolicy": {
+        "STRICT_LIVE": {
+          "verdict": "eligible",
+          "blocking": []
+        },
+        "REFERENCE_CONTEXT": {
+          "verdict": "limited",
+          "blocking": [
+            "REFERENCE_MISSING"
+          ]
+        },
+        "QUOTE_ONLY": {
+          "verdict": "eligible",
+          "blocking": []
+        }
+      },
+      "chosenPolicyVerdict": "eligible",
+      "reasons": [],
+      "evidenceIds": [
+        "ev_meta_005",
+        "ev_pyth_002",
+        "ev_q_cand_0_2500_7086dba0",
+        "ev_rwa_003",
+        "ev_stable_004"
+      ],
+      "nextStep": "ACCEPT_PARTIAL"
+    },
+    {
+      "candidateId": "cand_0_1000_7086dba0",
+      "legIndex": 0,
+      "inputAssetKey": "eip155:196:0x1111111111111111111111111111111111111111",
+      "amountInRaw": "10000000",
+      "expectedOutRaw": "40000000000000000",
+      "adverseImpactBps": 12,
+      "feeEstimate": {
+        "gasNative": null,
+        "routeFeeBps": null
+      },
+      "completionBps": 1000,
+      "verdictByPolicy": {
+        "STRICT_LIVE": {
+          "verdict": "eligible",
+          "blocking": []
+        },
+        "REFERENCE_CONTEXT": {
+          "verdict": "limited",
+          "blocking": [
+            "REFERENCE_MISSING"
+          ]
+        },
+        "QUOTE_ONLY": {
+          "verdict": "eligible",
+          "blocking": []
+        }
+      },
+      "chosenPolicyVerdict": "eligible",
+      "reasons": [],
+      "evidenceIds": [
+        "ev_meta_005",
+        "ev_pyth_002",
+        "ev_q_cand_0_1000_7086dba0",
+        "ev_rwa_003",
+        "ev_stable_004"
+      ],
+      "nextStep": "ACCEPT_PARTIAL"
+    }
+  ],
+  "recommended": "cand_0_10000_7086dba0",
+  "evidenceHash": "0x164d97ea5b78aaf123eb0a0bd0506329599c295cd7f7c9ef8ced541ab19f390b",
+  "planHash": "0xb9a8ec36c5529256a0409e604de6e13b2360866058ac4c92b0118266936fb841"
+}

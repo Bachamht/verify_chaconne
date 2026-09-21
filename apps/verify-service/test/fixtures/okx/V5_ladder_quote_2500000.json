@@ -1,0 +1,101 @@
+{
+  "recordedAt": "2026-09-20T22:20:54.108Z",
+  "endpoint": "/api/v6/dex/aggregator/quote?chainIndex=196&fromTokenAddress=0x4ae46a509f6b1d9056937ba4500cb143933d2dc8&toTokenAddress=0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a&amount=2500000&swapMode=exactIn",
+  "status": 200,
+  "code": "0",
+  "time": {
+    "requestedAt": "2026-09-20T22:20:53.911Z",
+    "receivedAt": "2026-09-20T22:20:54.107Z",
+    "sourcePublishedAt": null,
+    "sourceTimeKind": "not_provided"
+  },
+  "rawHash": "0x333ad54050ddbe7d6579e11a35289862eca7c311adfa12d8d11061789191019f",
+  "data": [
+    {
+      "chainIndex": "196",
+      "contextSlot": 71173816,
+      "dexRouterList": [
+        {
+          "dexProtocol": {
+            "dexName": "Uniswap V3",
+            "percent": "100"
+          },
+          "fromToken": {
+            "decimal": "6",
+            "isHoneyPot": false,
+            "latestMultiplier": "",
+            "taxRate": "0",
+            "tokenContractAddress": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+            "tokenSymbol": "USDG",
+            "tokenUnitPrice": "1"
+          },
+          "fromTokenIndex": "0",
+          "toToken": {
+            "decimal": "18",
+            "isHoneyPot": false,
+            "latestMultiplier": "",
+            "taxRate": "0",
+            "tokenContractAddress": "0x943bf64d566c32a2bcd41ac92fb63c111cc9de8f",
+            "tokenSymbol": "wAAPLx",
+            "tokenUnitPrice": "335.277271225260275"
+          },
+          "toTokenIndex": "1"
+        },
+        {
+          "dexProtocol": {
+            "dexName": "xStocks wrap V2",
+            "percent": "100"
+          },
+          "fromToken": {
+            "decimal": "18",
+            "isHoneyPot": false,
+            "latestMultiplier": "",
+            "taxRate": "0",
+            "tokenContractAddress": "0x943bf64d566c32a2bcd41ac92fb63c111cc9de8f",
+            "tokenSymbol": "wAAPLx",
+            "tokenUnitPrice": "335.277271225260275"
+          },
+          "fromTokenIndex": "1",
+          "toToken": {
+            "decimal": "18",
+            "isHoneyPot": false,
+            "latestMultiplier": "",
+            "taxRate": "0",
+            "tokenContractAddress": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+            "tokenSymbol": "AAPLx",
+            "tokenUnitPrice": "334.4304552567509709421186293888157"
+          },
+          "toTokenIndex": "2"
+        }
+      ],
+      "estimateGasFee": "334258",
+      "fromToken": {
+        "decimal": "6",
+        "isHoneyPot": false,
+        "latestMultiplier": "1",
+        "taxRate": "0",
+        "tokenContractAddress": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+        "tokenSymbol": "USDG",
+        "tokenUnitPrice": "1"
+      },
+      "fromTokenAmount": "2500000",
+      "mode": "dex",
+      "priceImpactPercent": "0",
+      "quoteId": "3130899428540070001",
+      "router": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8--0x943bf64d566c32a2bcd41ac92fb63c111cc9de8f--0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "signData": null,
+      "swapMode": "exactIn",
+      "toToken": {
+        "decimal": "18",
+        "isHoneyPot": false,
+        "latestMultiplier": "1.003269012539818700",
+        "taxRate": "0",
+        "tokenContractAddress": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+        "tokenSymbol": "AAPLx",
+        "tokenUnitPrice": "334.4304552567509709421186293888157"
+      },
+      "toTokenAmount": "7475374829111455",
+      "tradeFee": "0.00065692763604638"
+    }
+  ]
+}

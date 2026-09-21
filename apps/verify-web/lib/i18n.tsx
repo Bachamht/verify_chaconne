@@ -1,0 +1,323 @@
+"use client";
+/** 极简字典式双语：已存偏好优先，其次浏览器语言（zh* → 中文），否则英文；投屏模式大字。 */
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+
+export type Locale = "en" | "zh";
+
+const DICT = {
+  brand: { en: "Chaconne Verify", zh: "Chaconne Verify" },
+  tagline: { en: "Used through OKX AI · Executed on X Layer", zh: "通过 OKX AI 使用 · 在 X Layer 执行" },
+  nav_home: { en: "Home", zh: "首页" },
+  nav_new: { en: "New verification", zh: "创建核验" },
+  nav_dev: { en: "Developers", zh: "开发者" },
+  demo_mode: { en: "Demo mode", zh: "投屏模式" },
+  nav_plan: { en: "Plan", zh: "规划" },
+  nav_play: { en: "Play", zh: "试玩" },
+  nav_live: { en: "Live", zh: "公开板" },
+  nav_verify_bundle: { en: "Verify a bundle", zh: "验证证据包" },
+  plan_h: { en: "Plan a trade task", zh: "规划一个交易任务" },
+  plan_q1: { en: "1 · What do you want to complete?", zh: "1 · 你要完成什么？" },
+  plan_q2: { en: "2 · Budget and currencies", zh: "2 · 预算与币种" },
+  plan_q3: { en: "3 · Rules", zh: "3 · 规则" },
+  plan_side_buy: { en: "Buy", zh: "买入" },
+  plan_side_sell: { en: "Sell", zh: "卖出" },
+  plan_legs: { en: "Assets (basket weights in %, total 100%)", zh: "资产（篮子权重 %，合计 100%）" },
+  plan_add_leg: { en: "+ Add asset", zh: "+ 加一个资产" },
+  plan_inputs: { en: "Allowed input currencies", zh: "允许的资金币种" },
+  plan_budget: { en: "Total budget", zh: "总预算" },
+  plan_deadline: { en: "Deadline", zh: "期限" },
+  plan_run: { en: "Plan", zh: "开始规划" },
+  plan_running: { en: "Quoting ladder & scoring…", zh: "阶梯报价与评分中…" },
+  plan_candidates: { en: "Candidates", zh: "候选方案" },
+  plan_recommended: { en: "Recommended", zh: "推荐" },
+  plan_completion: { en: "Completion", zh: "完成比例" },
+  plan_next: { en: "Next step", zh: "下一步" },
+  plan_accept_partial: { en: "Accept partial completion", zh: "接受部分完成" },
+  plan_keep_wait: { en: "Keep goal and wait", zh: "保留目标等待" },
+  plan_create_task: { en: "Create task (authorize)", zh: "创建任务（签署授权）" },
+  plan_none: { en: "No feasible candidate right now. That is a delivered answer, not a failure.", zh: "现在没有可行方案。这也是一个已交付的答案，不是故障。" },
+  plan_no_market_optimum: { en: "Candidates are limited to supported routes; no claim of market-wide best price. Reducing the amount is not completing the original goal.", zh: "候选只覆盖已支持的路由，不宣称全市场最优；缩小金额不算完成原目标。" },
+  next_READY: { en: "Ready", zh: "可执行" },
+  next_ACCEPT_PARTIAL: { en: "Partial only", zh: "只能部分完成" },
+  next_SWITCH_INPUT: { en: "Switch currency", zh: "换资金币种" },
+  next_WAIT_CONDITION: { en: "Wait for condition", zh: "等待条件" },
+  next_PROVIDE_DATA: { en: "Data missing", zh: "缺数据" },
+  next_USER_MUST_RELAX_LIMIT: { en: "Your limit blocks it", zh: "你的上限拦住了" },
+  mandate_h: { en: "Authorize a task (one signature)", zh: "签署任务授权（一次签名）" },
+  mandate_p: { en: "You sign once: budget cap, per-step cap, step count, asset set, deadline, policy hash. Each step is re-verified and needs a fresh certificate (at most 60 s, and never longer than the quote it rests on — usually about 30 s). You can pause, cancel, or revoke on-chain at any time. The service never holds a key that can move your funds.", zh: "你只签一次：预算上限、单步上限、步数、资产集合、期限、策略哈希。每一步都重新核验并需要新的证明（最长 60 秒，且不得比报价更久，通常约 30 秒）。你随时可暂停、取消或链上撤销。服务永远不持有能动你资金的私钥。" },
+  mandate_budget: { en: "Budget cap", zh: "预算上限" },
+  mandate_per_step: { en: "Per-step cap", zh: "单步上限" },
+  mandate_max_steps: { en: "Max steps", zh: "最多步数" },
+  mandate_sign: { en: "Sign authorization", zh: "签署授权" },
+  mandate_signed: { en: "Signed · registering…", zh: "已签 · 登记中…" },
+  mandate_not_deployed: { en: "PlanGuard is not deployed on this network yet — authorization is unavailable.", zh: "PlanGuard 尚未部署到本网络 — 暂不能签署授权。" },
+  task_h: { en: "Task", zh: "任务" },
+  task_progress: { en: "Progress", zh: "进度" },
+  task_timeline: { en: "Timeline", zh: "时间线" },
+  task_pause: { en: "Pause", zh: "暂停" },
+  task_resume: { en: "Resume", zh: "继续" },
+  task_cancel: { en: "Cancel", zh: "取消" },
+  task_revoke: { en: "Revoke on-chain", zh: "链上撤销" },
+  task_exec_step: { en: "Execute this step myself", zh: "我来执行这一步" },
+  task_steps: { en: "Steps", zh: "步骤" },
+  task_bill: { en: "Bill", zh: "账单" },
+  task_wait: { en: "Waiting — nothing to execute right now.", zh: "等待中 — 现在没有可执行的步骤。" },
+  bill_fees: { en: "Service fees", zh: "服务费" },
+  bill_principal: { en: "Trade principal", zh: "交易本金" },
+  bill_gas: { en: "Gas", zh: "Gas" },
+  bill_self: { en: "Self-paid demo", zh: "自付演示" },
+  vb_h: { en: "Verify an evidence bundle", zh: "验证证据包" },
+  vb_p: { en: "Runs entirely in your browser: hashes, EIP-712 signatures and the rule engine are recomputed locally. No login, no API needed. Edit any field below and watch which check fails.", zh: "完全在你的浏览器里运行：哈希、EIP-712 签名与规则引擎都在本地重算。不需要登录，也不需要 API。改下面任意字段，看哪一项检查失败。" },
+  vb_load: { en: "Load from service", zh: "从服务加载" },
+  vb_paste: { en: "Paste bundle JSON (or upload a file)", zh: "粘贴证据包 JSON（或上传文件）" },
+  vb_run: { en: "Run checks", zh: "运行检查" },
+  vb_online: { en: "Online check (optional)", zh: "联网检查（可选）" },
+  vb_fetch: { en: "Fetch receipts & compare", zh: "拉取回执并比对" },
+  vb_all_ok: { en: "All checks passed", zh: "全部检查通过" },
+  vb_failed: { en: "checks failed", zh: "项检查失败" },
+  play_h: { en: "Try it without funds", zh: "不入金，先试玩" },
+  play_p: { en: "Pick an agent persona and a question. The simulation runs the real planner and rules on live data, but signs no certificate and executes nothing.", zh: "选一个 Agent 角色和一道题。模拟会用真实数据跑真实的规划器与规则，但不签证明、不执行。" },
+  play_pick: { en: "Your agent", zh: "你的 Agent" },
+  play_question: { en: "Question", zh: "题目" },
+  play_run: { en: "Run simulation", zh: "开始模拟" },
+  play_use_budget: { en: "Use my own budget", zh: "改成我的预算" },
+  report_evidence: { en: "Evidence & verifier", zh: "证据与验证器" },
+  share_h: { en: "Share", zh: "分享" },
+  share_public: { en: "Public battle report", zh: "公开战报" },
+  share_amounts: { en: "Amounts", zh: "金额" },
+  share_exact: { en: "exact", zh: "精确" },
+  share_range: { en: "range", zh: "区间" },
+  share_hidden: { en: "hidden", zh: "隐藏" },
+  share_save: { en: "Save share settings", zh: "保存分享设置" },
+  share_private_note: { en: "Private by default. Wallet is never shown.", zh: "默认私密。钱包地址永不显示。" },
+  share_remix: { en: "Challenge with my agent", zh: "用我的 Agent 挑战这道题" },
+  live_h: { en: "Genesis Live", zh: "Genesis Live 公开板" },
+  live_p: { en: "Battle reports their owners chose to publish. Newest first. No ranking by profit — verification is the point.", zh: "只列所有者自愿公开的战报，最新在前。不按收益排名 — 重点是核验。" },
+  remix_credit: { en: "Remixed from", zh: "翻创自" },
+  remix_note: { en: "Template prefills assets, policy and limits only — never amounts, wallets, old quotes or authorizations.", zh: "模板只预填资产、策略与限额结构 — 不带金额、钱包、旧报价或旧授权。" },
+  replay_h: { en: "Before / after replay", zh: "事件前后回放" },
+  replay_p: { en: "Same asset, two evidence sets around a unit (multiplier) change: a quote that looks cheaper may simply be a different unit.", zh: "同一资产，乘数变化前后两组证据：看似更便宜的报价可能只是单位口径不同。" },
+  status_completed: { en: "Completed", zh: "已完成" },
+  status_partial: { en: "Partially completed", zh: "部分完成" },
+  status_waiting: { en: "Waiting", zh: "等待中" },
+  status_rejected: { en: "Rejected", zh: "被拒绝" },
+  status_simulation: { en: "Simulation", zh: "模拟" },
+  close_unconfirmed_note: { en: "Close taken from the 16:00 ET last trade; not yet confirmed by the next session's previous close.", zh: "收盘价取自 16:00 ET 最后一笔成交，尚未经次日前收确认。" },
+  policy_matrix: { en: "Verdict by policy", zh: "三策略对照" },
+
+  hero_h: { en: "Before an agent buys a tokenized stock, prove the trade is what it thinks it is.", zh: "在 Agent 买入链上美股之前，先证明这笔交易是它以为的那笔。" },
+  hero_p: {
+    en: "StockProof checks the token's chain + contract identity, whether the stock reference price is live or a stale close, the executable on-chain quote and price impact — and returns an immutable, evidence-hashed report. RWA Guard then binds that report to a single constrained execution on X Layer.",
+    zh: "StockProof 核对代币的链+合约身份、股票参考价是实时还是陈旧收盘、链上可成交报价与价格冲击，输出带证据哈希的不可变报告。RWA Guard 再把这份报告绑定到 X Layer 上一次受约束的执行。",
+  },
+  cta_new: { en: "Start a verification", zh: "开始核验" },
+  cta_dev: { en: "Connect your agent", zh: "接入你的 Agent" },
+  what_you_get: { en: "What you get", zh: "你得到什么" },
+  feat1_h: { en: "Identity by chain + contract", zh: "按链+合约识别资产" },
+  feat1_p: { en: "Same-name tokens on other chains never inherit eligibility.", zh: "同名代币不因名字继承资格。" },
+  feat2_h: { en: "Time semantics, not vibes", zh: "时间语义，不靠感觉" },
+  feat2_p: { en: "Source time vs received time; live vs official close; no silent policy downgrade.", zh: "源时间与接收时间分开；实时与正式收盘分开；绝不静默降级。" },
+  feat3_h: { en: "Execution that obeys the report", zh: "执行服从报告" },
+  feat3_p: { en: "Guard enforces amount, minimum output, recipient, route and deadline on-chain.", zh: "Guard 在链上强制金额、最小到账、收款人、路由与期限。" },
+  new_h: { en: "Create a verification task", zh: "创建核验任务" },
+  f_owner: { en: "Funding wallet (owner)", zh: "资金钱包（owner）" },
+  f_recipient: { en: "Recipient (defaults to owner)", zh: "收款地址（默认同 owner）" },
+  f_input: { en: "Pay with", zh: "支付币种" },
+  f_output: { en: "Buy", zh: "买入" },
+  f_amount: { en: "Amount", zh: "金额" },
+  f_policy: { en: "Policy", zh: "核验策略" },
+  f_slippage: { en: "Max slippage (bps)", zh: "最大滑点（bps）" },
+  f_impact: { en: "Max price impact (bps)", zh: "最大价格冲击（bps）" },
+  f_dev: { en: "Max deviation vs reference (bps)", zh: "相对参考价最大偏差（bps）" },
+  policy_strict: { en: "STRICT_LIVE — regular hours, live reference only", zh: "STRICT_LIVE — 仅常规时段、实时参考" },
+  policy_ref: { en: "REFERENCE_CONTEXT — official close as context", zh: "REFERENCE_CONTEXT — 以正式收盘为背景" },
+  policy_quote: { en: "QUOTE_ONLY — route/quote checks, no stock comparison", zh: "QUOTE_ONLY — 只核验路由/报价，不比较股价" },
+  price_line: { en: "Service price", zh: "服务价格" },
+  free: { en: "Free (listing phase)", zh: "免费（上架阶段）" },
+  submit: { en: "Run verification", zh: "运行核验" },
+  running: { en: "Collecting evidence…", zh: "采集证据中…" },
+  verdict: { en: "Verdict", zh: "结论" },
+  eligible: { en: "Eligible for execution under this policy", zh: "满足本策略，可执行" },
+  limited: { en: "Insufficient information — no execution certificate", zh: "信息不足 — 不签发执行证明" },
+  rejected: { en: "Rejected — a hard condition failed", zh: "拒绝 — 存在明确阻断项" },
+  reasons: { en: "Reasons", zh: "理由" },
+  reference: { en: "Stock reference", zh: "股票参考" },
+  quote: { en: "On-chain quote", zh: "链上报价" },
+  session: { en: "Market session", zh: "市场时段" },
+  evidence: { en: "Evidence", zh: "证据" },
+  dev_details: { en: "Developer details", zh: "开发者详情" },
+  task_record: { en: "Task record", zh: "任务记录" },
+  payment: { en: "Service payment", zh: "服务付款" },
+  report_versions: { en: "Report versions", zh: "报告版本" },
+  executions: { en: "Executions", zh: "执行" },
+  prepare_exec: { en: "Prepare execution", zh: "准备执行" },
+  exec_h: { en: "Execution confirmation", zh: "执行确认" },
+  connect: { en: "Connect wallet", zh: "连接钱包" },
+  product_main: { en: "Chaconne · markets", zh: "Chaconne · 行情比价" },
+  product_verify: { en: "Verify · check & execute", zh: "Verify · 核验与执行" },
+  product_switch_hint: { en: "Two entrances from the same team: the main site for prices, comparison and trading (Solana / BNB); Verify for agents and constrained execution on X Layer.", zh: "同一团队的两个入口：主站看行情、比价、交易（Solana / BNB）；Verify 给 Agent 与 X Layer 做核验与受约束执行。" },
+  see_compare_main: { en: "See every version of this stock compared on the main site ↗", zh: "在主站看这只股票各版本的比价 ↗" },
+  prefilled_from: { en: "Prefilled from the main site — check the amount and policy, then run.", zh: "已从主站预填——确认金额与策略后运行。" },
+  switch_chain: { en: "Switch to X Layer", zh: "切换到 X Layer" },
+  step_prepare: { en: "1 · Re-verify & issue certificate", zh: "1 · 再核验并签发证明" },
+  step_approve: { en: "2 · Approve exact amount to Guard", zh: "2 · 向 Guard 精确授权" },
+  step_approve_first: { en: "1 · Approve the exact amount to Guard (do this first)", zh: "1 · 先向 Guard 精确授权" },
+  approve_first_hint: { en: "A certificate lives at most 60 s and never longer than the quote it rests on — usually about 30 s after re-verification. Approve first, then re-verify, sign and send within that window.", zh: "证明最长 60 秒，且不得比报价更久——再核验后通常约 30 秒。先授权，再核验、签名、发送。" },
+  sign_and_send: { en: "Sign intent & execute", zh: "签署意图并执行" },
+  step_prepare_2: { en: "2 · Re-verify & issue certificate", zh: "2 · 再核验并签发证明" },
+  step_sign_3: { en: "3 · Sign intent & send Guard transaction", zh: "3 · 签署意图并发送 Guard 交易" },
+  step_sign: { en: "3 · Sign trade intent", zh: "3 · 签署交易意图" },
+  step_send: { en: "4 · Send Guard transaction", zh: "4 · 发送 Guard 交易" },
+  step_receipt: { en: "5 · Receipt (wallet)", zh: "5 · 回执（钱包）" },
+  step_server_receipt: { en: "6 · Server-verified receipt", zh: "6 · 服务端链上核实" },
+  receipt_verified: { en: "verified on-chain", zh: "链上已核实" },
+  max_spend: { en: "Max spend", zh: "最大支出" },
+  min_out: { en: "Minimum received", zh: "最少到账" },
+  valid_until: { en: "Certificate valid until", zh: "证明有效期至" },
+  refreshes_left: { en: "Re-verifications left", zh: "剩余再核验次数" },
+  not_eligible: { en: "This version is not eligible — no certificate issued. You can re-verify while the entitlement lasts.", zh: "此版本不合格 — 未签发证明。额度期内可再核验。" },
+  expired: { en: "Certificate expired. Re-verify to get a new one.", zh: "证明已过期，请再核验获取新证明。" },
+  rejected_sign: { en: "Signature rejected in wallet. Nothing was sent; the report stays valid.", zh: "钱包里拒绝了签名。未发送任何交易，报告仍有效。" },
+  tx_pending: { en: "Transaction pending…", zh: "交易确认中…" },
+  tx_success: { en: "Executed", zh: "已执行" },
+  tx_reverted: { en: "Transaction reverted on-chain — no funds moved (gas paid).", zh: "交易链上回滚 — 资金未动（已付 gas）。" },
+  mode_live: { en: "LIVE", zh: "LIVE" },
+  mode_fixture: { en: "FIXTURE", zh: "FIXTURE" },
+  dev_h: { en: "Developers", zh: "开发者" },
+  disclaimer: { en: "Verification of data comparability and execution constraints only. Not investment advice; no guarantee of fill or profit.", zh: "仅核验数据可比性与执行约束，非投资建议；不保证成交或收益。" },
+  no_wallet: { en: "No wallet found in this browser. Install OKX Wallet (recommended on X Layer) or MetaMask, or open this page inside a wallet's built-in browser.", zh: "浏览器里没有检测到钱包。请安装 OKX Wallet（X Layer 上推荐）或 MetaMask，或在钱包内置浏览器里打开本页。" },
+  wallet_choice_cancelled: { en: "Wallet selection cancelled.", zh: "已取消选择钱包。" },
+  change_wallet: { en: "Change wallet", zh: "更换钱包" },
+  wrong_chain: { en: "Wallet is on another chain.", zh: "钱包不在 X Layer。" },
+  owner_mismatch: { en: "Connected account is not the task owner.", zh: "已连接账户不是任务 owner。" },
+  approve_done: { en: "Approved", zh: "已授权" },
+  loading: { en: "Loading…", zh: "加载中…" },
+  /* ---------- UX 修复（2026-09-21 扣分表 V-08~V-16 / X-01） ---------- */
+  human_intro: { en: "Before buying a tokenized US stock on-chain, take a few seconds to confirm the token, the price and the amount are actually what you think.", zh: "买链上美股之前，先花几秒确认：这个币、这个价、这个数量，到底对不对。" },
+  nav_me: { en: "My tasks", zh: "我的任务" },
+  header_menu: { en: "Menu", zh: "菜单" },
+  header_close: { en: "Close", zh: "收起" },
+  wallet_connected: { en: "Connected", zh: "已连接" },
+  wallet_short: { en: "Wallet", zh: "钱包" },
+  demo_short: { en: "Demo", zh: "投屏" },
+  wallet_connecting: { en: "Confirm in your wallet…", zh: "请在钱包中确认…" },
+  back_report: { en: "← Report", zh: "← 返回报告" },
+  not_enabled: { en: "not enabled", zh: "未启用" },
+  footer_line: { en: "Data & rules by", zh: "数据与规则来自" },
+  footer_not_official: { en: "OKX Dev Day 2026 · Not an official OKX product.", zh: "OKX Dev Day 2026 · 非 OKX 官方产品。" },
+  footer_links: { en: "Developers · Replay · My tasks", zh: "开发者 · 事件回放 · 我的任务" },
+  file_choose: { en: "Upload a JSON file", zh: "上传 JSON 文件" },
+  cert_ttl_line: { en: "If eligible, a re-verification issues a certificate (at most 60 s, never longer than the quote — usually about 30 s); the wallet approves the exact amount, signs the intent and executes through Guard — unspent input is refunded, output goes to the recipient.", zh: "合格则再核验签发证明（最长 60 秒，不得比报价更久，通常约 30 秒），钱包精确授权、签署意图、经 Guard 执行；未消耗输入退回、输出到收款人。" },
+  tz_note: { en: "Local time", zh: "本地时间" },
+  dev_raw_note: { en: "Raw values are what the service and contract actually see (smallest units / basis points).", zh: "raw 值是服务与合约实际看到的（最小单位 / 基点）。" },
+  plan_weight_pct: { en: "weight %", zh: "权重 %" },
+  plan_row_no_asset: { en: "Row {n} has no asset selected", zh: "第 {n} 行还没选资产" },
+  plan_weights_sum: { en: "Weights total {x}%, must be 100%", zh: "权重合计 {x}%，需为 100%" },
+  plan_no_reco_why: { en: "No candidate is eligible under your limits.", zh: "在你的限额下没有可行候选。" },
+  plan_why: { en: "Why", zh: "原因" },
+  plan_form_kept: { en: "Your form is kept below — adjust and plan again.", zh: "表单保留在下方，可调整后再规划。" },
+  mandate_budget_human: { en: "Budget cap", zh: "预算上限" },
+  mandate_per_step_human: { en: "Per-step cap", zh: "单步上限" },
+  mandate_amount_invalid: { en: "Enter a positive number, e.g. 10 or 12.5", zh: "填一个正数，如 10 或 12.5" },
+  mandate_step_gt_budget: { en: "Per-step cap cannot exceed the budget cap", zh: "单步上限不能超过预算上限" },
+  why_owner: { en: "Enter or connect the funding wallet first", zh: "先填写或连接资金钱包" },
+  why_owner_invalid: { en: "Fix the wallet address first", zh: "先修正钱包地址" },
+  why_assets: { en: "Pick the asset(s) first", zh: "先选资产" },
+  why_inputs: { en: "Pick at least one funding currency", zh: "至少选一个资金币种" },
+  why_budget: { en: "Enter a valid budget", zh: "填一个有效的预算" },
+  why_wallet: { en: "Connect the wallet that owns this plan to sign", zh: "连接这个规划的 owner 钱包才能签署" },
+  why_not_deployed: { en: "PlanGuard is not deployed on this network", zh: "PlanGuard 尚未部署到本网络" },
+  me_h: { en: "My tasks", zh: "我的任务" },
+  me_p: { en: "Everything you created in this browser. Kept only in this browser's storage — nothing is uploaded, and another device will not see it.", zh: "你在这个浏览器里创建过的东西。只存在本浏览器里，不上传，换设备看不到。" },
+  me_empty: { en: "Nothing yet. Start with a verification, a plan, or a simulation.", zh: "还没有记录。先做一次核验、规划或模拟吧。" },
+  me_clear: { en: "Clear this list", zh: "清空这个列表" },
+  me_kind_job: { en: "Verification", zh: "核验" },
+  me_kind_plan: { en: "Plan", zh: "规划" },
+  me_kind_mandate: { en: "Authorized task", zh: "授权任务" },
+  me_kind_simulation: { en: "Simulation", zh: "模拟" },
+  replay_note_constructed: { en: "Constructed sample: 'before' is the token's launch multiplier of 1.0; 'after' is the real 2026-09-21 observation (on-chain getCurrentMultiplier, OKX ratio and xStocks API agree). Real corporate-action history needs a provider API key we do not have.", zh: "构造样本：「事件前」取代币发行初值乘数 1.0；「事件后」是 2026-09-21 的真实观测（链上 getCurrentMultiplier、OKX ratio、xStocks API 三源一致）。真实的公司行动历史需要发行方 API key，我们没有。" },
+  replay_observed: { en: "Observed", zh: "观测时间" },
+  replay_ratio: { en: "Unit (1 token = ? shares)", zh: "单位（1 代币 = ? 股）" },
+  replay_stock: { en: "Stock price (USD/share)", zh: "股价（美元/股）" },
+  replay_in: { en: "You pay", zh: "投入金额" },
+  replay_out: { en: "Expected tokens", zh: "预期到账（代币）" },
+  replay_unit_price: { en: "Executable USD per share", zh: "可执行单价（美元/股）" },
+  replay_launch: { en: "launch value (constructed)", zh: "发行初值（构造）" },
+  replay_takeaway: { en: "Takeaway: fewer tokens for the same dollars is not a worse price when the token now represents more shares. Compare per share, never per token.", zh: "结论：同样的钱换到更少代币，不等于价格变差——代币代表的股数变多了。比较要按每股，不能按每个代币。" },
+  nf_h: { en: "Page not found", zh: "页面不存在" },
+  nf_p: { en: "The link may be wrong, or the task belongs to another wallet.", zh: "链接可能不对，或这个任务属于另一个钱包。" },
+  nf_home: { en: "Back to home", zh: "返回首页" },
+  err_h: { en: "Something went wrong on this page", zh: "这个页面出错了" },
+  err_p: { en: "Your data is safe: nothing is signed or sent without your wallet. Copy the summary below if you want to report it.", zh: "你的数据是安全的：没有钱包确认不会签名或发送任何东西。想反馈可以复制下面的摘要。" },
+  err_copy: { en: "Copy error summary", zh: "复制错误摘要" },
+  err_retry: { en: "Try again", zh: "重试" },
+  simulation_loaded: { en: "Loaded simulation", zh: "已加载模拟" },
+} as const;
+
+export type Key = keyof typeof DICT;
+
+interface Ctx {
+  locale: Locale;
+  setLocale: (l: Locale) => void;
+  demo: boolean;
+  setDemo: (d: boolean) => void;
+  t: (k: Key, vars?: Record<string, string | number>) => string;
+}
+
+const I18nContext = createContext<Ctx | null>(null);
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [locale, setLocaleState] = useState<Locale>("en");
+  const [demo, setDemoState] = useState(false);
+  useEffect(() => {
+    try {
+      const l = localStorage.getItem("verify-locale");
+      if (l === "zh" || l === "en") setLocaleState(l);
+      else if (typeof navigator !== "undefined" && /^zh/i.test(navigator.language || "")) setLocaleState("zh");
+      const d = localStorage.getItem("verify-demo");
+      if (d === "1") setDemoState(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => {
+    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+    document.documentElement.dataset["demo"] = demo ? "1" : "0";
+  }, [locale, demo]);
+  const setLocale = useCallback((l: Locale) => {
+    setLocaleState(l);
+    try {
+      localStorage.setItem("verify-locale", l);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const setDemo = useCallback((d: boolean) => {
+    setDemoState(d);
+    try {
+      localStorage.setItem("verify-demo", d ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const value = useMemo<Ctx>(
+    () => ({
+      locale,
+      setLocale,
+      demo,
+      setDemo,
+      t: (k, vars) => {
+        const s = DICT[k][locale] as string;
+        return vars ? s.replace(/\{(\w+)\}/g, (m, name: string) => (name in vars ? String(vars[name]) : m)) : s;
+      },
+    }),
+    [locale, setLocale, demo, setDemo],
+  );
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+export function useI18n(): Ctx {
+  const c = useContext(I18nContext);
+  if (!c) throw new Error("I18nProvider missing");
+  return c;
+}

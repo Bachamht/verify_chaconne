@@ -1,0 +1,104 @@
+{
+  "report": {
+    "schemaVersion": "1",
+    "jobId": "job_fixture_v2",
+    "reportVersion": 1,
+    "requestHash": "0xa9dfe448c5ca77732e4c52019f5dc84185d01efef15eee06a09ec28f085301bc",
+    "policyDefinitionHash": "0xaa36358277924589142b26b0d077e1ca7f3e864f20ba65d22d5098d8330e84ba",
+    "effectivePolicyHash": "0x8bf4fce5559d1ed6be1f6b9b178bfc8738298539f726af2a67ba8c012fdf9a4a",
+    "registryHash": "0xfa11b5544df245c969185db4798c3c7d0b783238abc1f82ad648b8810a0009c4",
+    "evaluatedAt": "2026-09-20T02:00:00.000Z",
+    "verdict": "eligible",
+    "executionEligible": true,
+    "comparisonStatus": "official_close",
+    "marketSession": "CLOSED",
+    "reasons": [
+      {
+        "code": "CLOSE_UNCONFIRMED",
+        "severity": "info",
+        "evidenceIds": [
+          "ev_close_001"
+        ],
+        "detail": {
+          "tradingDate": "2026-09-18",
+          "closeUsd": "336.13"
+        }
+      }
+    ],
+    "normalizedQuote": {
+      "amountInRaw": "100000000",
+      "expectedOutRaw": "297503000000000000",
+      "minOutRaw": "296015485000000000",
+      "priceImpactPercent": "-0.12",
+      "adverseImpactBps": 12,
+      "requestedAt": "2026-09-20T01:59:54.800Z",
+      "receivedAt": "2026-09-20T01:59:55.000Z",
+      "sourcePublishedAt": null,
+      "executableUsdPerShare": "336.131064224562"
+    },
+    "reference": {
+      "underlyingId": "us-equity:FAKE",
+      "priceUsd": "336.13",
+      "kind": "close_last_tick",
+      "tradingDate": "2026-09-18",
+      "sourcePublishedAt": "2026-09-18T20:00:00.000Z",
+      "sourceId": "chaconne-ref-closes:last_tick",
+      "deviationBps": 0
+    },
+    "evidenceIds": [
+      "ev_close_001",
+      "ev_meta_004",
+      "ev_quote_005",
+      "ev_stable_003"
+    ],
+    "evidenceHash": "0x150268b6fbc8edabbf439d52430ad8063243e1a562d8ac53a237777455d1a52b",
+    "policySnapshot": {
+      "definition": {
+        "policyId": "REFERENCE_CONTEXT",
+        "version": "1.1.0",
+        "engineVersion": "verify-engine/1.0.0",
+        "mode": "exactIn",
+        "quoteMaxAgeSeconds": 30,
+        "liveReferenceMaxAgeSeconds": 90,
+        "closeMaxSessionsSinceClose": 0,
+        "closeCrossVerifyToleranceBps": 50,
+        "certificateTtlSeconds": 60,
+        "futureSkewToleranceSeconds": 5,
+        "requireImpactKnown": true,
+        "referenceRequirement": "official_close",
+        "sessionRequirement": "any",
+        "paramRanges": {
+          "maxSlippageBps": {
+            "min": 1,
+            "max": 300,
+            "default": 50,
+            "required": true
+          },
+          "maxPriceImpactBps": {
+            "min": 1,
+            "max": 1000,
+            "default": 100,
+            "required": true
+          },
+          "maxReferenceDeviationBps": {
+            "min": 1,
+            "max": 2000,
+            "default": 300,
+            "required": true
+          }
+        },
+        "acceptedCloseKinds": [
+          "official_close",
+          "close_cross_verified",
+          "close_last_tick"
+        ]
+      },
+      "params": {
+        "maxSlippageBps": 50,
+        "maxPriceImpactBps": 100,
+        "maxReferenceDeviationBps": 300
+      }
+    }
+  },
+  "reportHash": "0xb2d8e5881351562a4f68474023df723471c3d601acb2ff9dd0b3bc487eeac6bc"
+}

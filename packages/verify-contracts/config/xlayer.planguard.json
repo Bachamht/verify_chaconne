@@ -1,0 +1,45 @@
+{
+  "_comment": "PlanGuard v2 allowlist. planGuard: fill after mainnet deploy. policies: v1.1.0 three hashes (A2, packages/core/src/verify/__fixtures__/v2/policy.hashes.v1_1_0.json) + v1.0.0 three hashes carried over (single-step mandates under v1.0.0 policies keep working). registries: v1.1.0 hash (B2, sell pairs stock\u2192stable) + v1.0.0 hash carried over. tokens/routes identical to v1 config (the address-approval log (internal) #1-#9b, operator-approved). tolerances: rebasing stock tokens (AAPLx, NVDAx) 1e6 wei as INPUT (sell direction), CV-D05 reverse case.",
+  "planGuard": "0xE8517f296211F4b9175796bAAB47979FB14Fd2F0",
+  "policies": [
+    "0x544c81492e9e352862df3bd3101510fe3b8ed2f2948e4fa49fb521b6b79f9859",
+    "0xaa36358277924589142b26b0d077e1ca7f3e864f20ba65d22d5098d8330e84ba",
+    "0x32b19b0d03387b2056603455d7581f1a018030c2f4bb853a54be90ec180dc857",
+    "0x81c56d2d456b5acfb9f3d8acfca19d112ee162c58f5d4ee7f39b86bb6f15291d",
+    "0x174d0b9210b48a69ddba5ea8f1fc13b96f680b128f2a5c0fface0ac943973f78",
+    "0xefd39a8cfd949074c41ee6b9c0b7a3d585a966a64ed970fd060bda7fcd6bec34"
+  ],
+  "registries": [
+    "0x8ea0c841891c81598b5eb7c55e4965d40ebc5ee5943bc0a3844289d1fbcc799a",
+    "0xb6d23cf356b27cf528529efc5af256f27c61d62d98fa91f55d9e32955a1d9fb6"
+  ],
+  "tokens": [
+    "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+    "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+    "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+    "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+    "0xc845b2894dbddd03858fd2d643b4ef725fe0849d"
+  ],
+  "routeCount": 1,
+  "routes": [
+    {
+      "router": "0x7c5bee2a8091c3ef39072f64f18fac913060aeaf",
+      "spender": "0x8b773d83bc66be128c60e07e17c8901f7a64f000",
+      "selectors": [
+        "0xf2c42696",
+        "0x0c307f76"
+      ]
+    }
+  ],
+  "toleranceCount": 2,
+  "tolerances": [
+    {
+      "token": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "wei": "1000000"
+    },
+    {
+      "token": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "wei": "1000000"
+    }
+  ]
+}
