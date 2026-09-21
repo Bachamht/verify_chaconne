@@ -34,7 +34,7 @@
 | D-10 | 通过 | FIXTURE | QUOTE_TOO_OLD、SOURCE_TIME_FUTURE、REFERENCE_STALE |
 | D-11 | 通过 | FIXTURE | routeSummary 含指令文本不改结论 |
 | D-12 | 通过 | FIXTURE | 黄金样本 4 份、顺序无关、reportHash 可复现 |
-| D-13 | 通过 | FIXTURE + REPLAY | 休市 STRICT_LIVE → rejected(MARKET_OUTSIDE_REGULAR) |
+| D-13 | 通过 | FIXTURE + REPLAY + **LIVE** | 休市 STRICT_LIVE → rejected(MARKET_OUTSIDE_REGULAR)；常规时段 LIVE 实测 eligible（2026-09-21 13:33Z，见下「STRICT_LIVE LIVE 通过记录」） |
 | D-14 | 通过 | FIXTURE + REPLAY | REFERENCE_CONTEXT：official / cross_verified / provisional / missing 四分支 |
 
 ## B · API、MCP 与独立售卖（6）
@@ -215,6 +215,17 @@
 | MX-07 | 通过 | FIXTURE | 从未成功 → 503 `{error:"unavailable"}` + `no-store`；未接行情（fixture 模式）的服务同样 503 |
 | MX-08 | 通过 | FIXTURE | HTTP 200：`Cache-Control: public, max-age=15, s-maxage=30`，正文无任何凭据字样，无鉴权可访问 |
 | MX-09 | 通过 | **LIVE** | 本地 `pnpm market:probe`（真实 OKX，2026-09-21 12:10:29Z，耗时 2.35 s）：AAPLx priceUsd 335.86、1k 335.97（0 bps）、10k 337.81（52 bps）；NVDAx 224.47、1k 224.50（3 bps）、10k 224.89（21 bps）；路由 Uniswap V3 → xStocks wrap V2；`errors: []`。服务器公网验收待部署 |
+
+## STRICT_LIVE LIVE 通过记录（美股常规时段，公网服务 A2MCP 免费端点；脚本 `scripts/liveStrict.ts`）
+
+| 时间（UTC） | 策略 / 版本 | jobId | 结论 | 参考 | 偏差 / 冲击 | reportHash | evidenceHash |
+|---|---|---|---|---|---|---|---|
+| 2026-09-21 13:33:18 | STRICT_LIVE / 1.1.0 | `job_b85b3e38146a542cc7f4db58` | **eligible**（REGULAR，comparison=live，reasons 空） | finnhub AAPL live 334.00，sourcePublishedAt 13:32:57Z（21 s 前） | +28 bps / 4 bps | `0xdfd4078d7f5652f6ca1db1d6261a61b9e45a0228b11313b3a058c4a71d2ea33a` | `0x6cc6be780bd39e0758c6ad3a1a3b13541fc0b52762defa44f622e4df5c5256f7` |
+| 2026-09-21 13:33:32 | REFERENCE_CONTEXT / 1.1.0 | `job_6470d58b53aee4da7171bce6` | **eligible**（REGULAR，comparison=official_close） | 09-18 官方收盘 336.13 | −35 bps / 0 bps | `0x690d3b7ed25f5a7cab99c5a264c0eb3ca5db328e59acbf2902650a5b1d4316ef` | `0xb56321929239a3fa4fb75b69c1c1f419cb09964fd522913d7bb62beb751cf937` |
+
+- 两次均 5 USDG → AAPLx（`amountInRaw=5000000`），HTTP 200，evidenceMode LIVE，任务归演示钱包 `0xbacb…0381`；原始响应存本地 `probes/2026-09-21T13-33-*_LIVE_*.json`（不入库）。
+- 同一分钟内两策略结论一致但参考口径不同（live 334.00 vs 官方收盘 336.13），偏差符号相反，说明参考选择逻辑按策略分流正确。
+- W-05（浏览器钱包主网成交录屏）：截至 13:35Z 演示钱包 nonce 仍为 4、余额未变，运营者尚未执行；完成后补记 tx。
 
 ## 汇总
 
