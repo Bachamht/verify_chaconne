@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api, type AssetsResponse } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Card, Row } from "@/components/ui";
+import { useAccount } from "@/lib/useAccount";
 import { connect } from "@/lib/wallet";
 import { templates, type TemplateView } from "@/lib/api-v2";
 import { addressProblem, isAddress } from "@/lib/format";
@@ -24,6 +25,14 @@ export function NewJobForm() {
   const [assets, setAssets] = useState<AssetsResponse | null>(null);
   const [policies, setPolicies] = useState<Policies | null>(null);
   const [owner, setOwner] = useState("");
+  const account = useAccount();
+  // UV-04：头部说已连接，表单就用同一个钱包（用户手改过则不覆盖）
+  useEffect(() => {
+    if (account && !owner) {
+      setOwner(account);
+      setConnected(account);
+    }
+  }, [account]);
   const [recipient, setRecipient] = useState("");
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
@@ -128,33 +137,37 @@ export function NewJobForm() {
     <div className="mx-auto max-w-2xl space-y-5">
       <h1 className="text-2xl font-bold">{t("new_h")}</h1>
       {tpl && (
-        <p className="text-sm text-neutral-400">
+        <p className="text-sm text-fg-2">
           {t("remix_credit")} <span className="text-neutral-200">{tpl.authorName ?? tpl.templateId}</span> · {t("remix_note")}
         </p>
       )}
       {prefilled && !tpl && (
-        <p className="rounded-lg border border-brand/40 bg-brand/10 px-3 py-2 text-xs text-neutral-200">{t("prefilled_from")}</p>
+        <p className="rounded-md border border-line-brand bg-surface-brand px-3 py-2 text-xs text-fg-1">{t("prefilled_from")}</p>
       )}
       <Card>
         <div className="space-y-4">
           <label className="block text-sm">
-            <span className="text-neutral-400">{t("f_owner")}</span>
+            <span className="text-fg-2">{t("f_owner")}</span>
             <div className="mt-1 flex gap-2">
               <input className={`field mono ${ownerProblem ? "border-bad" : ""}`} value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="0x…" aria-invalid={!!ownerProblem} />
-              <button className="btn-ghost shrink-0" onClick={() => connect().then((a) => { setOwner(a); setConnected(a); }).catch(() => setErr(t("no_wallet")))} type="button">
-                {t("connect")}
-              </button>
+              {account && owner.trim().toLowerCase() === account.toLowerCase() ? (
+                <span className="inline-flex h-10 shrink-0 items-center whitespace-nowrap rounded-md bg-ok/12 px-3 text-xs text-ok">{t("wallet_using")}</span>
+              ) : (
+                <button className="btn-ghost shrink-0" onClick={() => connect().then((a) => { setOwner(a); setConnected(a); }).catch(() => setErr(t("no_wallet")))} type="button">
+                  {t("connect")}
+                </button>
+              )}
             </div>
             {ownerProblem && <span className="mt-1 block text-xs text-bad">{ownerProblem}</span>}
           </label>
           <label className="block text-sm">
-            <span className="text-neutral-400">{t("f_recipient")}</span>
+            <span className="text-fg-2">{t("f_recipient")}</span>
             <input className={`field mono mt-1 ${recipientProblem ? "border-bad" : ""}`} value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder={owner || "0x…"} aria-invalid={!!recipientProblem} />
             {recipientProblem && <span className="mt-1 block text-xs text-bad">{recipientProblem}</span>}
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm">
-              <span className="text-neutral-400">{t("f_input")}</span>
+              <span className="text-fg-2">{t("f_input")}</span>
               <select className="field mt-1" value={input} onChange={(e) => setInput(e.target.value)}>
                 {assets?.assets.filter((a) => a.role === "stable_input").map((a) => (
                   <option key={a.assetKey} value={a.assetKey}>
@@ -164,7 +177,7 @@ export function NewJobForm() {
               </select>
             </label>
             <label className="block text-sm">
-              <span className="text-neutral-400">{t("f_output")}</span>
+              <span className="text-fg-2">{t("f_output")}</span>
               <select className="field mt-1" value={output} onChange={(e) => setOutput(e.target.value)}>
                 {assets?.assets.filter((a) => a.role === "stock_output").map((a) => (
                   <option key={a.assetKey} value={a.assetKey} disabled={!a.executionAllowed}>
@@ -175,38 +188,41 @@ export function NewJobForm() {
             </label>
           </div>
           <label className="block text-sm">
-            <span className="text-neutral-400">
+            <span className="text-fg-2">
               {t("f_amount")} ({inAsset?.displaySymbol ?? "—"})
             </span>
             <input className="field mono mt-1" value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" />
             {amountRaw && (
               <details className="demo-hide mt-1">
-                <summary className="cursor-pointer text-xs text-neutral-500">{t("dev_details")}</summary>
-                <span className="mono text-xs text-neutral-500">amountInRaw = {amountRaw}</span>
-                <p className="text-xs text-neutral-500">{t("dev_raw_note")}</p>
+                <summary className="cursor-pointer text-xs text-fg-3">{t("dev_details")}</summary>
+                <span className="mono text-xs text-fg-3">amountInRaw = {amountRaw}</span>
+                <p className="text-xs text-fg-3">{t("dev_raw_note")}</p>
               </details>
             )}
           </label>
           <label className="block text-sm">
-            <span className="text-neutral-400">{t("f_policy")}</span>
+            <span className="text-fg-2">{t("f_policy")}</span>
             <select className="field mt-1" value={policy} onChange={(e) => setPolicy(e.target.value)}>
               <option value="STRICT_LIVE">{t("policy_strict")}</option>
               <option value="REFERENCE_CONTEXT">{t("policy_ref")}</option>
               <option value="QUOTE_ONLY">{t("policy_quote")}</option>
             </select>
           </label>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-3 sm:items-end">
             <label className="block text-sm">
-              <span className="text-neutral-400">{t("f_slippage")}</span>
+              <span className="text-fg-2">{t("f_slippage_short")}</span>
               <input className="field mono mt-1" type="number" min={1} max={300} value={slippage} onChange={(e) => setSlippage(Number(e.target.value))} />
+              <span className="mt-1 block text-xs text-fg-3">{t("f_slippage_hint")}</span>
             </label>
             <label className="block text-sm">
-              <span className="text-neutral-400">{t("f_impact")}</span>
+              <span className="text-fg-2">{t("f_impact_short")}</span>
               <input className="field mono mt-1" type="number" min={1} max={1000} value={impact} onChange={(e) => setImpact(Number(e.target.value))} />
+              <span className="mt-1 block text-xs text-fg-3">{t("f_impact_hint")}</span>
             </label>
             <label className="block text-sm">
-              <span className="text-neutral-400">{t("f_dev")}</span>
+              <span className="text-fg-2">{t("f_dev_short")}</span>
               <input className="field mono mt-1" type="number" min={1} max={2000} value={deviation} disabled={policy === "QUOTE_ONLY"} onChange={(e) => setDeviation(Number(e.target.value))} />
+              <span className="mt-1 block text-xs text-fg-3">{t("f_dev_hint")}</span>
             </label>
           </div>
           <Row k={t("price_line")} v={price === "0" ? t("free") : `$${price} (${policies?.pricing.network})`} />
@@ -215,7 +231,7 @@ export function NewJobForm() {
           <button className="btn w-full" disabled={busy || !!disabledWhy} onClick={submit}>
             {busy ? t("running") : t("submit")}
           </button>
-          {disabledWhy && !busy && <p className="text-center text-xs text-neutral-400">{disabledWhy}</p>}
+          {disabledWhy && !busy && <p className="text-center text-xs text-fg-2">{disabledWhy}</p>}
         </div>
       </Card>
     </div>

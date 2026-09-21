@@ -227,6 +227,30 @@
 - 同一分钟内两策略结论一致但参考口径不同（live 334.00 vs 官方收盘 336.13），偏差符号相反，说明参考选择逻辑按策略分流正确。
 - W-05（浏览器钱包主网成交录屏）：截至 13:35Z 演示钱包 nonce 仍为 4、余额未变，运营者尚未执行；完成后补记 tx。
 
+## UI 设计评审 · Verify 侧（`plans/UI设计评审_2026-09-22.md` V 节；分支 devday-2026，2026-09-22）
+
+| 编号 | 级别 | 结果 | 做法 |
+|---|---|---|---|
+| UV-01 | P0 | 已修 | 头部与正文同版心 `max-w-5xl`，容器 `min-w-0`、子项可收缩；LIVE / 链徽章只在 ≥2xl 显示，常驻页脚；手机菜单改图标按钮不再被裁 |
+| UV-02 | P1 | 已修 | 波形标（与主站同一几何，`components/Logo.tsx`）+ 字标 CHACONNE + 小号 Verify |
+| UV-03 | P1 | 已修 | 导航纯文字、当前页下划线；实心紫只留主要操作（连接钱包 / 提交） |
+| UV-04 | P1 | 已修 | 新增 `lib/useAccount.ts`（只读 eth_accounts + accountsChanged + 钱包状态事件）；头部、新建、规划、模拟表单共用；已连接时自动填入并显示「使用已连接的钱包」 |
+| UV-05 | P1 | 已修 | body `min-h-dvh flex-col`、main `flex-1`、页脚 `mt-auto`；`EmptyState` 统一版式（404 / 任务不存在 / 页面错误 / Live 无数据 / 我的任务空） |
+| UV-06 | P1 | 已修（Verify 侧） | layout 服务端读主站 `pref-locale` cookie → Accept-Language 定首帧 `<html lang>` 与语言；本站显式切换（localStorage）仍优先。cookie 作用域到 `.chaconne.xyz` 归主站 |
+| UV-07 / UI-23 | P2 | 已修 | 主按钮白字压 brand-600 `#7f22fe`，悬停 brand-500；`.btn/.btn-ghost/.field` 统一 40px 高、圆角 10，卡片圆角 16 |
+| UV-08 | P2 | 已修 | 三列 `sm:items-end`；字段名缩短（最大滑点 / 最大冲击 / 最大偏差），单位与说明放输入框下 |
+| UV-09 | P2 | 已修 | 首页白话解释挪到 H1 下作导语，不带盒子 |
+| UV-10 | 保留 | — | `.card/.btn/.btn-ghost/.field/.mono` 与 Play 三只动物未动 |
+| UI-19 | P2 | 已修 | Replay 的 After 侧变化行 warn 左边线 + 浅底，数值后跟差值（如 +0.33%） |
+| UI-22 / 26 / 27 | P1 | 已修 | 文字三级 token（text-neutral-400/500/600 → fg-2/fg-3 全站替换）；`text-[10px]` 清零；描边/表面走 line / surface token |
+| UI-32 | P1 | 已修 | 原生下拉 `appearance-none` + 自绘箭头（CSS data URI，CSP img-src 已含 data:），高度与输入框一致 40px |
+| UI-37 / 38 | P1 | 已修 | base 层手型光标与 `:focus-visible` 焦点环（与主站同一规则） |
+| UI-04 | P2 | 已修 | emoji → lucide-react（证据包校验 ✓/✗/○、错误页、菜单）；Play 三只动物保留 |
+| UI-02 / UI-06 | P1 | 已修（第一步） | Inter 可变字体自托管（`app/fonts/InterVariable.woff2`，next/font/local）；token 值与主站 globals.css 同一份 |
+
+- 门禁：`tsc --noEmit` ✓、eslint 0 错误、`next build` ✓、`pnpm lint:copy` ✓、diff 密钥扫描干净。真浏览器视口/横向溢出复核由服务器部署后做。
+- 未做：报告页 / 执行页视觉未重做（评审本次也未看）；`packages/ui` 共用包（UI-06 第二步）留到两站组件稳定后。
+
 ## 汇总
 
 - v1 68 条（PRE 10 + 清单 58）中：通过 56（含代码级通过 2）、部分 9、待执行 3、阻塞 0、不适用 0。

@@ -8,9 +8,9 @@ export default function Home() {
   return (
     <div className="space-y-10">
       <section className="space-y-5 pt-6">
-        <p className="max-w-3xl rounded-lg border border-brand/30 bg-brand/10 px-4 py-2 text-base text-neutral-100">{t("human_intro")}</p>
         <h1 className="max-w-3xl text-3xl font-bold leading-tight sm:text-4xl">{t("hero_h")}</h1>
-        <p className="max-w-3xl text-neutral-300">{t("hero_p")}</p>
+        <p className="max-w-3xl text-lg leading-7 text-fg-1">{t("human_intro")}</p>
+        <p className="max-w-3xl text-fg-2">{t("hero_p")}</p>
         <div className="flex flex-wrap gap-3">
           <Link href="/new" className="btn">
             {t("cta_new")}
@@ -22,7 +22,7 @@ export default function Home() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-400">{t("what_you_get")}</h2>
+        <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-fg-3">{t("what_you_get")}</h2>
         <div className="grid gap-4 sm:grid-cols-3">
           <Card title={t("feat1_h")}>
             <p className="text-sm text-neutral-300">{t("feat1_p")}</p>

@@ -10,6 +10,7 @@ import { verifyBundleOffline, type BundleCheck, type EvidenceBundle } from "@cha
 import { GUARD_ABI } from "@/lib/guardAbi";
 import { PLAN_GUARD_ABI } from "@/lib/planGuardAbi";
 import { jobsV2, mandates } from "@/lib/api-v2";
+import { CheckCircle2, Circle, XCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { Card, Pill } from "@/components/ui";
 import { RPC_URL } from "@/lib/wallet";
@@ -153,20 +154,20 @@ export function BundleVerifier() {
           <button className="btn mt-2" onClick={() => run(text, true)} disabled={!text}>{t("vb_run")}</button>
         </Card>
         <Card title={zh ? "检查清单" : "Checklist"} right={checks ? failed === 0 ? <Pill tone="ok">{t("vb_all_ok")}</Pill> : <Pill tone="bad">{failed} {t("vb_failed")}</Pill> : null}>
-          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-fg-2">
             <span>{zh ? "期望的证明签名者" : "Expected attestation signer"}</span>
             <input className="field mono max-w-sm py-1 text-xs" value={expectedSigner} onChange={(e) => setExpectedSigner(e.target.value.trim())} placeholder="0x…" />
-            <span>{zh ? "（默认读自服务 healthz；包内自带 attestationSigner 时以包为准；⚪ = 未校验）" : "(defaults to the service healthz; a bundle's own attestationSigner wins; ⚪ = not verified)"}</span>
+            <span>{zh ? "（默认读自服务 healthz；包内自带 attestationSigner 时以包为准；○ = 未校验）" : "(defaults to the service healthz; a bundle's own attestationSigner wins; ○ = not verified)"}</span>
           </div>
           {!checks ? (
-            <p className="text-sm text-neutral-400">—</p>
+            <p className="text-sm text-fg-2">—</p>
           ) : (
             <ul className="max-h-[28rem] space-y-1 overflow-auto text-sm">
               {checks.map((c) => (
                 <li key={c.id} className={`flex gap-2 rounded px-1 ${flipped(c) ? "bg-warn/15" : ""}`}>
-                  <span title={c.skipped ? (zh ? "未校验" : "not verified") : undefined}>{c.skipped ? "⚪" : c.ok ? "✅" : "❌"}</span>
+                  <span className={c.skipped ? "text-fg-3" : c.ok ? "text-ok" : "text-bad"} title={c.skipped ? (zh ? "未校验" : "not verified") : undefined}>{c.skipped ? <Circle size={16} /> : c.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}</span>
                   <span className="mono text-xs text-neutral-300">{c.id}</span>
-                  <span className="text-xs text-neutral-500">{c.detail}</span>
+                  <span className="text-xs text-fg-3">{c.detail}</span>
                   {flipped(c) && <Pill tone="warn">{zh ? "被篡改影响" : "flipped by edit"}</Pill>}
                 </li>
               ))}
@@ -182,7 +183,7 @@ export function BundleVerifier() {
         {online && (
           <ul className="mt-3 space-y-1 text-sm">
             {online.map((c) => (
-              <li key={c.id} className="flex gap-2"><span>{c.ok ? "✅" : "❌"}</span><span className="mono text-xs">{c.id}</span><span className="text-xs text-neutral-500">{c.detail}</span></li>
+              <li key={c.id} className="flex gap-2"><span className={c.ok ? "text-ok" : "text-bad"}>{c.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}</span><span className="mono text-xs">{c.id}</span><span className="text-xs text-fg-3">{c.detail}</span></li>
             ))}
           </ul>
         )}

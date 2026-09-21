@@ -89,18 +89,18 @@ export function MandateBuilder({ plan, candidates, assets, onBack }: { plan: Pla
       <div className="grid gap-4 md:grid-cols-2">
         <Card title={zh ? "授权边界" : "Authorization bounds"}>
           <div className="space-y-3 text-sm">
-            <label className="block"><span className="text-neutral-400">{t("mandate_budget_human")} ({inSym})</span><input className={`field mono mt-1 ${amountProblem ? "border-bad" : ""}`} value={budgetHuman} inputMode="decimal" onChange={(e) => setBudgetHuman(e.target.value)} /></label>
-            <label className="block"><span className="text-neutral-400">{t("mandate_per_step_human")} ({inSym})</span><input className={`field mono mt-1 ${amountProblem ? "border-bad" : ""}`} value={perStepHuman} inputMode="decimal" onChange={(e) => setPerStepHuman(e.target.value)} /></label>
+            <label className="block"><span className="text-fg-2">{t("mandate_budget_human")} ({inSym})</span><input className={`field mono mt-1 ${amountProblem ? "border-bad" : ""}`} value={budgetHuman} inputMode="decimal" onChange={(e) => setBudgetHuman(e.target.value)} /></label>
+            <label className="block"><span className="text-fg-2">{t("mandate_per_step_human")} ({inSym})</span><input className={`field mono mt-1 ${amountProblem ? "border-bad" : ""}`} value={perStepHuman} inputMode="decimal" onChange={(e) => setPerStepHuman(e.target.value)} /></label>
             {amountProblem && <p className="text-xs text-bad">{amountProblem}</p>}
-            <label className="block"><span className="text-neutral-400">{t("mandate_max_steps")}</span><input className="field mono mt-1" type="number" min={1} max={50} value={maxSteps} onChange={(e) => setMaxSteps(Number(e.target.value))} /></label>
+            <label className="block"><span className="text-fg-2">{t("mandate_max_steps")}</span><input className="field mono mt-1" type="number" min={1} max={50} value={maxSteps} onChange={(e) => setMaxSteps(Number(e.target.value))} /></label>
             <Row k={t("plan_deadline")} v={fmtLocal(goal.deadline, locale)} mono />
             <Row k={t("f_policy")} v={`${goal.policyId} v${goal.policyVersion}`} mono />
             <details className="demo-hide">
-              <summary className="cursor-pointer text-xs text-neutral-500">{t("dev_details")}</summary>
+              <summary className="cursor-pointer text-xs text-fg-3">{t("dev_details")}</summary>
               <Row k="budgetCap (raw)" v={budgetCap} mono />
               <Row k="perStepCap (raw)" v={perStep} mono />
               <Row k="deadline (ISO)" v={goal.deadline} mono />
-              <p className="text-xs text-neutral-500">{t("dev_raw_note")}</p>
+              <p className="text-xs text-fg-3">{t("dev_raw_note")}</p>
             </details>
           </div>
         </Card>
@@ -118,11 +118,11 @@ export function MandateBuilder({ plan, candidates, assets, onBack }: { plan: Pla
               <Row k="verifyingContract" v={PLANGUARD_ADDRESS || "—"} mono />
             </div>
           ) : (
-            <p className="text-sm text-neutral-400">{amountProblem ?? (zh ? "填好授权边界后，这里会显示将要签署的内容。" : "Fill in the bounds and the exact message to sign appears here.")}</p>
+            <p className="text-sm text-fg-2">{amountProblem ?? (zh ? "填好授权边界后，这里会显示将要签署的内容。" : "Fill in the bounds and the exact message to sign appears here.")}</p>
           )}
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button className="btn" disabled={!draft || !PLANGUARD_ADDRESS || step === "signing" || step === "registering"} onClick={doSign}>{step === "signing" ? "…" : step === "registering" ? t("mandate_signed") : t("mandate_sign")}</button>
-            {account ? <Pill tone="ok">{short(account)}</Pill> : <span className="text-xs text-neutral-400">{!PLANGUARD_ADDRESS ? t("why_not_deployed") : !draft ? amountProblem ?? "" : t("why_wallet")}</span>}
+            {account ? <Pill tone="ok">{short(account)}</Pill> : <span className="text-xs text-fg-2">{!PLANGUARD_ADDRESS ? t("why_not_deployed") : !draft ? amountProblem ?? "" : t("why_wallet")}</span>}
           </div>
           {msg && <p className="mt-3 text-sm text-bad">{msg}</p>}
         </Card>

@@ -25,7 +25,7 @@ function Tbl({ rows }: { rows: Array<[string, string]> }) {
       <table className="w-full text-left text-sm">
         <tbody>
           {rows.map(([p, d]) => (
-            <tr key={p} className="border-b border-neutral-800 last:border-0">
+            <tr key={p} className="border-b border-line last:border-0">
               <td className="mono whitespace-nowrap py-2 pr-4 align-top text-brand">{p}</td>
               <td className="py-2 text-neutral-300">{d}</td>
             </tr>
@@ -70,7 +70,7 @@ export default function DevelopersPage() {
 
       <Card title={zh ? "通过 OKX AI 使用（A2MCP）" : "Use through OKX AI (A2MCP)"}>
         <p className="text-sm text-neutral-300">{zh ? "服务：Chaconne Verify · StockProof Trade Verification（ASP #13803）。A2MCP 传输约定只用两个状态码：任何缺参数/参数错误都是 HTTP 200 + status: input_required（正文带缺失项、提示、schema 和示例）；成功是 HTTP 200 + status: delivered（一句话结论 + 完整报告）；收费阶段是 402 + PAYMENT-REQUIRED（x402 v2）。参数可以直接写符号和人类金额。" : "Service: Chaconne Verify · StockProof Trade Verification (ASP #13803). The A2MCP transport uses only two status codes: any missing/invalid input is HTTP 200 with status: input_required (missing fields, hints, schema and an example in the body); success is HTTP 200 with status: delivered (a one-line summary plus the full report); the paid phase is 402 + PAYMENT-REQUIRED (x402 v2). Symbols and human amounts are accepted directly."}</p>
-        <pre className="mono mt-3 overflow-auto rounded-lg bg-neutral-950 p-3 text-xs">{`curl -X POST ${SERVICE}/a2mcp/verify -H "Content-Type: application/json" -d '{
+        <pre className="mono mt-3 overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`curl -X POST ${SERVICE}/a2mcp/verify -H "Content-Type: application/json" -d '{
   "ownerAddress": "0xYourWallet",
   "outputAssetKey": "AAPLx",      # or AAPL / NVDAx / NVDA / a 0x address
   "amount": "100",                # 100 USDG (human units); or amountInRaw
@@ -80,7 +80,7 @@ export default function DevelopersPage() {
 # → 200 {"ok":true,"status":"delivered","summary":"ELIGIBLE under REFERENCE_CONTEXT: …","verdict":"eligible","jobId":"job_…","report":{…}}
 # → 200 {"ok":false,"status":"input_required","missingParams":[…],"schema":{…},"example":{…}}   (never 4xx)
 # → 402 + PAYMENT-REQUIRED header                                                       (paid phase)`}</pre>
-        <p className="mt-2 text-xs text-neutral-500">{zh ? "GET 也可用（参数放 query）。同参数重复调用返回同一任务，不重复计费。" : "GET works too (params in the query string). Repeating the same parameters returns the same task; nothing is charged twice."}</p>
+        <p className="mt-2 text-xs text-fg-3">{zh ? "GET 也可用（参数放 query）。同参数重复调用返回同一任务，不重复计费。" : "GET works too (params in the query string). Repeating the same parameters returns the same task; nothing is charged twice."}</p>
       </Card>
 
       <Card title={zh ? "地址（X Layer 主网 · chainId 196）" : "Addresses (X Layer mainnet · chainId 196)"}>
@@ -92,7 +92,7 @@ export default function DevelopersPage() {
                 ["ChaconneVerifyPlanGuard (v2, mandates)", ADDR.planGuard, true],
                 [zh ? "证明签名者（attestation signer, epoch 1）" : "Attestation signer (epoch 1)", ADDR.signer, false],
               ].map(([label, addr, isContract]) => (
-                <tr key={String(addr)} className="border-b border-neutral-800 last:border-0">
+                <tr key={String(addr)} className="border-b border-line last:border-0">
                   <td className="py-2 pr-4 align-top text-neutral-300">{label}</td>
                   <td className="mono py-2 align-top break-all">
                     {String(addr)}
@@ -107,7 +107,7 @@ export default function DevelopersPage() {
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-neutral-500">{zh ? "两个合约均 Sourcify 精确匹配；EIP-712 domain：ChaconneVerifyGuard v1 / ChaconneVerifyPlanGuard v1。当前 signer 与 epoch 也可从 GET /healthz 读取。" : "Both contracts are Sourcify exact matches; EIP-712 domains: ChaconneVerifyGuard v1 / ChaconneVerifyPlanGuard v1. The current signer and epoch are also exposed by GET /healthz."}</p>
+        <p className="mt-2 text-xs text-fg-3">{zh ? "两个合约均 Sourcify 精确匹配；EIP-712 domain：ChaconneVerifyGuard v1 / ChaconneVerifyPlanGuard v1。当前 signer 与 epoch 也可从 GET /healthz 读取。" : "Both contracts are Sourcify exact matches; EIP-712 domains: ChaconneVerifyGuard v1 / ChaconneVerifyPlanGuard v1. The current signer and epoch are also exposed by GET /healthz."}</p>
       </Card>
 
       <Card title={zh ? "HTTP API · 核验（v1）" : "HTTP API · verification (v1)"}>
@@ -115,27 +115,27 @@ export default function DevelopersPage() {
       </Card>
       <Card title={zh ? "HTTP API · 规划、授权计划、模拟、战报（v5）" : "HTTP API · plans, mandates, simulations, reports (v5)"}>
         <Tbl rows={v2} />
-        <p className="mt-2 text-xs text-neutral-500">{zh ? "鉴权：x-api-key 或 Authorization: Bearer；A2MCP 端点与 /pub/* 不需要 key。响应 private/no-store。API key 在 Dev Day 期间联系运营者获取。" : "Auth: x-api-key or Authorization: Bearer; A2MCP endpoints and /pub/* need no key. Responses are private/no-store. During Dev Day, ask the operator for an API key."}</p>
+        <p className="mt-2 text-xs text-fg-3">{zh ? "鉴权：x-api-key 或 Authorization: Bearer；A2MCP 端点与 /pub/* 不需要 key。响应 private/no-store。API key 在 Dev Day 期间联系运营者获取。" : "Auth: x-api-key or Authorization: Bearer; A2MCP endpoints and /pub/* need no key. Responses are private/no-store. During Dev Day, ask the operator for an API key."}</p>
       </Card>
 
       <Card title={zh ? "MCP 工具（verify-mcp，20 个）" : "MCP tools (verify-mcp, 20)"}>
         <div className="space-y-2 text-sm">
           {MCP_TOOLS.map(([group, names]) => (
             <div key={group}>
-              <p className="text-xs uppercase tracking-wide text-neutral-500">{group}</p>
+              <p className="text-xs uppercase tracking-wide text-fg-3">{group}</p>
               <p className="mono break-words text-neutral-300 [overflow-wrap:anywhere]">{names.join(" · ")}</p>
             </div>
           ))}
         </div>
-        <p className="mt-2 text-xs text-neutral-500">{zh ? "stdio 传输；默认不持有任何私钥。可选 agent-wallet 模式（用户自己的 Agent 钱包，AGENT_WALLET_PRIVATE_KEY + AGENT_WALLET_MAX_SPEND_USD + AGENT_WALLET_CHAIN_IDS 三者齐备才启用）：x402 自动付款带花费上限、代签 TradeMandate、执行步骤（发交易前读链上 stepIndex，预授权后再取证书）。" : "stdio transport; holds no private key by default. Optional agent-wallet mode (your own agent wallet; enabled only when AGENT_WALLET_PRIVATE_KEY + AGENT_WALLET_MAX_SPEND_USD + AGENT_WALLET_CHAIN_IDS are all set): auto-pays x402 within a spend cap, signs TradeMandate, executes steps (reads the on-chain stepIndex before sending, pre-approves before fetching the certificate)."}</p>
-        <pre className="mono mt-3 overflow-auto rounded-lg bg-neutral-950 p-3 text-xs">{`{ "mcpServers": { "chaconne-verify": {
+        <p className="mt-2 text-xs text-fg-3">{zh ? "stdio 传输；默认不持有任何私钥。可选 agent-wallet 模式（用户自己的 Agent 钱包，AGENT_WALLET_PRIVATE_KEY + AGENT_WALLET_MAX_SPEND_USD + AGENT_WALLET_CHAIN_IDS 三者齐备才启用）：x402 自动付款带花费上限、代签 TradeMandate、执行步骤（发交易前读链上 stepIndex，预授权后再取证书）。" : "stdio transport; holds no private key by default. Optional agent-wallet mode (your own agent wallet; enabled only when AGENT_WALLET_PRIVATE_KEY + AGENT_WALLET_MAX_SPEND_USD + AGENT_WALLET_CHAIN_IDS are all set): auto-pays x402 within a spend cap, signs TradeMandate, executes steps (reads the on-chain stepIndex before sending, pre-approves before fetching the certificate)."}</p>
+        <pre className="mono mt-3 overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`{ "mcpServers": { "chaconne-verify": {
     "command": "npx", "args": ["-y", "@chaconne/verify-mcp"],
     "env": { "VERIFY_SERVICE_URL": "${SERVICE}", "VERIFY_API_KEY": "<your key>" }
 } } }`}</pre>
       </Card>
 
       <Card title="SDK (@chaconne/verify-sdk)">
-        <pre className="mono overflow-auto rounded-lg bg-neutral-950 p-3 text-xs">{`import { createClient } from "@chaconne/verify-sdk";
+        <pre className="mono overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`import { createClient } from "@chaconne/verify-sdk";
 const c = createClient({ baseUrl: "${SERVICE}", apiKey: process.env.VERIFY_API_KEY /*, x402Signer: account */ });
 
 const job  = await c.jobs.create({ ownerAddress, inputAssetKey, outputAssetKey, amountInRaw: "5000000", policyId: "REFERENCE_CONTEXT", maxSlippageBps: 50, maxPriceImpactBps: 100, maxReferenceDeviationBps: 300, clientRequestId: "my-1" });
@@ -144,7 +144,7 @@ const plan = await c.plans.create({ /* PlanGoal + clientRequestId */ });
 const m    = await c.mandates.create({ /* typedData + signature + legs … */ });
 const step = await c.mandates.prepareStep(m.body.mandateId); // → executeStep on PlanGuard from your wallet
 const bundle = await c.jobs.bundle(job.body.jobId);         // re-check offline with verify_evidence_bundle / npx verify-bundle`}</pre>
-        <p className="mt-2 break-words text-xs text-neutral-500 [overflow-wrap:anywhere]">{zh ? "方法：assets · policies · products · healthz · jobs.{create,get,report,prepareExecution,submit,bundle,bill} · plans.{create,get,toJob} · mandates.{create,get,pause,resume,cancel,prepareStep,submitStep,bundle,bill} · simulations · profiles · templates · shares.{create,getPublic} · a2mcp.{verify,plan}。" : "Methods: assets · policies · products · healthz · jobs.{create,get,report,prepareExecution,submit,bundle,bill} · plans.{create,get,toJob} · mandates.{create,get,pause,resume,cancel,prepareStep,submitStep,bundle,bill} · simulations · profiles · templates · shares.{create,getPublic} · a2mcp.{verify,plan}."}</p>
+        <p className="mt-2 break-words text-xs text-fg-3 [overflow-wrap:anywhere]">{zh ? "方法：assets · policies · products · healthz · jobs.{create,get,report,prepareExecution,submit,bundle,bill} · plans.{create,get,toJob} · mandates.{create,get,pause,resume,cancel,prepareStep,submitStep,bundle,bill} · simulations · profiles · templates · shares.{create,getPublic} · a2mcp.{verify,plan}。" : "Methods: assets · policies · products · healthz · jobs.{create,get,report,prepareExecution,submit,bundle,bill} · plans.{create,get,toJob} · mandates.{create,get,pause,resume,cancel,prepareStep,submitStep,bundle,bill} · simulations · profiles · templates · shares.{create,getPublic} · a2mcp.{verify,plan}."}</p>
       </Card>
 
       <Card title={zh ? "信任边界（如实）" : "Trust boundary (stated plainly)"}>

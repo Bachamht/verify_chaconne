@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { reasonText } from "@/lib/reasons";
-import { Card, Json, Pill, Row, VerdictBadge } from "@/components/ui";
+import { Card, Json, Pill, Row, VerdictBadge, EmptyState } from "@/components/ui";
 import { EXPLORER, short } from "@/lib/wallet";
 import { MAIN_SITE_URL } from "@/lib/productSwitch";
 import { jobsV2 } from "@/lib/api-v2";
@@ -100,8 +100,13 @@ export function JobClient({ jobId }: { jobId: string }) {
     void load();
   }, [load]);
 
-  if (status && status !== 200) return <p className="text-bad">{status === 404 ? (locale === "zh" ? "找不到任务，或它属于另一个钱包。" : "Task not found, or it belongs to another wallet.") : `Error ${status}`}</p>;
-  if (!job) return <p className="text-neutral-400">{t("loading")}</p>;
+  if (status && status !== 200)
+    return status === 404 ? (
+      <EmptyState title={t("task_nf_h")} description={t("task_nf_p")} primary={{ href: "/me", label: t("nav_me") }} secondary={{ href: "/new", label: t("nav_new") }} />
+    ) : (
+      <EmptyState title={`${t("err_generic")} ${status}`} description={t("err_p")} primary={{ href: "/", label: t("nf_home") }} />
+    );
+  if (!job) return <p className="text-fg-2">{t("loading")}</p>;
   const report = rep?.report ?? null;
   const modeTone = job.evidenceMode === "LIVE" ? "ok" : "warn";
 
@@ -112,7 +117,7 @@ export function JobClient({ jobId }: { jobId: string }) {
         <Pill tone={modeTone}>{job.evidenceMode}</Pill>
         <Pill>{job.job.policyId}</Pill>
         {report && <Pill>{t("session")}: {report.marketSession}</Pill>}
-        <span className="mono ml-auto text-xs text-neutral-500">{job.jobId}</span>
+        <span className="mono ml-auto text-xs text-fg-3">{job.jobId}</span>
       </div>
 
       {report ? (
@@ -131,11 +136,11 @@ export function JobClient({ jobId }: { jobId: string }) {
                   <li key={i} className="flex gap-2">
                     <Pill tone={r.severity === "block" ? "bad" : r.severity === "warning" ? "warn" : "neutral"}>{r.severity}</Pill>
                     <span>
-                      {reasonText(r.code, locale)} <span className="mono text-xs text-neutral-500">{r.code}</span>
+                      {reasonText(r.code, locale)} <span className="mono text-xs text-fg-3">{r.code}</span>
                     </span>
                   </li>
                 ))}
-                {report.reasons.length === 0 && <li className="text-neutral-400">—</li>}
+                {report.reasons.length === 0 && <li className="text-fg-2">—</li>}
               </ul>
             </Card>
             <Card title={t("reference")}>
@@ -153,7 +158,7 @@ export function JobClient({ jobId }: { jobId: string }) {
                   </a>
                 </>
               ) : (
-                <p className="text-sm text-neutral-400">{report.comparisonStatus}</p>
+                <p className="text-sm text-fg-2">{report.comparisonStatus}</p>
               )}
             </Card>
             <Card title={t("quote")}>
@@ -167,7 +172,7 @@ export function JobClient({ jobId }: { jobId: string }) {
                   <Row k={locale === "zh" ? "报价接收时间" : "Quote received"} v={report.normalizedQuote.receivedAt} mono />
                 </>
               ) : (
-                <p className="text-sm text-neutral-400">—</p>
+                <p className="text-sm text-fg-2">—</p>
               )}
             </Card>
             <Card title={t("task_record")}>
@@ -177,9 +182,9 @@ export function JobClient({ jobId }: { jobId: string }) {
               <Row k={t("executions")} v={job.executions.length === 0 ? "—" : job.executions.map((e) => (
                 <span key={e.attemptId} className="block">
                   <Pill tone={execStateTone(e.state)}>{e.state}</Pill> {e.txHash && (<a className="underline" href={`${EXPLORER}/tx/${e.txHash}`} target="_blank" rel="noreferrer">{short(e.txHash)}</a>)}
-                  {e.receipt?.event && <span className="ml-2 text-neutral-400">{t("receipt_verified")} · spent {e.receipt.event.spent} · received {e.receipt.event.received} · refunded {e.receipt.event.refunded}</span>}
-                  {e.state === "REORG_PENDING" && e.receipt && <span className="ml-2 text-neutral-400">{e.receipt.confirmations}/{e.receipt.requiredConfirmations} conf</span>}
-                  {e.state === "UNKNOWN" && e.receipt?.reason && <span className="ml-2 text-neutral-400">{e.receipt.reason}</span>}
+                  {e.receipt?.event && <span className="ml-2 text-fg-2">{t("receipt_verified")} · spent {e.receipt.event.spent} · received {e.receipt.event.received} · refunded {e.receipt.event.refunded}</span>}
+                  {e.state === "REORG_PENDING" && e.receipt && <span className="ml-2 text-fg-2">{e.receipt.confirmations}/{e.receipt.requiredConfirmations} conf</span>}
+                  {e.state === "UNKNOWN" && e.receipt?.reason && <span className="ml-2 text-fg-2">{e.receipt.reason}</span>}
                 </span>
               ))} mono />
               <div className="mt-3 flex flex-wrap gap-2">
@@ -196,8 +201,8 @@ export function JobClient({ jobId }: { jobId: string }) {
                 <li key={e.evidenceId} className="flex flex-wrap items-center gap-2">
                   <Pill tone={e.mode === "LIVE" ? "ok" : "warn"}>{e.mode}</Pill>
                   <span className="mono" title={e.payload.kind}>{evidenceKindLabel(e.payload.kind, e.provider)}</span>
-                  <span className="text-neutral-400">{e.provider} · {e.endpoint}</span>
-                  <span className="mono ml-auto text-xs text-neutral-500">src {e.time.sourcePublishedAt ?? "—"} · recv {e.time.receivedAt}</span>
+                  <span className="text-fg-2">{e.provider} · {e.endpoint}</span>
+                  <span className="mono ml-auto text-xs text-fg-3">src {e.time.sourcePublishedAt ?? "—"} · recv {e.time.receivedAt}</span>
                 </li>
               ))}
             </ul>

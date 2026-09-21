@@ -9,9 +9,9 @@ export function BillPanel({ bill }: { bill: Bill | null }) {
   if (!bill) return null;
   const group = (label: string, lines: Bill["serviceFees"]) => (
     <div className="mb-3">
-      <div className="mb-1 text-xs uppercase tracking-wide text-neutral-400">{label}</div>
-      {lines.length === 0 ? <p className="text-xs text-neutral-500">—</p> : lines.map((l, i) => (
-        <div key={i} className="flex flex-wrap justify-between gap-2 border-b border-neutral-800 py-1 text-sm last:border-0">
+      <div className="mb-1 text-xs uppercase tracking-wide text-fg-2">{label}</div>
+      {lines.length === 0 ? <p className="text-xs text-fg-3">—</p> : lines.map((l, i) => (
+        <div key={i} className="flex flex-wrap justify-between gap-2 border-b border-line py-1 text-sm last:border-0">
           <span>{l.label}</span>
           <span className="mono">{l.amountRaw} {l.asset}{l.amountUsd ? ` · $${l.amountUsd}` : ""} {l.txHash && <a className="underline" href={`${EXPLORER}/tx/${l.txHash}`} target="_blank" rel="noreferrer">{short(l.txHash)}</a>}</span>
         </div>

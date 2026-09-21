@@ -242,12 +242,12 @@ export function ExecuteClient({ jobId }: { jobId: string }) {
           {account && !chainOk && <button className="btn-ghost" onClick={doSwitch}>{t("switch_chain")}</button>}
           {account && chainOk && <Pill tone="ok">X Layer · {CHAIN_ID}</Pill>}
           {account && job && !ownerOk && <Pill tone="bad">{t("owner_mismatch")}</Pill>}
-          {bal && exec && <span className="mono text-neutral-400">balance {fmtUnits(bal.token, inDec)} · allowance {fmtUnits(bal.allowance, inDec)}</span>}
+          {bal && exec && <span className="mono text-fg-2">balance {fmtUnits(bal.token, inDec)} · allowance {fmtUnits(bal.allowance, inDec)}</span>}
         </div>
       </Card>
 
       <Card title={t("step_approve_first")}>
-        <p className="mb-3 text-sm text-neutral-400">{t("approve_first_hint")}</p>
+        <p className="mb-3 text-sm text-fg-2">{t("approve_first_hint")}</p>
         <div className="flex flex-wrap items-center gap-3">
           {approvalTarget && bal && bal.allowance >= BigInt(approvalTarget.amount) ? (
             <Pill tone="ok">{t("approve_done")} · {fmtUnits(approvalTarget.amount, inDec)}</Pill>
@@ -256,7 +256,7 @@ export function ExecuteClient({ jobId }: { jobId: string }) {
               {step === "approving" ? "…" : approvalTarget ? `approve ${fmtUnits(approvalTarget.amount, inDec)}` : "…"}
             </button>
           )}
-          {bal && <span className="mono text-sm text-neutral-400">allowance {fmtUnits(bal.allowance, inDec)} · balance {fmtUnits(bal.token, inDec)}</span>}
+          {bal && <span className="mono text-sm text-fg-2">allowance {fmtUnits(bal.allowance, inDec)} · balance {fmtUnits(bal.token, inDec)}</span>}
         </div>
       </Card>
 
@@ -274,7 +274,7 @@ export function ExecuteClient({ jobId }: { jobId: string }) {
             <ul className="space-y-1 text-sm">
               {prep.report.reasons.filter((r) => r.severity !== "info").map((r, i) => (
                 <li key={i}>
-                  <Pill tone={r.severity === "block" ? "bad" : "warn"}>{r.severity}</Pill> {reasonText(r.code, locale)} <span className="mono text-xs text-neutral-500">{r.code}</span>
+                  <Pill tone={r.severity === "block" ? "bad" : "warn"}>{r.severity}</Pill> {reasonText(r.code, locale)} <span className="mono text-xs text-fg-3">{r.code}</span>
                 </li>
               ))}
             </ul>
@@ -326,9 +326,9 @@ export function ExecuteClient({ jobId }: { jobId: string }) {
               {!txHash ? null : !serverExec ? <Pill tone="warn">…</Pill> : (
                 <>
                   <Pill tone={execStateTone(serverExec.state)}>{serverExec.state}</Pill>
-                  {serverExec.state === "REORG_PENDING" && serverExec.receipt && <span className="text-xs text-neutral-400">{serverExec.receipt.confirmations}/{serverExec.receipt.requiredConfirmations} conf</span>}
-                  {serverExec.receipt?.event && <span className="mono text-xs text-neutral-400">spent {fmtUnits(serverExec.receipt.event.spent, inDec)} · received {serverExec.receipt.event.received} raw · refunded {fmtUnits(serverExec.receipt.event.refunded, inDec)}</span>}
-                  {serverExec.state === "UNKNOWN" && serverExec.receipt?.reason && <span className="text-xs text-neutral-400">{serverExec.receipt.reason}</span>}
+                  {serverExec.state === "REORG_PENDING" && serverExec.receipt && <span className="text-xs text-fg-2">{serverExec.receipt.confirmations}/{serverExec.receipt.requiredConfirmations} conf</span>}
+                  {serverExec.receipt?.event && <span className="mono text-xs text-fg-2">spent {fmtUnits(serverExec.receipt.event.spent, inDec)} · received {serverExec.receipt.event.received} raw · refunded {fmtUnits(serverExec.receipt.event.refunded, inDec)}</span>}
+                  {serverExec.state === "UNKNOWN" && serverExec.receipt?.reason && <span className="text-xs text-fg-2">{serverExec.receipt.reason}</span>}
                 </>
               )}
             </li>
@@ -336,7 +336,7 @@ export function ExecuteClient({ jobId }: { jobId: string }) {
           {step === "expired" && <p className="mt-3 text-sm text-warn">{t("expired")}</p>}
           {msg && <p className="mt-3 text-sm text-bad">{msg}</p>}
           <details className="demo-hide mt-3">
-            <summary className="cursor-pointer text-xs text-neutral-400">{t("dev_details")}</summary>
+            <summary className="cursor-pointer text-xs text-fg-2">{t("dev_details")}</summary>
             <Json value={{ typedData: exec.typedData, certificate: exec.certificate, certificateSignature: exec.certificateSignature, intentDigest: exec.intentDigest, routerCalldataHead: exec.routerCalldata.slice(0, 10) }} />
           </details>
         </Card>

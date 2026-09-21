@@ -252,6 +252,24 @@ const DICT = {
   err_copy: { en: "Copy error summary", zh: "复制错误摘要" },
   err_retry: { en: "Try again", zh: "重试" },
   simulation_loaded: { en: "Loaded simulation", zh: "已加载模拟" },
+  /* UI 设计评审 2026-09-22 */
+  wallet_using: { en: "Using the connected wallet", zh: "使用已连接的钱包" },
+  wallet_change: { en: "Edit", zh: "改" },
+  f_dev_short: { en: "Max deviation", zh: "最大偏差" },
+  f_dev_hint: { en: "bps vs the reference price · not used by QUOTE_ONLY", zh: "相对参考股价，bps · QUOTE_ONLY 不用" },
+  f_slippage_short: { en: "Max slippage", zh: "最大滑点" },
+  f_slippage_hint: { en: "bps · sets minOut", zh: "bps · 决定最少到手" },
+  f_impact_short: { en: "Max price impact", zh: "最大冲击" },
+  f_impact_hint: { en: "bps · from the OKX route", zh: "bps · 取自 OKX 路由" },
+  task_nf_h: { en: "Task not found", zh: "找不到这个任务" },
+  task_nf_p: { en: "The link may be wrong, or the task belongs to another wallet — tasks are only visible to the wallet that created them.", zh: "链接可能不对，或这个任务属于另一个钱包——任务只对创建它的钱包可见。" },
+  live_empty_h: { en: "No public reports yet", zh: "还没有公开的战报" },
+  live_empty_p: { en: "Reports appear here once someone shares one. Run a verification and share yours.", zh: "有人分享战报后会出现在这里。先做一次核验，再把你的分享出来。" },
+  me_empty_h: { en: "Nothing here yet", zh: "还没有记录" },
+  replay_changed: { en: "changed", zh: "变了" },
+  err_generic: { en: "Error", zh: "出错" },
+  footer_network: { en: "Network", zh: "网络" },
+  footer_mode: { en: "Evidence", zh: "证据模式" },
 } as const;
 
 export type Key = keyof typeof DICT;
@@ -266,14 +284,15 @@ interface Ctx {
 
 const I18nContext = createContext<Ctx | null>(null);
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("en");
+export function I18nProvider({ children, initialLocale }: { children: ReactNode; initialLocale?: Locale }) {
+  // UV-06：服务端已按主站 cookie / Accept-Language 定了首帧语言；本站显式切换过（localStorage）才覆盖
+  const [locale, setLocaleState] = useState<Locale>(initialLocale ?? "en");
   const [demo, setDemoState] = useState(false);
   useEffect(() => {
     try {
       const l = localStorage.getItem("verify-locale");
       if (l === "zh" || l === "en") setLocaleState(l);
-      else if (typeof navigator !== "undefined" && /^zh/i.test(navigator.language || "")) setLocaleState("zh");
+      else if (!initialLocale && typeof navigator !== "undefined" && /^zh/i.test(navigator.language || "")) setLocaleState("zh");
       const d = localStorage.getItem("verify-demo");
       if (d === "1") setDemoState(true);
     } catch {

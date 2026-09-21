@@ -14,7 +14,7 @@ export function PublicReportClient({ shareId }: { shareId: string }) {
       if (x.status === 200) setR(x.data);
     });
   }, [shareId]);
-  if (status && status !== 200) return <p className="text-neutral-400">{locale === "zh" ? "这份战报是私密的，或不存在。" : "This report is private or does not exist."}</p>;
-  if (!r) return <p className="text-neutral-400">{t("loading")}</p>;
+  if (status && status !== 200) return <p className="text-fg-2">{locale === "zh" ? "这份战报是私密的，或不存在。" : "This report is private or does not exist."}</p>;
+  if (!r) return <p className="text-fg-2">{t("loading")}</p>;
   return <ReportCard r={r} />;
 }

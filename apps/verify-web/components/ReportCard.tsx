@@ -26,7 +26,7 @@ export function ReportCard({ r, compact = false }: { r: PublicReport; compact?: 
             <Pill tone={r.evidenceMode === "LIVE" ? "ok" : r.evidenceMode === "SIMULATION" ? "brand" : "warn"}>{r.evidenceMode}</Pill>
           </div>
           <h2 className={`${compact ? "text-lg" : "text-2xl"} font-bold`}>{title}</h2>
-          {r.persona && <p className="text-xs text-neutral-400">{r.persona.name} · {zh ? PERSONAS[r.persona.personaId].name.zh : PERSONAS[r.persona.personaId].name.en}</p>}
+          {r.persona && <p className="text-xs text-fg-2">{r.persona.name} · {zh ? PERSONAS[r.persona.personaId].name.zh : PERSONAS[r.persona.personaId].name.en}</p>}
         </div>
       </div>
       {!compact && (

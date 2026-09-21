@@ -30,12 +30,12 @@ export function ShareSettings({ kind, refId }: { kind: "job" | "mandate" | "simu
       <div className="space-y-3 text-sm">
         <label className="flex items-center gap-2"><input type="checkbox" checked={pub} onChange={(e) => setPub(e.target.checked)} /> {t("share_public")}</label>
         <div className="flex items-center gap-2">
-          <span className="text-neutral-400">{t("share_amounts")}</span>
+          <span className="text-fg-2">{t("share_amounts")}</span>
           {(["exact", "range", "hidden"] as const).map((a) => (
             <button key={a} className={`px-2 py-0.5 text-xs ${amounts === a ? "btn" : "btn-ghost"}`} onClick={() => setAmounts(a)}>{t(`share_${a}` as "share_exact")}</button>
           ))}
         </div>
-        <p className="text-xs text-neutral-500">{t("share_private_note")}</p>
+        <p className="text-xs text-fg-3">{t("share_private_note")}</p>
         <div className="flex flex-wrap gap-2">
           <button className="btn px-3 py-1" onClick={save}>{t("share_save")}</button>
           <button className="btn-ghost px-3 py-1" onClick={makeTemplate}>{locale === "zh" ? "生成翻创模板" : "Create remix template"}</button>

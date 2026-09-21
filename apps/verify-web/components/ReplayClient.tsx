@@ -22,20 +22,51 @@ export function ReplayClient({ assetKey }: { assetKey: string }) {
     if (!f) return setMissing(true);
     fetch(`/replay/${f}.json`).then((r) => (r.ok ? r.json() : null)).then((j) => (j ? setD(j as Replay) : setMissing(true)));
   }, [assetKey]);
-  if (missing) return <p className="text-neutral-400">{zh ? "没有这个资产的回放样本。" : "No replay sample for this asset."}</p>;
-  if (!d) return <p className="text-neutral-400">{t("loading")}</p>;
+  if (missing) return <p className="text-fg-2">{zh ? "没有这个资产的回放样本。" : "No replay sample for this asset."}</p>;
+  if (!d) return <p className="text-fg-2">{t("loading")}</p>;
   const bi = (x: Bi | string) => (typeof x === "string" ? x : zh ? x.zh : x.en);
-  const side = (s: Side, title: string) => (
-    <Card title={title} right={<Pill tone="warn">{d.label}</Pill>}>
-      <Row k={t("replay_observed")} v={s.observedAt ? fmtLocal(s.observedAt, locale) : s.observedLabel ? bi(s.observedLabel) : t("replay_launch")} mono />
-      <Row k={t("replay_ratio")} v={s.ratio} mono />
-      <Row k={t("replay_stock")} v={`$${s.stockPriceUsd}`} mono />
-      <Row k={t("replay_in")} v={`${rawToHuman(s.quote.amountInRaw, 6)} USDG`} mono />
-      <Row k={t("replay_out")} v={`${rawToHuman(s.quote.expectedOutRaw, 18, 8)} ${d.displaySymbol}`} mono />
-      <Row k={t("replay_unit_price")} v={`$${s.quote.executableUsdPerShare}`} mono />
-      <p className="mt-2 text-xs text-neutral-400">{bi(s.unitNote)}</p>
-    </Card>
-  );
+  // UI-19：After 一侧把变了的行标出来（warn 左边线 + 浅底），数值后跟差值
+  const pctDelta = (a: string, b: string): string | null => {
+    const x = Number(a);
+    const y = Number(b);
+    if (!Number.isFinite(x) || !Number.isFinite(y) || x === 0 || x === y) return null;
+    const d = ((y - x) / Math.abs(x)) * 100;
+    return `${d > 0 ? "+" : "\u2212"}${Math.abs(d).toFixed(2)}%`;
+  };
+  const side = (s: Side, title: string, other: Side | null) => {
+    const cell = (label: string, val: string, rawA: string, rawB: string | null) => {
+      const delta = rawB !== null ? pctDelta(rawB, rawA) : null;
+      return (
+        <Row
+          key={label}
+          k={label}
+          tone={delta ? "changed" : undefined}
+          mono
+          v={
+            delta ? (
+              <span>
+                {val} <span className="text-warn">{delta}</span>
+              </span>
+            ) : (
+              val
+            )
+          }
+        />
+      );
+    };
+    return (
+      <Card title={title} right={<Pill tone="warn">{d.label}</Pill>}>
+        <Row k={t("replay_observed")} v={s.observedAt ? fmtLocal(s.observedAt, locale) : s.observedLabel ? bi(s.observedLabel) : t("replay_launch")} mono />
+        {cell(t("replay_ratio"), s.ratio, s.ratio, other?.ratio ?? null)}
+        {cell(t("replay_stock"), `$${s.stockPriceUsd}`, s.stockPriceUsd, other?.stockPriceUsd ?? null)}
+        {cell(t("replay_in"), `${rawToHuman(s.quote.amountInRaw, 6)} USDG`, s.quote.amountInRaw, other?.quote.amountInRaw ?? null)}
+        {cell(t("replay_out"), `${rawToHuman(s.quote.expectedOutRaw, 18, 8)} ${d.displaySymbol}`, s.quote.expectedOutRaw, other?.quote.expectedOutRaw ?? null)}
+        {cell(t("replay_unit_price"), `$${s.quote.executableUsdPerShare}`, s.quote.executableUsdPerShare, other?.quote.executableUsdPerShare ?? null)}
+        <p className="mt-2 text-xs text-fg-2">{bi(s.unitNote)}</p>
+        {other && <p className="mt-2 text-[11px] text-fg-3">{zh ? "左边线 = 与事件前相比变了的行" : "Left bar = rows that changed vs. before"}</p>}
+      </Card>
+    );
+  };
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
@@ -43,10 +74,10 @@ export function ReplayClient({ assetKey }: { assetKey: string }) {
         <Pill tone="warn">{d.mode}</Pill>
       </div>
       <p className="text-sm text-neutral-300">{t("replay_p")}</p>
-      <p className="text-xs text-neutral-500">{t("replay_note_constructed")}</p>
+      <p className="text-xs text-fg-3">{t("replay_note_constructed")}</p>
       <div className="grid gap-4 md:grid-cols-2">
-        {side(d.before, zh ? "事件前" : "Before")}
-        {side(d.after, zh ? "事件后" : "After")}
+        {side(d.before, zh ? "事件前" : "Before", null)}
+        {side(d.after, zh ? "事件后" : "After", d.before)}
       </div>
       <Card title={t("reasons")}>
         <ul className="space-y-1 text-sm">{d.reasonCodes.map((c) => <li key={c}><Pill tone="warn">{c}</Pill> {reasonText(c, locale)}</li>)}</ul>

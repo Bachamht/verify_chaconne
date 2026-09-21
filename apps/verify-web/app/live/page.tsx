@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { pubList, type PublicReport } from "@/lib/api-v2";
 import { useI18n } from "@/lib/i18n";
 import { ReportCard } from "@/components/ReportCard";
-import { Card } from "@/components/ui";
+import { Card, EmptyState } from "@/components/ui";
 
 export default function LivePage() {
   const { t, locale } = useI18n();
@@ -16,7 +16,11 @@ export default function LivePage() {
     <div className="space-y-5">
       <h1 className="text-2xl font-bold">{t("live_h")}</h1>
       <p className="text-sm text-neutral-300">{t("live_p")}</p>
-      {items === null ? <p className="text-neutral-400">{t("loading")}</p> : items.length === 0 ? <p className="text-neutral-400">{locale === "zh" ? "还没有公开的战报。" : "No public reports yet."}</p> : (
+      {items === null ? (
+        <p className="text-fg-2">{t("loading")}</p>
+      ) : items.length === 0 ? (
+        <EmptyState compact title={t("live_empty_h")} description={t("live_empty_p")} primary={{ href: "/new", label: t("nav_new") }} secondary={{ href: "/play", label: t("nav_play") }} />
+      ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {items.map((r) => (
             <Card key={r.shareId}>

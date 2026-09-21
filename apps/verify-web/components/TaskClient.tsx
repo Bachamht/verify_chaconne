@@ -10,7 +10,7 @@ import { fmtLocal } from "@/lib/format";
 import { apiError } from "@/lib/errors";
 import { encodeExecuteStep, encodeRevoke } from "@/lib/mandate";
 import { PLANGUARD_ADDRESS } from "@/lib/planGuardAbi";
-import { Card, Pill, Row } from "@/components/ui";
+import { Card, Pill, Row, EmptyState } from "@/components/ui";
 import { allowance, approveExact, CHAIN_ID, connect, currentChainId, ensureChain, EXPLORER, fmtUnits, publicClient, sendGuardCall, short, waitReceipt } from "@/lib/wallet";
 import { execStateTone } from "@/components/JobClient";
 import { BillPanel } from "@/components/BillPanel";
@@ -128,8 +128,13 @@ export function TaskClient({ id }: { id: string }) {
     }
   }
 
-  if (status && status !== 200) return <p className="text-bad">{status === 404 ? (zh ? "找不到任务，或它属于另一个钱包。" : "Task not found, or it belongs to another wallet.") : `Error ${status}`}</p>;
-  if (!m) return <p className="text-neutral-400">{t("loading")}</p>;
+  if (status && status !== 200)
+    return status === 404 ? (
+      <EmptyState title={t("task_nf_h")} description={t("task_nf_p")} primary={{ href: "/me", label: t("nav_me") }} secondary={{ href: "/new", label: t("nav_new") }} />
+    ) : (
+      <EmptyState title={`${t("err_generic")} ${status}`} description={t("err_p")} primary={{ href: "/", label: t("nf_home") }} />
+    );
+  if (!m) return <p className="text-fg-2">{t("loading")}</p>;
   const inDec = 6;
   const pct = Number(m.budgetCap) > 0 ? Math.min(100, (Number(m.spent) / Number(m.budgetCap)) * 100) : 0;
   const latest = m.latestEvaluation;
@@ -142,7 +147,7 @@ export function TaskClient({ id }: { id: string }) {
         <Pill tone={STATE_TONE[m.state] ?? "neutral"}>{m.state}</Pill>
         <Pill tone={m.evidenceMode === "LIVE" ? "ok" : "warn"}>{m.evidenceMode}</Pill>
         <Pill>{m.policyId} v{m.policyVersion}</Pill>
-        <span className="mono ml-auto text-xs text-neutral-500">{m.mandateId}</span>
+        <span className="mono ml-auto text-xs text-fg-3">{m.mandateId}</span>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -163,11 +168,11 @@ export function TaskClient({ id }: { id: string }) {
         <Card title={t("task_exec_step")}>
           {latest ? (
             <div className="mb-3 text-sm">
-              <Pill tone={latest.status === "READY" ? "ok" : latest.status === "BLOCKED" ? "bad" : "warn"}>{latest.status}</Pill> <span className="text-neutral-400">{fmtLocal(latest.evaluatedAt, locale)}</span>
+              <Pill tone={latest.status === "READY" ? "ok" : latest.status === "BLOCKED" ? "bad" : "warn"}>{latest.status}</Pill> <span className="text-fg-2">{fmtLocal(latest.evaluatedAt, locale)}</span>
               {latest.delta && <p className="mt-1 text-neutral-300">{zh ? latest.delta.summary.zh : latest.delta.summary.en}</p>}
             </div>
           ) : (
-            <p className="mb-3 text-sm text-neutral-400">{t("task_wait")}</p>
+            <p className="mb-3 text-sm text-fg-2">{t("task_wait")}</p>
           )}
           <button className="btn" disabled={m.state !== "ACTIVE" || phase === "preparing" || phase === "approving" || phase === "sending" || phase === "pending"} onClick={executeStep}>
             {phase === "preparing" ? t("running") : phase === "approving" ? `approve…` : phase === "sending" ? "execute…" : phase === "pending" ? t("tx_pending") : t("task_exec_step")}
@@ -190,10 +195,10 @@ export function TaskClient({ id }: { id: string }) {
 
       <Card title={t("task_timeline")}>
         <ul className="space-y-2 text-sm">
-          {m.evaluations.length === 0 && <li className="text-neutral-400">—</li>}
+          {m.evaluations.length === 0 && <li className="text-fg-2">—</li>}
           {m.evaluations.map((e) => (
-            <li key={e.evaluationId} className="flex flex-wrap gap-2 border-b border-neutral-800 py-1 last:border-0">
-              <span className="mono text-xs text-neutral-500">{fmtLocal(e.evaluatedAt, locale)}</span>
+            <li key={e.evaluationId} className="flex flex-wrap gap-2 border-b border-line py-1 last:border-0">
+              <span className="mono text-xs text-fg-3">{fmtLocal(e.evaluatedAt, locale)}</span>
               <Pill tone={e.status === "READY" ? "ok" : e.status === "BLOCKED" ? "bad" : e.status === "DONE" ? "ok" : "warn"}>{e.status}</Pill>
               <span className="text-neutral-300">{e.delta ? (zh ? e.delta.summary.zh : e.delta.summary.en) : e.reasons.filter((r) => r.severity !== "info").map((r) => reasonText(r.code, locale)).join("; ") || "—"}</span>
               {e.preparedStepIndex !== null && <Pill>step {e.preparedStepIndex}</Pill>}
@@ -204,15 +209,15 @@ export function TaskClient({ id }: { id: string }) {
 
       <Card title={t("task_steps")}>
         <ul className="space-y-2 text-sm">
-          {m.steps.length === 0 && <li className="text-neutral-400">—</li>}
+          {m.steps.length === 0 && <li className="text-fg-2">—</li>}
           {m.steps.map((s) => (
-            <li key={s.stepIndex} className="flex flex-wrap items-center gap-2 border-b border-neutral-800 py-1 last:border-0">
+            <li key={s.stepIndex} className="flex flex-wrap items-center gap-2 border-b border-line py-1 last:border-0">
               <span className="mono">#{s.stepIndex}</span>
               <Pill tone={execStateTone(s.state)}>{s.state}</Pill>
-              {s.step && <span className="mono text-xs text-neutral-400">{s.step.amountIn} → ≥{s.step.minAmountOut} {short(s.step.outputToken)}</span>}
+              {s.step && <span className="mono text-xs text-fg-2">{s.step.amountIn} → ≥{s.step.minAmountOut} {short(s.step.outputToken)}</span>}
               {s.txHash && <a className="mono underline" href={`${EXPLORER}/tx/${s.txHash}`} target="_blank" rel="noreferrer">{short(s.txHash)}</a>}
               {s.receipt && typeof s.receipt["event"] === "object" && s.receipt["event"] !== null && (
-                <span className="mono text-xs text-neutral-400">{t("receipt_verified")} · spent {(s.receipt["event"] as { spent?: string }).spent} · received {(s.receipt["event"] as { received?: string }).received} · refunded {(s.receipt["event"] as { refunded?: string }).refunded}</span>
+                <span className="mono text-xs text-fg-2">{t("receipt_verified")} · spent {(s.receipt["event"] as { spent?: string }).spent} · received {(s.receipt["event"] as { received?: string }).received} · refunded {(s.receipt["event"] as { refunded?: string }).refunded}</span>
               )}
             </li>
           ))}

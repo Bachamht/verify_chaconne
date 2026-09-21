@@ -6,6 +6,7 @@ import type { PersonaId, PlanGoal } from "@chaconne/core/verify";
 import { api, type AssetsResponse } from "@/lib/api";
 import { profiles, simulations, type PublicReport, type SimulationView } from "@/lib/api-v2";
 import { useI18n } from "@/lib/i18n";
+import { useAccount } from "@/lib/useAccount";
 import { PersonaArt, PERSONAS } from "@/components/personas";
 import { ReportCard } from "@/components/ReportCard";
 import { Card, Pill } from "@/components/ui";
@@ -34,6 +35,10 @@ export function PlayClient() {
   const [sim, setSim] = useState<SimulationView | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [owner, setOwner] = useState("");
+  const account = useAccount();
+  useEffect(() => {
+    if (account && !owner) setOwner(account);
+  }, [account]);
 
   useEffect(() => {
     api<AssetsResponse>("GET", "v1/assets").then((r) => r.status === 200 && setAssets(r.data));
@@ -108,24 +113,28 @@ export function PlayClient() {
         <Card title={t("play_pick")}>
           <div className="grid grid-cols-3 gap-3">
             {(Object.keys(PERSONAS) as PersonaId[]).map((id) => (
-              <button key={id} className={`flex flex-col items-center gap-2 rounded-xl border p-3 text-sm ${persona === id ? "border-brand bg-brand/10" : "border-neutral-800"}`} onClick={() => setPersona(id)}>
+              <button key={id} className={`flex flex-col items-center gap-2 rounded-xl border p-3 text-sm ${persona === id ? "border-brand bg-brand/10" : "border-line"}`} onClick={() => setPersona(id)}>
                 <PersonaArt id={id} size={72} />
                 <span className="font-semibold">{zh ? PERSONAS[id].name.zh : PERSONAS[id].name.en}</span>
-                <span className="text-xs text-neutral-400">{zh ? PERSONAS[id].blurb.zh : PERSONAS[id].blurb.en}</span>
+                <span className="text-xs text-fg-2">{zh ? PERSONAS[id].blurb.zh : PERSONAS[id].blurb.en}</span>
               </button>
             ))}
           </div>
           <div className="mt-3 flex flex-wrap gap-2 text-sm">
             <input className="field max-w-xs" placeholder={zh ? "给它起个名（可选）" : "Name it (optional)"} value={name} onChange={(e) => setName(e.target.value)} />
             <input className={`field mono max-w-xs ${addressProblem(owner, null, locale) ? "border-bad" : ""}`} placeholder={zh ? "钱包（可选，只用于保存角色）" : "Wallet (optional, only to save persona)"} value={owner} onChange={(e) => setOwner(e.target.value)} />
-            <button className="btn-ghost" type="button" onClick={() => connect().then(setOwner).catch(() => setErr(t("no_wallet")))}>{t("connect")}</button>
+            {account && owner.trim().toLowerCase() === account.toLowerCase() ? (
+              <span className="inline-flex h-10 items-center whitespace-nowrap rounded-md bg-ok/12 px-3 text-xs text-ok">{t("wallet_using")}</span>
+            ) : (
+              <button className="btn-ghost" type="button" onClick={() => connect().then(setOwner).catch(() => setErr(t("no_wallet")))}>{t("connect")}</button>
+            )}
           </div>
           {addressProblem(owner, null, locale) && <p className="mt-1 text-xs text-bad">{addressProblem(owner, null, locale)}</p>}
         </Card>
         <Card title={t("play_question")}>
           <div className="space-y-2">
             {PRESETS.map((p) => (
-              <button key={p.id} className={`block w-full rounded-lg border p-3 text-left text-sm ${preset === p.id ? "border-brand bg-brand/10" : "border-neutral-800"}`} onClick={() => setPreset(p.id)}>
+              <button key={p.id} className={`block w-full rounded-lg border p-3 text-left text-sm ${preset === p.id ? "border-brand bg-brand/10" : "border-line"}`} onClick={() => setPreset(p.id)}>
                 {zh ? p.title.zh : p.title.en} <Pill>{p.policy}</Pill>
               </button>
             ))}

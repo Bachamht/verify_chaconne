@@ -7,6 +7,7 @@ import type { PlanCandidate, PlanGoal, PlanNextStep } from "@chaconne/core/verif
 import { api, type AssetsResponse } from "@/lib/api";
 import { plans, templates, type PlanView, type TemplateView } from "@/lib/api-v2";
 import { useI18n } from "@/lib/i18n";
+import { useAccount } from "@/lib/useAccount";
 import { reasonText } from "@/lib/reasons";
 import { Card, Pill, Row } from "@/components/ui";
 import { connect, fmtUnits } from "@/lib/wallet";
@@ -24,6 +25,13 @@ export function PlanClient() {
   const zh = locale === "zh";
   const [assets, setAssets] = useState<AssetsResponse | null>(null);
   const [owner, setOwner] = useState("");
+  const account = useAccount();
+  useEffect(() => {
+    if (account && !owner) {
+      setOwner(account);
+      setConnected(account);
+    }
+  }, [account]);
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [legs, setLegs] = useState<Array<{ outputAssetKey: string; weightBps: number }>>([{ outputAssetKey: "", weightBps: 10000 }]);
   const [inputs, setInputs] = useState<string[]>([]);
@@ -143,10 +151,10 @@ export function PlanClient() {
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold">{t("plan_h")}</h1>
         {plan && <Pill tone={plan.evidenceMode === "LIVE" ? "ok" : "warn"}>{plan.evidenceMode}</Pill>}
-        {plan && <span className="mono ml-auto text-xs text-neutral-500">{plan.planId}</span>}
+        {plan && <span className="mono ml-auto text-xs text-fg-3">{plan.planId}</span>}
       </div>
       {tpl && (
-        <p className="text-sm text-neutral-400">
+        <p className="text-sm text-fg-2">
           {t("remix_credit")} <span className="text-neutral-200">{tpl.authorName ?? tpl.templateId}</span> · {t("remix_note")}
         </p>
       )}
@@ -159,7 +167,7 @@ export function PlanClient() {
                 <button key={s} className={`px-3 py-1 ${side === s ? "btn" : "btn-ghost"}`} onClick={() => { setSide(s); setInputs([]); setLegs([{ outputAssetKey: "", weightBps: 10000 }]); }}>{t(s === "buy" ? "plan_side_buy" : "plan_side_sell")}</button>
               ))}
             </div>
-            <span className="text-neutral-400">{t("plan_legs")}</span>
+            <span className="text-fg-2">{t("plan_legs")}</span>
             {legs.map((l, i) => (
               <div key={i} className="flex gap-2">
                 <select className="field" value={l.outputAssetKey} onChange={(e) => setLegs(legs.map((x, j) => (j === i ? { ...x, outputAssetKey: e.target.value } : x)))}>
@@ -171,7 +179,7 @@ export function PlanClient() {
                     );
                   })}
                 </select>
-                <label className="flex items-center gap-1 text-xs text-neutral-400">
+                <label className="flex items-center gap-1 text-xs text-fg-2">
                   <input className="field mono w-24 shrink-0" type="number" min={0.1} max={100} step={0.1} value={(l.weightBps / 100).toFixed(1).replace(/\.0$/, "")} onChange={(e) => setLegs(legs.map((x, j) => (j === i ? { ...x, weightBps: Math.max(0, Math.min(10000, Math.round(Number(e.target.value) * 100))) } : x)))} />
                   %
                 </label>
@@ -186,14 +194,18 @@ export function PlanClient() {
         <Card title={t("plan_q2")}>
           <div className="space-y-3 text-sm">
             <label className="block">
-              <span className="text-neutral-400">{t("f_owner")}</span>
+              <span className="text-fg-2">{t("f_owner")}</span>
               <div className="mt-1 flex gap-2">
                 <input className={`field mono ${ownerProblem ? "border-bad" : ""}`} value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="0x…" aria-invalid={!!ownerProblem} />
-                <button className="btn-ghost shrink-0" type="button" onClick={() => connect().then((a) => { setOwner(a); setConnected(a); }).catch(() => setErr(t("no_wallet")))}>{t("connect")}</button>
+                {account && owner.trim().toLowerCase() === account.toLowerCase() ? (
+                  <span className="inline-flex h-10 shrink-0 items-center whitespace-nowrap rounded-md bg-ok/12 px-3 text-xs text-ok">{t("wallet_using")}</span>
+                ) : (
+                  <button className="btn-ghost shrink-0" type="button" onClick={() => connect().then((a) => { setOwner(a); setConnected(a); }).catch(() => setErr(t("no_wallet")))}>{t("connect")}</button>
+                )}
               </div>
               {ownerProblem && <span className="mt-1 block text-xs text-bad">{ownerProblem}</span>}
             </label>
-            <span className="text-neutral-400">{t("plan_inputs")}</span>
+            <span className="text-fg-2">{t("plan_inputs")}</span>
             <div className="flex flex-wrap gap-2">
               {payAssets.map((a) => {
                 const on = inputs.includes(a.assetKey);
@@ -203,13 +215,13 @@ export function PlanClient() {
               })}
             </div>
             <label className="block">
-              <span className="text-neutral-400">{t("plan_budget")} ({primary?.displaySymbol ?? "—"})</span>
+              <span className="text-fg-2">{t("plan_budget")} ({primary?.displaySymbol ?? "—"})</span>
               <input className="field mono mt-1" value={budget} onChange={(e) => setBudget(e.target.value)} inputMode="decimal" />
               {budgetRaw && (
                 <details className="demo-hide mt-1">
-                  <summary className="cursor-pointer text-xs text-neutral-500">{t("dev_details")}</summary>
-                  <span className="mono text-xs text-neutral-500">amountInRaw = {budgetRaw}</span>
-                  <p className="text-xs text-neutral-500">{t("dev_raw_note")}</p>
+                  <summary className="cursor-pointer text-xs text-fg-3">{t("dev_details")}</summary>
+                  <span className="mono text-xs text-fg-3">amountInRaw = {budgetRaw}</span>
+                  <p className="text-xs text-fg-3">{t("dev_raw_note")}</p>
                 </details>
               )}
             </label>
@@ -223,22 +235,22 @@ export function PlanClient() {
               <option value="QUOTE_ONLY">{t("policy_quote")}</option>
             </select>
             <div className="grid grid-cols-3 gap-2">
-              <label><span className="text-xs text-neutral-400">{t("f_slippage")}</span><input className="field mono mt-1" type="number" value={slippage} onChange={(e) => setSlippage(Number(e.target.value))} /></label>
-              <label><span className="text-xs text-neutral-400">{t("f_impact")}</span><input className="field mono mt-1" type="number" value={impact} onChange={(e) => setImpact(Number(e.target.value))} /></label>
-              <label><span className="text-xs text-neutral-400">{t("f_dev")}</span><input className="field mono mt-1" type="number" value={deviation} disabled={policy === "QUOTE_ONLY"} onChange={(e) => setDeviation(Number(e.target.value))} /></label>
+              <label><span className="text-xs text-fg-2">{t("f_slippage")}</span><input className="field mono mt-1" type="number" value={slippage} onChange={(e) => setSlippage(Number(e.target.value))} /></label>
+              <label><span className="text-xs text-fg-2">{t("f_impact")}</span><input className="field mono mt-1" type="number" value={impact} onChange={(e) => setImpact(Number(e.target.value))} /></label>
+              <label><span className="text-xs text-fg-2">{t("f_dev")}</span><input className="field mono mt-1" type="number" value={deviation} disabled={policy === "QUOTE_ONLY"} onChange={(e) => setDeviation(Number(e.target.value))} /></label>
             </div>
-            <label className="block"><span className="text-neutral-400">{t("plan_deadline")} · {t("tz_note")} {tzLabel()}</span><input className="field mono mt-1" type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} /><span className="mono text-xs text-neutral-500">{fmtLocal(new Date(deadline), locale)}</span></label>
+            <label className="block"><span className="text-fg-2">{t("plan_deadline")} · {t("tz_note")} {tzLabel()}</span><input className="field mono mt-1" type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} /><span className="mono text-xs text-fg-3">{fmtLocal(new Date(deadline), locale)}</span></label>
           </div>
         </Card>
       </div>
       {err && <p className="text-sm text-bad">{err}</p>}
       <button className="btn w-full" disabled={busy || !!disabledWhy} onClick={run}>{busy ? t("plan_running") : t("plan_run")}</button>
-      {disabledWhy && !busy && <p className="text-center text-xs text-neutral-400">{disabledWhy}</p>}
-      {plan && <p className="text-center text-xs text-neutral-500">{t("plan_form_kept")}</p>}
+      {disabledWhy && !busy && <p className="text-center text-xs text-fg-2">{disabledWhy}</p>}
+      {plan && <p className="text-center text-xs text-fg-3">{t("plan_form_kept")}</p>}
 
       {plan && (
         <Card title={t("plan_candidates")} right={report?.recommended ? <Pill tone="ok">{t("plan_recommended")}: {report.recommended}</Pill> : <Pill tone="warn">{zh ? "无推荐" : "no recommendation"}</Pill>}>
-          <p className="mb-3 text-xs text-neutral-500">{t("plan_no_market_optimum")}</p>
+          <p className="mb-3 text-xs text-fg-3">{t("plan_no_market_optimum")}</p>
           {report?.candidates.some((c) => c.reasons.some((r) => r.code === "CLOSE_UNCONFIRMED")) && (
             <div className="mb-3 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">
               <span className="mono mr-2 text-xs">CLOSE_UNCONFIRMED</span>
@@ -246,7 +258,7 @@ export function PlanClient() {
             </div>
           )}
           {report && !report.recommended && report.candidates.length > 0 && (
-            <div className="mb-3 rounded-lg border border-neutral-700 bg-neutral-900/60 px-3 py-2 text-sm text-neutral-200">
+            <div className="mb-3 rounded-lg border border-line-strong bg-surface-1 px-3 py-2 text-sm text-neutral-200">
               <p className="font-semibold">{t("plan_no_reco_why")}</p>
               <p className="mt-1 text-neutral-300">{blockingSummary(report.candidates, locale)}</p>
             </div>
@@ -256,13 +268,13 @@ export function PlanClient() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="text-xs text-neutral-400"><tr><th className="py-2 pr-3">leg</th><th className="pr-3">{t("f_input")}</th><th className="pr-3">{t("f_amount")}</th><th className="pr-3">{t("plan_completion")}</th><th className="pr-3">expectedOut</th><th className="pr-3">impact</th><th className="pr-3">{t("verdict")}</th><th className="pr-3">{t("policy_matrix")}</th><th className="pr-3">{t("plan_next")}</th><th className="pr-3">{t("reasons")}</th><th></th></tr></thead>
+                <thead className="text-xs text-fg-2"><tr><th className="py-2 pr-3">leg</th><th className="pr-3">{t("f_input")}</th><th className="pr-3">{t("f_amount")}</th><th className="pr-3">{t("plan_completion")}</th><th className="pr-3">expectedOut</th><th className="pr-3">impact</th><th className="pr-3">{t("verdict")}</th><th className="pr-3">{t("policy_matrix")}</th><th className="pr-3">{t("plan_next")}</th><th className="pr-3">{t("reasons")}</th><th></th></tr></thead>
                 <tbody>
                   {report.candidates.map((c) => {
                     const rec = report.recommended === c.candidateId;
                     const tone = c.chosenPolicyVerdict === "eligible" ? "ok" : c.chosenPolicyVerdict === "limited" ? "warn" : "bad";
                     return (
-                      <tr key={c.candidateId} className={`border-t border-neutral-800 ${rec ? "bg-ok/5" : ""}`}>
+                      <tr key={c.candidateId} className={`border-t border-line ${rec ? "bg-ok/5" : ""}`}>
                         <td className="mono py-2 pr-3">{c.legIndex}</td>
                         <td className="pr-3">{sym(c.inputAssetKey)}</td>
                         <td className="mono pr-3">{fmtUnits(c.amountInRaw, dec(c.inputAssetKey))}</td>
@@ -284,13 +296,13 @@ export function PlanClient() {
                         </td>
                         <td className="pr-3">
                           <Pill tone={NEXT_TONE[c.nextStep]}>{t(`next_${c.nextStep}` as "next_READY")}</Pill>
-                          <p className="mt-1 max-w-[16rem] text-xs text-neutral-400">{nextStepText(c.nextStep, locale)}</p>
+                          <p className="mt-1 max-w-[16rem] text-xs text-fg-2">{nextStepText(c.nextStep, locale)}</p>
                         </td>
-                        <td className="pr-3 text-xs text-neutral-400">
+                        <td className="pr-3 text-xs text-fg-2">
                           {c.reasons.filter((r) => r.severity !== "info").length === 0 ? "—" : (
                             <ul className="max-w-[18rem] space-y-0.5">
                               {c.reasons.filter((r) => r.severity !== "info").map((r) => (
-                                <li key={r.code}><span className={r.severity === "block" ? "text-bad" : "text-warn"}>{reasonText(r.code, locale)}</span> <span className="mono text-[10px] text-neutral-600">{r.code}</span></li>
+                                <li key={r.code}><span className={r.severity === "block" ? "text-bad" : "text-warn"}>{reasonText(r.code, locale)}</span> <span className="mono text-[11px] text-fg-3">{r.code}</span></li>
                               ))}
                             </ul>
                           )}
@@ -312,7 +324,7 @@ export function PlanClient() {
           </div>
           {report && (
             <details className="demo-hide mt-3">
-              <summary className="cursor-pointer text-xs text-neutral-400">{t("dev_details")}</summary>
+              <summary className="cursor-pointer text-xs text-fg-2">{t("dev_details")}</summary>
               <Row k="goalHash" v={report.goalHash} mono />
               <Row k="planHash" v={report.planHash} mono />
               <Row k="evidenceHash" v={report.evidenceHash} mono />

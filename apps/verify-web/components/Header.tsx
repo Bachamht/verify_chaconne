@@ -1,12 +1,19 @@
 "use client";
-/** 头部（V-14 / V-10）：桌面一行；手机折叠成「菜单」；显示已连接钱包与「我的任务」入口。钱包逻辑只用 lib/wallet 现有导出。 */
+/**
+ * 头部（UI 设计评审 UV-01/02/03）：与正文同一版心（max-w-5xl）、子项可收缩不再撑出横向滚动；
+ * 波形标 + 字标；导航纯文字、当前页下划线；实心紫只留主要操作；LIVE / 链徽章只在 ≥2xl 显示，其余在页脚。
+ * 钱包状态与各表单共用 useAccount（UV-04）。
+ */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Menu, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { MAIN_SITE_URL } from "@/lib/productSwitch";
 import { api, type AssetsResponse } from "@/lib/api";
-import { CHAIN_ID, connect, injected, short } from "@/lib/wallet";
+import { CHAIN_ID, connect, short } from "@/lib/wallet";
+import { useAccount } from "@/lib/useAccount";
+import { LogoMark, Wordmark } from "./Logo";
 
 export function ModeBadge() {
   const [mode, setMode] = useState<"LIVE" | "FIXTURE" | "…">("…");
@@ -15,39 +22,27 @@ export function ModeBadge() {
       .then((r) => setMode(r.status === 200 ? r.data.evidenceMode : "…"))
       .catch(() => setMode("…"));
   }, []);
-  const cls = mode === "LIVE" ? "bg-ok/15 text-ok border-ok/40" : mode === "FIXTURE" ? "bg-warn/15 text-warn border-warn/40" : "bg-neutral-800 text-neutral-400 border-neutral-700";
-  return <span className={`mono rounded-md border px-2 py-0.5 text-xs font-bold ${cls}`}>{mode}</span>;
+  const cls = mode === "LIVE" ? "bg-ok/12 text-ok" : mode === "FIXTURE" ? "bg-warn/12 text-warn" : "bg-surface-2 text-fg-2";
+  return <span className={`mono inline-flex h-5 items-center rounded-full px-2 text-[11px] font-semibold ${cls}`}>{mode}</span>;
 }
 
-/** 只读取已授权账户（eth_accounts 不弹窗）；点击才 connect */
+export function ChainBadge() {
+  return <span className="mono inline-flex h-5 items-center rounded-full bg-surface-2 px-2 text-[11px] text-fg-2 ring-1 ring-line">{CHAIN_ID === 196 ? "X Layer · 196" : `X Layer Testnet · ${CHAIN_ID}`}</span>;
+}
+
+/** 只读取已授权账户（不弹窗）；点击才 connect */
 function WalletStatus({ compact }: { compact?: boolean }) {
   const { t } = useI18n();
-  const [account, setAccount] = useState<string | null>(null);
+  const account = useAccount();
   const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    const eth = injected();
-    if (!eth) return;
-    eth
-      .request({ method: "eth_accounts" })
-      .then((a) => {
-        const list = a as string[];
-        if (list?.[0]) setAccount(list[0]);
-      })
-      .catch(() => undefined);
-    const onChange = (accs: unknown) => setAccount(Array.isArray(accs) && accs[0] ? String(accs[0]) : null);
-    const evented = eth as unknown as { on?: (ev: string, fn: (x: unknown) => void) => void; removeListener?: (ev: string, fn: (x: unknown) => void) => void };
-    evented.on?.("accountsChanged", onChange);
-    return () => evented.removeListener?.("accountsChanged", onChange);
-  }, []);
-  if (account) return <span className="mono whitespace-nowrap rounded-md border border-ok/40 px-2 py-0.5 text-xs text-ok" title={account}>{short(account)}</span>;
+  if (account) return <span className="mono inline-flex h-8 items-center whitespace-nowrap rounded-md bg-ok/12 px-2.5 text-xs text-ok" title={account}>{short(account)}</span>;
   return (
     <button
-      className="btn-ghost whitespace-nowrap px-2.5 py-1 text-sm"
+      className="btn h-8 px-3 text-xs"
       disabled={busy}
       onClick={() => {
         setBusy(true);
         connect()
-          .then(setAccount)
           .catch(() => undefined)
           .finally(() => setBusy(false));
       }}
@@ -71,63 +66,80 @@ export function Header() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [pathname]);
-  const navLink = (n: (typeof NAV)[number], extra = "") => (
-    <Link key={n.href} href={n.href} className={`px-2.5 py-1 text-sm whitespace-nowrap ${pathname === n.href ? "btn" : "btn-ghost"} ${extra}`} aria-current={pathname === n.href ? "page" : undefined}>
+  const active = (href: string) => pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+  const textLink = (n: (typeof NAV)[number]) => (
+    <Link
+      key={n.href}
+      href={n.href}
+      aria-current={active(n.href) ? "page" : undefined}
+      className={`relative whitespace-nowrap px-2 py-1.5 text-sm transition-colors after:absolute after:inset-x-2 after:-bottom-[9px] after:h-0.5 after:rounded-full after:bg-brand-400 ${active(n.href) ? "text-fg-1 after:opacity-100" : "text-fg-2 after:opacity-0 hover:text-fg-1"}`}
+    >
       {t(n.key)}
     </Link>
   );
+  const smallGhost = "btn-ghost h-8 px-2.5 text-xs";
   return (
-    <header className="sticky top-0 z-10 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2">
-        <Link href="/" className="flex shrink-0 items-center gap-2 whitespace-nowrap font-bold tracking-tight">
-          <span className="inline-block h-6 w-6 shrink-0 rounded-md bg-brand" aria-hidden />
-          <span>{t("brand")}</span>
+    <header className="sticky top-0 z-10 border-b border-line bg-surface-0/90 backdrop-blur">
+      <div className="mx-auto flex min-w-0 max-w-5xl items-center gap-3 px-4 py-2.5">
+        <Link href="/" className="flex shrink-0 items-center gap-2 text-brand-400" aria-label={t("brand")}>
+          <LogoMark size={26} />
+          <Wordmark />
         </Link>
         {/* 产品切换（两站同款）：Verify ↔ 主站 */}
-        <div className="hidden shrink-0 items-center rounded-lg border border-neutral-800 bg-neutral-900/60 p-0.5 text-[11px] lg:flex" title={t("product_switch_hint")}>
-          <a href={MAIN_SITE_URL} className="rounded-md px-2 py-1 text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100" rel="noopener">
+        <div className="hidden shrink-0 items-center rounded-md bg-surface-2 p-0.5 text-[11px] ring-1 ring-line lg:flex" title={t("product_switch_hint")}>
+          <a href={MAIN_SITE_URL} className="rounded-sm px-2 py-1 text-fg-2 hover:bg-neutral-800 hover:text-fg-1" rel="noopener">
             {t("product_main")} ↗
           </a>
-          <span className="rounded-md bg-brand/20 px-2 py-1 font-semibold text-brand">{t("product_verify")}</span>
+          <span className="rounded-sm bg-brand-950/70 px-2 py-1 font-semibold text-brand-300">{t("product_verify")}</span>
         </div>
-        <ModeBadge />
-        <span className="mono hidden whitespace-nowrap rounded-md border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300 min-[1400px]:inline">{CHAIN_ID === 196 ? "X Layer · 196" : `X Layer Testnet · ${CHAIN_ID}`}</span>
-        {/* 桌面：一行 */}
-        <nav className="ml-auto hidden items-center gap-1.5 lg:flex">
-          {NAV.map((n) => navLink(n))}
-          <span className="mx-1 h-5 w-px bg-neutral-800" aria-hidden />
+        <div className="hidden items-center gap-1.5 2xl:flex">
+          <ModeBadge />
+          <ChainBadge />
+        </div>
+        {/* 桌面：纯文字导航 */}
+        <nav className="ml-auto hidden min-w-0 items-center gap-1 lg:flex">
+          {NAV.map(textLink)}
+          <span className="mx-2 h-5 w-px bg-line" aria-hidden />
           <WalletStatus />
-          <button className="btn-ghost whitespace-nowrap px-2.5 py-1 text-sm" onClick={() => setLocale(locale === "en" ? "zh" : "en")} aria-label="language">
+          <button className={smallGhost} onClick={() => setLocale(locale === "en" ? "zh" : "en")} aria-label="language">
             {locale === "en" ? "中文" : "EN"}
           </button>
-          <button className={`whitespace-nowrap px-2.5 py-1 text-sm ${demo ? "btn" : "btn-ghost"}`} onClick={() => setDemo(!demo)} title={t("demo_mode")}>
+          <button className={`${smallGhost} ${demo ? "ring-brand-400 text-brand-300" : ""}`} aria-pressed={demo} onClick={() => setDemo(!demo)} title={t("demo_mode")}>
             {t("demo_short")}
           </button>
         </nav>
         {/* 手机：钱包 + 菜单按钮 */}
         <div className="ml-auto flex shrink-0 items-center gap-2 lg:hidden">
           <WalletStatus compact />
-          <button className="btn-ghost whitespace-nowrap px-2.5 py-1 text-sm" aria-expanded={open} aria-controls="mobile-nav" onClick={() => setOpen(!open)}>
-            {open ? t("header_close") : t("header_menu")}
+          <button className="btn-ghost h-9 w-9 px-0" aria-expanded={open} aria-controls="mobile-nav" aria-label={open ? t("header_close") : t("header_menu")} onClick={() => setOpen(!open)}>
+            {open ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
       </div>
       {open && (
-        <nav id="mobile-nav" className="border-t border-neutral-800 px-4 py-3 lg:hidden">
-          <a href={MAIN_SITE_URL} rel="noopener" className="btn-ghost mb-2 flex w-full items-center justify-between px-3 py-2 text-sm">
-            <span>{t("product_main")}</span>
-            <span aria-hidden>↗</span>
-          </a>
-          <div className="grid grid-cols-2 gap-2">
-            {NAV.map((n) => navLink(n, "justify-center"))}
-            <button className="btn-ghost px-2.5 py-1 text-sm" onClick={() => setLocale(locale === "en" ? "zh" : "en")}>
+        <nav id="mobile-nav" className="border-t border-line px-4 py-3 lg:hidden">
+          <div className="grid grid-cols-2 gap-1">
+            {NAV.map((n) => (
+              <Link key={n.href} href={n.href} aria-current={active(n.href) ? "page" : undefined} className={`rounded-md px-3 py-2.5 text-sm ${active(n.href) ? "bg-brand-950/60 text-brand-200" : "text-fg-1 hover:bg-surface-2"}`}>
+                {t(n.key)}
+              </Link>
+            ))}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line pt-2">
+            <a href={MAIN_SITE_URL} rel="noopener" className={smallGhost}>
+              {t("product_main")} ↗
+            </a>
+            <button className={smallGhost} onClick={() => setLocale(locale === "en" ? "zh" : "en")}>
               {locale === "en" ? "中文" : "EN"}
             </button>
-            <button className={`px-2.5 py-1 text-sm ${demo ? "btn" : "btn-ghost"}`} onClick={() => setDemo(!demo)}>
+            <button className={`${smallGhost} ${demo ? "ring-brand-400 text-brand-300" : ""}`} aria-pressed={demo} onClick={() => setDemo(!demo)}>
               {t("demo_mode")}
             </button>
+            <span className="ml-auto flex items-center gap-1.5">
+              <ModeBadge />
+              <ChainBadge />
+            </span>
           </div>
-          <p className="mono mt-2 text-xs text-neutral-500">{CHAIN_ID === 196 ? "X Layer · 196" : `X Layer Testnet · ${CHAIN_ID}`} · {t("tagline")}</p>
         </nav>
       )}
     </header>

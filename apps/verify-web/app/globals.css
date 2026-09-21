@@ -1,18 +1,64 @@
 @import "tailwindcss";
 
+/* ══════════════════════════════════════════════════════════════════════
+ * 设计 token 层（UI 设计评审 2026-09-22 §五；与主站 apps/web/app/globals.css 同一份值，UI-06 第一步）
+ *  · 品牌紫一条色阶（线上 Tailwind v4 violet 值，视觉零变化）；--color-brand 指向 500
+ *  · 三层表面 + 品牌/警示着色；文字三级（全部过 WCAG AA）；状态色不借用品牌紫
+ *  · 圆角三档：sm 6 / md 10 / lg 16（xl/2xl/3xl 收敛到 16）
+ *  · Inter 可变字体自托管（next/font/local → --font-inter），中文回退系统字体
+ * ══════════════════════════════════════════════════════════════════════ */
 @theme {
-  --color-brand: #8b5cf6;
-  --color-ok: #22c55e;
-  --color-warn: #f59e0b;
-  --color-bad: #f04e5e;
+  --color-brand-200: #ddd6ff;
+  --color-brand-300: #c4b4ff;
+  --color-brand-400: #a684ff;
+  --color-brand-500: #8e51ff;
+  --color-brand-600: #7f22fe; /* 实心主按钮的底，配白字 5.9:1（UV-07 / UI-23） */
+  --color-brand-900: #4d179a;
+  --color-brand-950: #2f0d68;
+  --color-brand: var(--color-brand-500);
+
+  --color-surface-0: #0a0a0a;
+  --color-surface-1: #121212;
+  --color-surface-2: #1a1a1a;
+  --color-surface-brand: #150b26;
+  --color-surface-warn: #1f1608;
+  --color-line: #262626;
+  --color-line-strong: #404040;
+  --color-line-brand: #4d179a;
+
+  --color-fg-1: #f5f5f5;
+  --color-fg-2: #a1a1a1;
+  --color-fg-3: #8f8f8f;
+
+  --color-ok: #00d492;
+  --color-info: #00bcff;
+  --color-warn: #ffb900;
+  --color-bad: #ff637e;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 16px;
+  --radius-2xl: 16px;
+  --radius-3xl: 16px;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 }
 
 :root {
   color-scheme: dark;
 }
+/* UV-05：页脚永远贴底 */
 body {
-  @apply bg-neutral-950 text-neutral-100 antialiased;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-surface-0);
+  color: var(--color-fg-1);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 /* 投屏模式：大字 */
 html[data-demo="1"] body {
@@ -21,19 +67,66 @@ html[data-demo="1"] body {
 html[data-demo="1"] .demo-hide {
   display: none;
 }
-.card {
-  @apply rounded-xl border border-neutral-800 bg-neutral-900/60 p-5;
+
+@layer base {
+  /* UI-37：Tailwind v4 不再给按钮手型光标 */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+  /* UI-38：自有键盘焦点环 */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-400);
+    outline-offset: 2px;
+  }
 }
-.btn {
-  @apply inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40;
-}
-.btn-ghost {
-  @apply inline-flex items-center justify-center rounded-lg border border-neutral-700 px-4 py-2 font-medium text-neutral-200 transition hover:border-neutral-500 disabled:opacity-40;
-}
-.field {
-  @apply w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 outline-none focus:border-brand;
+
+/* 组件类层（UV-10 保留；值换成 token：卡片 16 / 按钮与输入框 10，按钮与输入框统一 40px 高） */
+@layer components {
+  .card {
+    @apply rounded-lg border border-line bg-surface-1 p-5;
+  }
+  .btn {
+    @apply inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-brand-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-500 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-fg-2;
+  }
+  .btn-ghost {
+    @apply inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-surface-2 px-4 text-sm font-medium text-fg-1 ring-1 ring-line-strong transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-fg-2 disabled:ring-0;
+  }
+  .field {
+    @apply h-10 w-full rounded-md border border-line bg-surface-2 px-3 text-sm text-fg-1 outline-none placeholder:text-fg-3 focus:border-brand-400 disabled:cursor-not-allowed disabled:text-fg-3;
+  }
+  /* UI-32：原生下拉去系统箭头，自绘箭头，高度与输入框一致 */
+  select.field {
+    appearance: none;
+    padding-right: 2.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a1a1a1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 16px 16px;
+  }
+  textarea.field {
+    @apply h-auto py-2;
+  }
 }
 .mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+/* Inter 等宽数字（价格/金额） */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+/* 五线底纹（UI-03）：空状态用 */
+.chc-staff {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 11px,
+    color-mix(in srgb, var(--color-fg-1) 4%, transparent) 11px,
+    color-mix(in srgb, var(--color-fg-1) 4%, transparent) 12px
+  );
+  background-size: 100% 60px;
 }
