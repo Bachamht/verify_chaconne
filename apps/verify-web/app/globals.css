@@ -73,6 +73,8 @@ body {
 .verify-header { position: sticky; top: 0; z-index: 30; border-bottom: 1px solid var(--color-line); background: #0c0813f2; backdrop-filter: blur(18px); }
 .verify-header-inner { max-width: 1200px; min-height: 74px; margin-inline: auto; padding: 12px 24px; display: flex; align-items: center; gap: 30px; }
 .verify-brand { display: inline-flex; align-items: center; gap: 8px; color: #bb94ff; flex: none; }
+.verify-switch { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 28px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--color-line-brand, #4d179a); background: #1d1230; color: #c9b4f5; font-size: 12px; font-weight: 500; white-space: nowrap; transition: background .15s, color .15s, border-color .15s; }
+.verify-switch:hover { background: #2a1a45; border-color: #6d3bf5; color: #e7dcff; }
 .verify-desktop-nav { display: flex; align-items: stretch; gap: 24px; margin-left: auto; align-self: stretch; }
 .verify-desktop-nav a { display: flex; align-items: center; position: relative; font-size: 12px; color: var(--color-fg-2); white-space: nowrap; transition: color .2s; }
 .verify-desktop-nav a:hover,.verify-desktop-nav a[aria-current="page"] { color: var(--color-fg-1); }
@@ -189,4 +191,10 @@ html[data-demo="1"] .demo-hide {
     color-mix(in srgb, var(--color-fg-1) 4%, transparent) 12px
   );
   background-size: 100% 60px;
+}
+
+@media (max-width: 560px) {
+  .verify-header-inner { gap: 10px; padding: 12px 14px; }
+  .verify-switch { padding: 0 8px; font-size: 11px; gap: 4px; }
+  .verify-wordmark-long { display: none; }
 }

@@ -72,6 +72,12 @@ export function Header() {
     <header className="verify-header" ref={headerRef}>
       <div className="verify-header-inner">
         <Link href="/" className="verify-brand" aria-label={t("brand")}><LogoMark size={28} /><Wordmark /></Link>
+        {/* 回主站的入口原来只藏在右下角展开菜单里，滚动后用户找不到（运营者报）。
+            与主站头部那颗「Agent 交易 ↗」胶囊对称：同样放左上角、紧挨字标，命名也对应。 */}
+        <a className="verify-switch" href={MAIN_SITE_URL} title={t("product_switch_hint")}>
+          {locale === "zh" ? "行情比价" : "Markets"}
+          <ArrowUpRight size={12} aria-hidden="true" />
+        </a>
         <nav className="verify-desktop-nav" aria-label={locale === "zh" ? "主导航" : "Main navigation"}>
           {NAV.slice(0, 4).map((n) => <Link key={n.href} href={n.href} aria-current={active(n.href) ? "page" : undefined}>{t(n.key)}</Link>)}
         </nav>

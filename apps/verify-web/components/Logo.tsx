@@ -31,7 +31,8 @@ export function LogoMark({ size = 24, color = "currentColor", className }: { siz
 export function Wordmark({ className }: { className?: string }) {
   return (
     <span className={`inline-flex items-baseline gap-1.5 ${className ?? ""}`}>
-      <span className="text-[13px] font-bold tracking-[0.14em] text-fg-1">CHACONNE</span>
+      {/* 窄屏隐藏长字标，只留标志 + Agent：头部左上角加了「Markets」入口后，390px 下原来会横向溢出 30px */}
+      <span className="verify-wordmark-long text-[13px] font-bold tracking-[0.14em] text-fg-1">CHACONNE</span>
       <span className="text-[11px] font-semibold text-brand-300">Agent</span>
     </span>
   );
