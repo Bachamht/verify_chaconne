@@ -1,7 +1,7 @@
 {
   "schema": "chaconne-verify/release/1",
-  "exportedAt": "2026-09-22T11:02:55.291Z",
-  "treeHash": "ec9f2ad57980bbe379986732878724299654767a81ff8fa8ad9ea68ea4e5a229",
+  "exportedAt": "2026-09-22T11:16:59.779Z",
+  "treeHash": "254cee86755b24f25e6fc3ced00df9813d46e1ccbece934a0268a9327c01781d",
   "fileCount": 290,
   "note": "Recompute with `pnpm release:hash` after `git clone`; the deployed service reports the same hash at GET /healthz → release.treeHash."
 }

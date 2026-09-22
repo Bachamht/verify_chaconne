@@ -1,7 +1,7 @@
 /** A2MCP 单端点：空参 → **200** status=input_required(schema)（OKX 客户端只接受 200/402）；免费 → 200 delivered；同参幂等；收费 → 402；宽容输入 */
 import { afterEach, describe, expect, it } from "vitest";
 import { FIXTURE_STABLE_KEY, FIXTURE_STOCK_KEY } from "@chaconne/core/verify/fixtures";
-import { createTestEnv, type TestEnv } from "./helpers";
+import { createTestEnv, TEST_API_KEY, type TestEnv } from "./helpers";
 
 let env: TestEnv | null = null;
 afterEach(async () => {
@@ -48,6 +48,30 @@ describe("POST /a2mcp/verify", () => {
     expect(badStock.status).toBe(200);
     expect(badStock.json["status"]).toBe("input_required");
     expect((badStock.json["problems"] as Array<{ field: string }>)[0]?.field).toBe("outputAssetKey");
+  });
+
+  it("body 不是合法 JSON → 仍是 200 status=input_required（Express 的 entity.parse.failed 默认回 400，会被 OKX 客户端判端点不可达）", async () => {
+    env = await createTestEnv();
+    const res = await fetch(env.url + "/a2mcp/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "not-json",
+    });
+    expect(res.status).toBe(200);
+    const j = (await res.json()) as Record<string, unknown>;
+    expect(j.status).toBe("input_required");
+    expect(j.error).toBe("invalid_json");
+    expect(j.example).toBeTruthy();
+  });
+
+  it("非 a2mcp 路径的非法 JSON 仍回 400（标准 HTTP 语义只对外放宽，不动 v1 API）", async () => {
+    env = await createTestEnv();
+    const res = await fetch(env.url + "/v1/jobs", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": TEST_API_KEY },
+      body: "not-json",
+    });
+    expect(res.status).toBe(400);
   });
 
   it("宽容输入：符号/代码/别名/人类金额/百分比滑点 → 解析并交付；resolvedInput 透明", async () => {

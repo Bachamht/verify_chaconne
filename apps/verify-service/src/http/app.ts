@@ -356,12 +356,31 @@ export function createApp(d: AppDeps) {
     res.status(404).json({ error: "not_found" });
   });
 
-  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
+    // OKX AI 的调用客户端只接受 200/402，任何其它状态码都被判定为「端点不可达」——
+    // ASP #13803 第一次上架审核就是这么被驳回的（空探测回 400）。所以 /a2mcp/* 这几条
+    // 对外路径上，输入侧的错误一律回 200 + status:"input_required"，把问题写在正文里。
+    // 非 a2mcp 路径（v1 API 面向我们自己的客户端）保持标准 HTTP 语义。
+    const isA2mcp = req.path.startsWith("/a2mcp/");
     if (err instanceof HttpError) {
+      if (isA2mcp && err.status >= 400 && err.status < 500 && err.status !== 402) {
+        res.status(200).json({ ok: false, status: "input_required", error: err.code, message: err.message, details: err.details ?? undefined });
+        return;
+      }
       res.status(err.status).json({ error: err.code, message: err.message, details: err.details ?? undefined });
       return;
     }
     if (err && typeof err === "object" && "type" in err && (err as { type?: string }).type === "entity.parse.failed") {
+      if (isA2mcp) {
+        res.status(200).json({
+          ok: false,
+          status: "input_required",
+          error: "invalid_json",
+          message: "The request body is not valid JSON. Send a JSON object with content-type: application/json, or pass the same fields as a GET query string.",
+          example: { ownerAddress: "0x1111111111111111111111111111111111111111", outputAssetKey: "AAPLx", amount: "100" },
+        });
+        return;
+      }
       res.status(400).json({ error: "invalid_json" });
       return;
     }
