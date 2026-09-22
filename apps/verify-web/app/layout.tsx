@@ -9,8 +9,8 @@ import { Footer } from "@/components/Footer";
 import { WalletChooser } from "@/components/WalletChooser";
 
 export const metadata: Metadata = {
-  title: "Chaconne Verify — StockProof & RWA Guard",
-  description: "Pre-trade verification for tokenized US stocks on X Layer, sold to agents through OKX AI. Immutable evidence-bound reports and constrained execution.",
+  title: "Chaconne Verify — Less FOMO. More proof.",
+  description: "Check the token, the price and your limits before trading tokenized US stocks. Evidence you can inspect. Execution inside the boundaries you sign.",
 };
 
 /** UI-02：Inter 可变字体自托管（与主站同一文件），中文回退系统字体（globals.css --font-sans） */
@@ -31,8 +31,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang={locale === "zh" ? "zh-CN" : "en"} data-demo="0" className={inter.variable}>
       <body>
         <I18nProvider initialLocale={locale}>
+          <a href="#main-content" className="verify-skip-link">{locale === "zh" ? "跳到主要内容" : "Skip to content"}</a>
           <Header />
-          <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-16 pt-6">{children}</main>
+          <main id="main-content" className="verify-main" tabIndex={-1}>{children}</main>
           <Footer />
           <WalletChooser />
         </I18nProvider>

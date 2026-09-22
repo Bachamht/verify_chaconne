@@ -9,6 +9,7 @@ export default tseslint.config(
       "**/node_modules/**",
       ".qa-live/**", // 服务器侧真金测试工件（gitignore，本地存在勿 lint）
       "**/.next/**",
+      "**/.next-*/**", // 零空窗发版的旁路构建目录（.next-build / .next-prev）与本地预览产物
       "**/dist/**",
       "**/.turbo/**",
       "**/coverage/**",
