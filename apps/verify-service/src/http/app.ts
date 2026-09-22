@@ -7,6 +7,7 @@ import type { VerifyConfig } from "../config";
 import { apiKeyAuth, callerOf } from "./auth";
 import type { Paywall } from "./paywall";
 import { HttpError, type VerifyService } from "../jobs/service";
+import { UpstreamEvidenceError } from "../evidence/live";
 import { A2MCP_PATH, createA2mcpHandler } from "./a2mcp";
 import { A2MCP_MONITOR_PATH, A2MCP_PLAN_PATH, createA2mcpMonitorHandler, createA2mcpPlanHandler } from "./a2mcpPlan";
 import { log } from "../log";
@@ -375,6 +376,15 @@ export function createApp(d: AppDeps) {
         return;
       }
       res.status(err.status).json({ error: err.code, message: err.message, details: err.details ?? undefined });
+      return;
+    }
+    // 上游报价拿不到 / 方向写拧了：不是服务端内部故障，别兜底成 500（V-24）。
+    // no_quotes 用 422（请求本身合法，只是此刻这个方向与数量没有可成交报价）；
+    // upstream_unavailable 用 503；mixed_sides 是调用方的参数问题，用 400。
+    if (err instanceof UpstreamEvidenceError) {
+      const status = err.code === "mixed_sides" ? 400 : err.code === "upstream_unavailable" ? 503 : 422;
+      const body = { error: err.code, message: err.message, details: err.detail ?? undefined };
+      res.status(isA2mcp && status !== 503 ? 200 : status).json(isA2mcp && status !== 503 ? { ok: false, status: "input_required", ...body } : body);
       return;
     }
     // body-parser 抛出的全部读体错误都是「客户端把请求发坏了」，统一按 4xx 处理。

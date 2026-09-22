@@ -56,6 +56,29 @@ export class PlansService {
     for (const k of [...goal.budget.inputAssetKeys, ...goal.legs.map((l) => l.outputAssetKey)]) {
       if (!findEntry(this.d.registry, k)) throw new HttpError(400, "asset_unsupported", `资产不在登记表内：${k}`);
     }
+    // V-24 方向校验：买入 = 花稳定币买股票，卖出 = 卖股票换稳定币。
+    // `budget.inputAssetKeys` 永远是「你付出的那一侧」，`legs[].outputAssetKey` 永远是「你收到的那一侧」。
+    // 以前写反了不会被挡，会一路带到阶梯报价那里以 OKX 上游错误的形式炸成 500（原 V-24 现象）。
+    {
+      const wantIn = goal.side === "sell" ? "stock_output" : "stable_input";
+      const wantOut = goal.side === "sell" ? "stable_input" : "stock_output";
+      const dirErrors: Array<{ field: string; code: string; assetKey: string; role: string; expected: string }> = [];
+      for (const k of goal.budget.inputAssetKeys) {
+        const e = findEntry(this.d.registry, k)!;
+        if (e.role !== wantIn) dirErrors.push({ field: "budget.inputAssetKeys", code: "wrong_side_for_direction", assetKey: k, role: e.role, expected: wantIn });
+      }
+      for (const l of goal.legs) {
+        const e = findEntry(this.d.registry, l.outputAssetKey)!;
+        if (e.role !== wantOut) dirErrors.push({ field: "legs.outputAssetKey", code: "wrong_side_for_direction", assetKey: l.outputAssetKey, role: e.role, expected: wantOut });
+      }
+      if (dirErrors.length > 0) {
+        const hint =
+          goal.side === "sell"
+            ? "卖出：budget.inputAssetKeys 写你要卖的股票（数量按该股票的精度），legs[].outputAssetKey 写你要收的稳定币。"
+            : "买入：budget.inputAssetKeys 写你要付的稳定币，legs[].outputAssetKey 写你要买的股票。";
+        throw new HttpError(400, "wrong_side_for_direction", `资产方向与 side="${goal.side}" 不符。${hint}`, dirErrors);
+      }
+    }
     const gHash = goalHash(goal);
     const existing = await this.findByClientRequest(callerId, clientRequestId);
     if (existing) {

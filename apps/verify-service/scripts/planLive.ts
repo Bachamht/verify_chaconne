@@ -40,7 +40,9 @@ async function main() {
     executionChainId: 196,
     legs: basket ? [{ outputAssetKey: AAPLX, weightBps: 6000 }, { outputAssetKey: NVDAX, weightBps: 4000 }] : [{ outputAssetKey: AAPLX, weightBps: 10000 }],
     budget: { inputAssetKeys: process.env["MULTI_INPUT"] === "1" ? [USDG, USDC] : [USDG], amountInRaw: process.env["BUDGET_RAW"] ?? "10000000" },
-    side: "buy",
+    // SIDE 文档里一直写着可调，但之前没接上（env 给了也没用，仍按买入跑）。
+    // 约定同 V-18：卖出时 budget/legs 仍按买入形状书写（预算=资金币种、腿=股票），由 side 翻转链上方向。
+    side: (process.env["SIDE"] === "sell" ? "sell" : "buy") as PlanGoal["side"],
     policyId: (process.env["POLICY"] ?? "REFERENCE_CONTEXT") as PlanGoal["policyId"],
     policyVersion: process.env["POLICY_VERSION"] ?? "1.1.0",
     maxSlippageBps: 50,

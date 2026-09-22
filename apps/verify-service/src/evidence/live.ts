@@ -38,6 +38,22 @@ import { log } from "../log";
 import type { FinnhubClient, FinnhubQuote } from "../adapters/finnhub";
 import type { XStocksClient } from "../adapters/xstocks";
 import { isRateLimited, OkxClient, quote as okxQuote, rwaTokens as okxRwaTokens, swap as okxSwap, type OkxCall, type OkxQuote, type OkxRwaToken } from "../adapters/okx/client";
+
+/**
+ * 上游报价拿不到，或调用方把方向写拧了——都不是服务端内部故障。
+ * 证据层不引 HttpError（不想把 HTTP 概念倒灌进来），只带一个机器码，由 http/app.ts 映射状态码。
+ * V-24 之前这些全是裸 `Error`，一律被兜底成 500 internal，调用方既看不出是行情问题还是自己参数错。
+ */
+export class UpstreamEvidenceError extends Error {
+  constructor(
+    readonly code: "no_quotes" | "upstream_unavailable" | "mixed_sides",
+    message: string,
+    readonly detail?: unknown,
+  ) {
+    super(message);
+    this.name = "UpstreamEvidenceError";
+  }
+}
 import { checkRouteAgainstIntent, SUPPORTED_ROUTE_SELECTORS } from "../adapters/okx/calldata";
 import { readCurrentMultiplier } from "../adapters/xlayer/multiplier";
 import { lastCompletedTradingDate, type CollectedEvidence, type CollectOptions, type EvidenceProvider } from "./provider";
@@ -236,7 +252,7 @@ export class LiveEvidenceProvider implements EvidenceProvider {
       const outEntry = registry.entries.find((e) => e.assetKey === leg.outputAssetKey);
       if (!inEntry || !outEntry) throw new Error(`registry entry missing for leg ${leg.legIndex}`);
       const s = sideOf(inEntry, outEntry);
-      if (side && side !== s) throw new Error("一个规划里不能混合买入与卖出");
+      if (side && side !== s) throw new UpstreamEvidenceError("mixed_sides", "一个规划里不能混合买入与卖出", { legIndex: leg.legIndex });
       side = s;
       const chainIndex = String(inEntry.chainId);
       leg.amounts.forEach((amount, i) => {
@@ -264,7 +280,7 @@ export class LiveEvidenceProvider implements EvidenceProvider {
         await sleep(o.backoffMs * (attempt + 1));
       }
       if (!call) throw new Error("unreachable");
-      if (call.status === 0 || call.status >= 500) throw new Error(`OKX quote 上游不可用: status=${call.status}`);
+      if (call.status === 0 || call.status >= 500) throw new UpstreamEvidenceError("upstream_unavailable", `OKX quote 上游不可用: status=${call.status}`, { status: call.status });
       const base = { legIndex: t.leg.legIndex, inputAssetKey: t.leg.inputAssetKey, outputAssetKey: t.leg.outputAssetKey, amountInRaw: t.amount };
       if (!call.ok || !qd) {
         quotes.push({ ...base, evidenceId: null, ok: false, error: isRateLimited(call) ? "rate_limited" : `upstream:${call.code}` });
@@ -292,7 +308,7 @@ export class LiveEvidenceProvider implements EvidenceProvider {
     await Promise.all(workers);
     if (tasks.length > 0 && quotes.every((x) => !x.ok)) {
       const first = quotes.find((x) => x.error && x.error !== "skipped_cap");
-      throw new Error(`阶梯报价全部失败: ${first?.error ?? "unknown"}`);
+      throw new UpstreamEvidenceError("no_quotes", `阶梯报价全部失败: ${first?.error ?? "unknown"}`, { firstError: first?.error ?? null, legs: quotes.map((q) => ({ legIndex: q.legIndex, amountInRaw: q.amountInRaw, error: q.error })) });
     }
 
     // 共享证据：每个股票代币一次 token_meta + rwa + 参考价

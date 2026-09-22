@@ -102,11 +102,17 @@ import type { LiveEvidenceProvider } from "../evidence/live";
 /** 用 LiveEvidenceProvider.quoteLadder 一次取全部候选报价 + 共享证据 */
 export function liveQuoteLadder(live: LiveEvidenceProvider): QuoteLadder {
   return async (goal, specs, deps) => {
+    // V-24：这里原本对卖出做了一次输入/输出对调，是错的，且与全链路其余环节都不一致——
+    //  · `evaluate.ts` 对卖出要求 job.inputAssetKey = 股票、outputAssetKey = 稳定币（`stockEntry = inputEntry`）；
+    //  · `candidateJob` 原样透传 spec 的输入/输出，不做对调；
+    //  · `buildLadder` 的金额按 `budget.inputAssetKeys[0]` 的精度算。
+    // 对调之后方向反了，金额还带着另一个资产的精度：卖出 10 USDG 会把 `10000000` 当成 AAPLx(18 位)
+    // 的输入量 = 1e-11 枚，OKX 回 51006「Input value is too low」，阶梯每档全败。
+    // 正确做法是不对调——卖出时调用方本就该把 budget 写成要卖的股票、legs 写成要收的稳定币（见 service.ts 的方向校验）。
     const legs = new Map<string, { legIndex: number; inputAssetKey: string; outputAssetKey: string; amounts: string[] }>();
     for (const s of specs) {
-      // 卖出：core spec 的 inputAssetKey 是资金币种、outputAssetKey 是股票；LadderLeg 需要 (输入=股票, 输出=稳定币)
-      const inputAssetKey = goal.side === "sell" ? s.outputAssetKey : s.inputAssetKey;
-      const outputAssetKey = goal.side === "sell" ? s.inputAssetKey : s.outputAssetKey;
+      const inputAssetKey = s.inputAssetKey;
+      const outputAssetKey = s.outputAssetKey;
       const key = `${s.legIndex}:${inputAssetKey}:${outputAssetKey}`;
       const leg = legs.get(key) ?? { legIndex: s.legIndex, inputAssetKey, outputAssetKey, amounts: [] };
       leg.amounts.push(s.amountInRaw);
@@ -116,8 +122,8 @@ export function liveQuoteLadder(live: LiveEvidenceProvider): QuoteLadder {
     const byEvidenceId = new Map(r.evidence.map((e) => [e.evidenceId, e]));
     const quotes: PlanEvidenceSet["quotes"] = {};
     for (const s of specs) {
-      const inputAssetKey = goal.side === "sell" ? s.outputAssetKey : s.inputAssetKey;
-      const outputAssetKey = goal.side === "sell" ? s.inputAssetKey : s.outputAssetKey;
+      const inputAssetKey = s.inputAssetKey;
+      const outputAssetKey = s.outputAssetKey;
       const q = r.quotes.find((x) => x.legIndex === s.legIndex && x.inputAssetKey === inputAssetKey && x.outputAssetKey === outputAssetKey && x.amountInRaw === s.amountInRaw);
       quotes[s.candidateId] = q?.evidenceId ? (byEvidenceId.get(q.evidenceId) ?? null) : null;
     }
