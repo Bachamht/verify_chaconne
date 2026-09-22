@@ -8,6 +8,8 @@ export function LogoMark({ size = 24, color = "currentColor", className }: { siz
   const r = size * 0.355;
   const sw = size * 0.068;
   const rad = (d: number) => (d * Math.PI) / 180;
+  // 右侧 ±42° 缺口。sweep-flag 必须是 1：两端点同在右侧，sweep=0 会选到右边那个候选圆心，
+  // 画出向右外凸、被 viewBox 切成上下两段的弧（不是 C）。与主站 apps/web/components/Logo.tsx 同修。
   const gapDeg = 42;
   const ax1 = cx + r * Math.cos(rad(gapDeg));
   const ay1 = cy + r * Math.sin(rad(gapDeg));
@@ -21,7 +23,7 @@ export function LogoMark({ size = 24, color = "currentColor", className }: { siz
   const pointsStr = pts.map((p) => p.map((v) => v.toFixed(2)).join(",")).join(" ");
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" xmlns="http://www.w3.org/2000/svg" className={className} aria-hidden>
-      <path d={`M ${ax1.toFixed(2)} ${ay1.toFixed(2)} A ${r.toFixed(2)} ${r.toFixed(2)} 0 1 0 ${ax2.toFixed(2)} ${ay2.toFixed(2)}`} stroke={color} strokeWidth={sw} strokeLinecap="round" fill="none" />
+      <path d={`M ${ax1.toFixed(2)} ${ay1.toFixed(2)} A ${r.toFixed(2)} ${r.toFixed(2)} 0 1 1 ${ax2.toFixed(2)} ${ay2.toFixed(2)}`} stroke={color} strokeWidth={sw} strokeLinecap="round" fill="none" />
       <polyline points={pointsStr} stroke={color} strokeWidth={sw * 0.62} strokeLinecap="round" strokeLinejoin="round" fill="none" />
     </svg>
   );
