@@ -44,7 +44,7 @@
 | I-01 | 通过 | 隔离 HTTP | 缺 key 401、错 key 403、他人任务 404、通配 key 按地址隔离（`http.test.ts`） |
 | I-02 | 通过 | HTTP 头 | `Cache-Control: private, no-store` + Vary；网页代理同样 no-store |
 | I-03 | 通过 | LIVE 客户端 | 官方 SDK Client：InMemory + 真实 stdio 握手/发现/调用（`verify-mcp/test`） |
-| I-04 | 部分 | LIVE 平台 | ASP #13803 首次审核被驳回（2026-09-21 中午查到；根因：OKX 客户端只认 200/402，空探测 400 被判端点不可达）。已修（CV-D10）并重部署；**公网用 OKX CLI 复核通过**（空探测 → input_required；`outputAssetKey=AAPLx amount=100` → delivered/eligible/LIVE）；**2026-09-21 17:04 布里斯班重新提审，平台状态 "Listing under review"**。服务器 nginx 日志佐证：审核方客户端（Java-http-client，阿里云香港）9/20 13:17Z 三次 POST 带参数被旧严格层拒（400）；**v5 上线 64 秒后同客户端再来 → 200 delivered:eligible**，字段为 `ownerAddress/outputAssetKey/amount`（人类金额，宽容层命中）。通过后由运营者从 OKX AI 入口调用一次（B5） |
+| I-04 | 部分 | LIVE 平台 | ASP #13803 首次审核被驳回（2026-09-21 中午查到；根因：OKX 客户端只认 200/402，空探测 400 被判端点不可达）。已修（CV-D10）并重部署；**公网用 OKX CLI 复核通过**（空探测 → input_required；`outputAssetKey=AAPLx amount=100` → delivered/eligible/LIVE）；**2026-09-21 17:04 布里斯班重新提审，平台状态 "Listing under review"**。服务器 nginx 日志佐证：审核方客户端（Java-http-client，阿里云香港）9/20 13:17Z 三次 POST 带参数被旧严格层拒（400）；**v5 上线 64 秒后同客户端再来 → 200 delivered:eligible**，字段为 `ownerAddress/outputAssetKey/amount`（人类金额，宽容层命中）。**2026-09-22 第二次驳回，理由与端点无关：头像不合规**（平台要求 440×440、不接受圆角、需清晰；原图 512×512 且四角透明）。同日重做头像并上传，`agent update --picture` 上链成功（tx `0x0e7c75cd2d3cd6eaa77c9bcb0bcd2d521f1a4a038e0e03a977ad28b755968dfc`），`agent activate` 提审成功 → `approvalStatus` 6（驳回）→ 3（审核中）。端点侧自 v5 起未再被指摘。通过后由运营者从 OKX AI 入口调用一次（B5） |
 | I-05 | 通过 | LIVE 1952 | 只买报告不交易：`x402:buy` 用官方客户端 SDK 走 402→签 EIP-3009→重发→200 + PAYMENT-RESPONSE(status success)，两笔真实结算（QUOTE_ONLY 经 A2MCP、REFERENCE_CONTEXT 经 /v1）；未发起任何执行 |
 | I-06 | 通过 | FIXTURE | 每调用方限频 429；上游 5xx 抛错不落库 |
 
