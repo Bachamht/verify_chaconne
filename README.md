@@ -4,6 +4,8 @@
 
 > A **trade-task service for agents** on tokenized US stocks: plan what is actually achievable, keep watching while conditions move, execute only inside limits the user signed once, and hand over evidence anyone can re-check offline.
 
+> **Two names, one product.** The live site brands itself **Chaconne Agent** (its job, stated plainly: let an AI agent trade for you). These review materials and the OKX AI listing keep the project name **Chaconne Verify**, which is the name ASP #13803 is registered and under review as. Nothing technical differs between them: same domain, same API paths, same contracts, same package names. "Verify" also remains the name of the capability itself (verification report, evidence bundle, `verify-bundle` CLI).
+
 - Product entry (独立入口): `https://verify.chaconne.xyz/`
 - OKX AI service: ASP **#13803 "Chaconne Verify"**, A2MCP service *StockProof Trade Verification* → `POST https://verify.chaconne.xyz/a2mcp/verify`
 - Guard contract (X Layer mainnet, 196): [`0x02834e26bbd851eedb888bafba666bc0af72770c`](https://www.okx.com/web3/explorer/xlayer/address/0x02834e26bbd851eedb888bafba666bc0af72770c) — Sourcify exact match

@@ -9,8 +9,8 @@ import { Footer } from "@/components/Footer";
 import { WalletChooser } from "@/components/WalletChooser";
 
 export const metadata: Metadata = {
-  title: "Chaconne Verify — Less FOMO. More proof.",
-  description: "Check the token, the price and your limits before trading tokenized US stocks. Evidence you can inspect. Execution inside the boundaries you sign.",
+  title: "Chaconne Agent — Let the agent trade. Let the contract set the limits.",
+  description: "Let your AI assistant buy and sell tokenized US stocks on X Layer. Every order is verified against fresh evidence first, and executed inside boundaries a contract enforces.",
 };
 
 /** UI-02：Inter 可变字体自托管（与主站同一文件），中文回退系统字体（globals.css --font-sans） */

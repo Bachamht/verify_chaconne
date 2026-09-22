@@ -29,7 +29,6 @@ export function Conductor({
   const stageRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<number | null>(null);
   const [take, setTake] = useState(0);
-  const [paused, setPaused] = useState(false);
   const zh = locale === "zh";
 
   useEffect(() => () => {
@@ -44,7 +43,7 @@ export function Conductor({
   }
 
   function tilt(event: PointerEvent<HTMLButtonElement>) {
-    if (paused || event.pointerType !== "mouse" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (event.pointerType !== "mouse" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - bounds.left) / bounds.width - 0.5;
     const y = (event.clientY - bounds.top) / bounds.height - 0.5;
@@ -57,7 +56,7 @@ export function Conductor({
   }
 
   return (
-    <div ref={stageRef} className={`conductor conductor--${variant} ${className}`} data-state={state} data-paused={paused}>
+    <div ref={stageRef} className={`conductor conductor--${variant} ${className}`} data-state={state}>
       <div className="conductor__score" aria-hidden="true">
         <svg viewBox="0 0 560 440" fill="none">
           {[0, 1, 2, 3, 4].map((i) => (
@@ -91,21 +90,8 @@ export function Conductor({
           />
         </span>
       </button>
-      {variant === "hero" && (
-        <>
-          <span className="conductor__sticker" aria-hidden="true">TRUST ME BRO?<strong>SHOW ME PROOF.</strong></span>
-          <button
-            type="button"
-            className="conductor__motion"
-            aria-label={zh ? "暂停角色动效" : "Pause character motion"}
-            aria-pressed={paused}
-            onClick={() => { resetTilt(); setPaused((value) => !value); }}
-          >
-            <span aria-hidden="true">{paused ? "▷" : "Ⅱ"}</span>
-            {zh ? (paused ? "动效已暂停" : "暂停动效") : (paused ? "Motion paused" : "Pause motion")}
-          </button>
-        </>
-      )}
+      {/* 动效一律有限次播放；系统「减少动效」偏好在 Conductor.css 里统一停掉，不再提供手动暂停开关。 */}
+      {variant === "hero" && <span className="conductor__sticker" aria-hidden="true">TRUST ME BRO?<strong>SHOW ME PROOF.</strong></span>}
     </div>
   );
 }

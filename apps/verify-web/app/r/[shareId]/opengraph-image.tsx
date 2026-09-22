@@ -36,7 +36,7 @@ export default async function Image({ params }: { params: Promise<{ shareId: str
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: 56, background: "#0a0a0a", color: "#f5f5f5", fontFamily: "sans-serif" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ display: "flex", width: 28, height: 28, borderRadius: 8, background: "#8b5cf6" }} />
-          <div style={{ display: "flex", fontSize: 28, fontWeight: 700 }}>Chaconne Verify</div>
+          <div style={{ display: "flex", fontSize: 28, fontWeight: 700 }}>Chaconne Agent</div>
           <div style={{ display: "flex", marginLeft: "auto", fontSize: 22, padding: "6px 14px", border: `2px solid ${color}`, borderRadius: 10, color }}>{status.toUpperCase()}</div>
           <div style={{ display: "flex", fontSize: 22, padding: "6px 14px", border: "2px solid #444", borderRadius: 10, color: "#ccc" }}>{r.evidenceMode ?? "—"}</div>
         </div>

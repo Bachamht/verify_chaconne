@@ -1,0 +1,256 @@
+{
+  "_comment": [
+    "X Layer 展示层行情清单（display tier）——只用于 /pub/market/xlayer 的中间价报价，",
+    "主站 chaconne.xyz 据此做跨链比价展示。**不是资产登记表**：这里的代币不进 Verify 注册表、",
+    "不进 Guard 合约白名单，因此不可在本服务执行，端点对它们的 verifyUrl 一律为 null。",
+    "范围取舍（2026-09-22 实测 OKX RWA 名录在 X Layer 上的全部 100 只）：",
+    "  · 49 只可路由，51 只 OKX 返回 82000（X Layer 上没有池）→ 不接，接进来只是没有价格的空记录；",
+    "  · 可路由的 49 只里 41 只是美股底层（已接），8 只是港股数字代码（TCENTx 700、SHEINx 625、",
+    "    XIAOx 1810、KUAIx 1024、MEITx 3690、HKEXCx 388、POPMTx 9992、MIXUx 2097）→ 不接：",
+    "    本站参考价管线是美股（us-equity: + NYSE 日历），会给港股标错时段且没有参考股价，",
+    "    比不接更糟；要支持需另加港股交易日历与参考源，属另一件事。",
+    "双源核验：① OKX RWA 名录 API（category=47, chainIndex=196）返回的登记项；",
+    "② X Layer 节点 eth_call 读 symbol() / decimals()，与名录一致（全部 18 位）；",
+    "③ OKX 聚合器按 100 USDG 买入档实测可路由。登记见 docs/devday-2026/the address-approval log (internal)。",
+    "新增代币必须走同样的双源核验并记录，勿凭记忆添加。"
+  ],
+  "version": "xlayer-display/1.1.0",
+  "chainId": 196,
+  "verifiedAt": "2026-09-22",
+  "tokens": [
+    {
+      "symbol": "SPCXx",
+      "underlying": "SPCX",
+      "address": "0x68fa48b1c2fe52b3d776e1953e0e782b5044ce28",
+      "decimals": 18
+    },
+    {
+      "symbol": "CRCLx",
+      "underlying": "CRCL",
+      "address": "0xfebded1b0986a8ee107f5ab1a1c5a813491deceb",
+      "decimals": 18
+    },
+    {
+      "symbol": "HOODx",
+      "underlying": "HOOD",
+      "address": "0xe1385fdd5ffb10081cd52c56584f25efa9084015",
+      "decimals": 18
+    },
+    {
+      "symbol": "GMEx",
+      "underlying": "GME",
+      "address": "0xe5f6d3b2405abdfe6f660e63202b25d23763160d",
+      "decimals": 18
+    },
+    {
+      "symbol": "COINx",
+      "underlying": "COIN",
+      "address": "0x364f210f430ec2448fc68a49203040f6124096f0",
+      "decimals": 18
+    },
+    {
+      "symbol": "MSTRx",
+      "underlying": "MSTR",
+      "address": "0xae2f842ef90c0d5213259ab82639d5bbf649b08e",
+      "decimals": 18
+    },
+    {
+      "symbol": "SNDKx",
+      "underlying": "SNDK",
+      "address": "0xb63efbc28860c8097e341de1fcf59456161e9d98",
+      "decimals": 18
+    },
+    {
+      "symbol": "INTCx",
+      "underlying": "INTC",
+      "address": "0xf8a80d1cb9cfd70d03d655d9df42339846f3b3c8",
+      "decimals": 18
+    },
+    {
+      "symbol": "BMNRx",
+      "underlying": "BMNR",
+      "address": "0xaeb681b69e5094e04d11bcef51a71358a374c3ed",
+      "decimals": 18
+    },
+    {
+      "symbol": "QQQx",
+      "underlying": "QQQ",
+      "address": "0xa753a7395cae905cd615da0b82a53e0560f250af",
+      "decimals": 18
+    },
+    {
+      "symbol": "MRVLx",
+      "underlying": "MRVL",
+      "address": "0xeaad46f4146ded5a47b55aa7f6c48c191deaec88",
+      "decimals": 18
+    },
+    {
+      "symbol": "TSLAx",
+      "underlying": "TSLA",
+      "address": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "decimals": 18
+    },
+    {
+      "symbol": "DELLx",
+      "underlying": "DELL",
+      "address": "0x2782df1cc877f720c81b4f6568db64563f1d3aa3",
+      "decimals": 18
+    },
+    {
+      "symbol": "MUx",
+      "underlying": "MU",
+      "address": "0xf6a873bae4ba1b304e45df52a4b7d176e1c6a8c4",
+      "decimals": 18
+    },
+    {
+      "symbol": "SPYx",
+      "underlying": "SPY",
+      "address": "0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48",
+      "decimals": 18
+    },
+    {
+      "symbol": "GOOGLx",
+      "underlying": "GOOGL",
+      "address": "0xe92f673ca36c5e2efd2de7628f815f84807e803f",
+      "decimals": 18
+    },
+    {
+      "symbol": "ORCLx",
+      "underlying": "ORCL",
+      "address": "0x548308e91ec9f285c7bff05295badbd56a6e4971",
+      "decimals": 18
+    },
+    {
+      "symbol": "AMDx",
+      "underlying": "AMD",
+      "address": "0x3522513e5f146a2006e2901b05f16b2821485e19",
+      "decimals": 18
+    },
+    {
+      "symbol": "AMZNx",
+      "underlying": "AMZN",
+      "address": "0x3557ba345b01efa20a1bddc61f573bfd87195081",
+      "decimals": 18
+    },
+    {
+      "symbol": "AVGOx",
+      "underlying": "AVGO",
+      "address": "0x38bac69cbbd28156796e4163b2b6dcb81e336565",
+      "decimals": 18
+    },
+    {
+      "symbol": "SLVx",
+      "underlying": "SLV",
+      "address": "0x4833e7f4f0460f4b72a3a5879a6c9841bcc5b58b",
+      "decimals": 18
+    },
+    {
+      "symbol": "ASMLx",
+      "underlying": "ASML",
+      "address": "0xc0b417e7f83db438631eb5e096684dd742e5294f",
+      "decimals": 18
+    },
+    {
+      "symbol": "MSFTx",
+      "underlying": "MSFT",
+      "address": "0x5621737f42dae558b81269fcb9e9e70c19aa6b35",
+      "decimals": 18
+    },
+    {
+      "symbol": "METAx",
+      "underlying": "META",
+      "address": "0x96702be57cd9777f835117a809c7124fe4ec989a",
+      "decimals": 18
+    },
+    {
+      "symbol": "PLTRx",
+      "underlying": "PLTR",
+      "address": "0x6d482cec5f9dd1f05ccee9fd3ff79b246170f8e2",
+      "decimals": 18
+    },
+    {
+      "symbol": "MCDx",
+      "underlying": "MCD",
+      "address": "0x80a77a372c1e12accda84299492f404902e2da67",
+      "decimals": 18
+    },
+    {
+      "symbol": "TSMx",
+      "underlying": "TSM",
+      "address": "0x9e3bf4ecfc44eedd624f26656b6736a3f093b073",
+      "decimals": 18
+    },
+    {
+      "symbol": "BRK.Bx",
+      "underlying": "BRK.B",
+      "address": "0x12992613fdd35abe95dec5a4964331b1ee23b50d",
+      "decimals": 18
+    },
+    {
+      "symbol": "KOx",
+      "underlying": "KO",
+      "address": "0xdcc1a2699441079da889b1f49e12b69cc791129b",
+      "decimals": 18
+    },
+    {
+      "symbol": "IWMx",
+      "underlying": "IWM",
+      "address": "0xdadfb355c6110eda0908740d52c834d6c2bcddc7",
+      "decimals": 18
+    },
+    {
+      "symbol": "IBMx",
+      "underlying": "IBM",
+      "address": "0xd9913208647671fe0f48f7f260076b2c6f310aac",
+      "decimals": 18
+    },
+    {
+      "symbol": "MRKx",
+      "underlying": "MRK",
+      "address": "0x17d8186ed8f68059124190d147174d0f6697dc40",
+      "decimals": 18
+    },
+    {
+      "symbol": "SMCIx",
+      "underlying": "SMCI",
+      "address": "0x39c31fc6038490ea4bf8a21ca18cd18f33b8d3fb",
+      "decimals": 18
+    },
+    {
+      "symbol": "WMTx",
+      "underlying": "WMT",
+      "address": "0x7aefc9965699fbea943e03264d96e50cd4a97b21",
+      "decimals": 18
+    },
+    {
+      "symbol": "SKHYx",
+      "underlying": "SKHY",
+      "address": "0x58100046a4afcd4ee4fadbd4244f3f895a341c56",
+      "decimals": 18
+    },
+    {
+      "symbol": "ICEx",
+      "underlying": "ICE",
+      "address": "0xde916b8089cbd5e52551bd933c3ea2ea5c903465",
+      "decimals": 18
+    },
+    {
+      "symbol": "MRNAx",
+      "underlying": "MRNA",
+      "address": "0xefd30445a4ec1f4b3e0a6f4d9bdbd215f805047f",
+      "decimals": 18
+    },
+    {
+      "symbol": "NKEx",
+      "underlying": "NKE",
+      "address": "0x7c5e9e93ea0f8fe94ea94eb6283f200ba0b72be0",
+      "decimals": 18
+    },
+    {
+      "symbol": "RDDTx",
+      "underlying": "RDDT",
+      "address": "0x52ce422d81e62a2c4bb87653d66f2235c73b152e",
+      "decimals": 18
+    }
+  ]
+}

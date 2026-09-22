@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 export type Locale = "en" | "zh";
 
 const DICT = {
-  brand: { en: "Chaconne Verify", zh: "Chaconne Verify" },
+  brand: { en: "Chaconne Agent", zh: "Chaconne Agent" },
   tagline: { en: "Used through OKX AI · Executed on X Layer", zh: "通过 OKX AI 使用 · 在 X Layer 执行" },
   nav_home: { en: "Home", zh: "首页" },
   nav_new: { en: "New verification", zh: "创建核验" },
@@ -154,8 +154,8 @@ const DICT = {
   exec_h: { en: "Execution confirmation", zh: "执行确认" },
   connect: { en: "Connect wallet", zh: "连接钱包" },
   product_main: { en: "Chaconne · markets", zh: "Chaconne · 行情比价" },
-  product_verify: { en: "Verify · check & execute", zh: "Verify · 核验与执行" },
-  product_switch_hint: { en: "Two entrances from the same team: the main site for prices, comparison and trading (Solana / BNB); Verify for agents and constrained execution on X Layer.", zh: "同一团队的两个入口：主站看行情、比价、交易（Solana / BNB）；Verify 给 Agent 与 X Layer 做核验与受约束执行。" },
+  product_verify: { en: "Agent · trade with proof", zh: "Agent · 让 AI 替你交易" },
+  product_switch_hint: { en: "Two entrances from the same team: the main site for prices, comparison and trading (Solana / BNB); Chaconne Agent for letting an AI agent trade on X Layer inside boundaries a contract enforces.", zh: "同一团队的两个入口：主站看行情、比价、交易（Solana / BNB）；Chaconne Agent 让 AI 助手在 X Layer 上替你交易，边界由合约强制。" },
   see_compare_main: { en: "See every version of this stock compared on the main site ↗", zh: "在主站看这只股票各版本的比价 ↗" },
   prefilled_from: { en: "Prefilled from the main site — check the amount and policy, then run.", zh: "已从主站预填——确认金额与策略后运行。" },
   switch_chain: { en: "Switch to X Layer", zh: "切换到 X Layer" },

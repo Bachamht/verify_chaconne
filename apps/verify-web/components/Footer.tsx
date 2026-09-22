@@ -14,7 +14,7 @@ export function Footer() {
       <div className="verify-footer-inner">
         <div className="verify-footer-top">
           <Link href="/" className="verify-brand" aria-label={t("brand")}><LogoMark size={27} /><Wordmark /></Link>
-          <nav className="verify-footer-links" aria-label="Verify resources">
+          <nav className="verify-footer-links" aria-label="Chaconne Agent resources">
             <Link href="/developers">{t("nav_dev")}</Link>
             <Link href="/verify-bundle">{t("nav_verify_bundle")}</Link>
             <Link href="/replay/AAPLx">{t("replay_h")}</Link>

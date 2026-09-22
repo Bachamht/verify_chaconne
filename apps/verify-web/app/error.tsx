@@ -11,7 +11,7 @@ export default function ErrorPage({ error, reset }: { error: Error & { digest?: 
   useEffect(() => {
     console.error(error);
   }, [error]);
-  const summary = `Chaconne Verify · ${typeof window !== "undefined" ? window.location.pathname : ""}\n${error.name}: ${error.message}${error.digest ? `\ndigest: ${error.digest}` : ""}\n${new Date().toISOString()}`;
+  const summary = `Chaconne Agent · ${typeof window !== "undefined" ? window.location.pathname : ""}\n${error.name}: ${error.message}${error.digest ? `\ndigest: ${error.digest}` : ""}\n${new Date().toISOString()}`;
   return (
     <div className="chc-staff mx-auto flex max-w-xl flex-col items-center rounded-lg border border-line px-6 py-16 text-center">
       <AlertTriangle size={28} strokeWidth={1.5} className="text-warn" />

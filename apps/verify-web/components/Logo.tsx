@@ -27,12 +27,12 @@ export function LogoMark({ size = 24, color = "currentColor", className }: { siz
   );
 }
 
-/** 字标：CHACONNE（宽字距）+ 小号 Verify */
+/** 字标：CHACONNE（宽字距）+ 小号 Agent（站名；产品能力仍叫「核验 / Verify」） */
 export function Wordmark({ className }: { className?: string }) {
   return (
     <span className={`inline-flex items-baseline gap-1.5 ${className ?? ""}`}>
       <span className="text-[13px] font-bold tracking-[0.14em] text-fg-1">CHACONNE</span>
-      <span className="text-[11px] font-semibold text-brand-300">Verify</span>
+      <span className="text-[11px] font-semibold text-brand-300">Agent</span>
     </span>
   );
 }

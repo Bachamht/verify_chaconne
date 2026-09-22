@@ -81,7 +81,7 @@ export function Header() {
           <button ref={menuRef} className="verify-menu-toggle" aria-expanded={open} aria-controls="verify-browse-nav" aria-label={open ? t("header_close") : t("header_menu")} onClick={() => setOpen(!open)}>{open ? <X size={19} /> : <Menu size={19} />}</button>
         </div>
       </div>
-      {open && <nav id="verify-browse-nav" className="verify-browse-nav" aria-label={locale === "zh" ? "探索 Verify" : "Explore Verify"}>
+      {open && <nav id="verify-browse-nav" className="verify-browse-nav" aria-label={locale === "zh" ? "探索 Chaconne Agent" : "Explore Chaconne Agent"}>
         <div className="verify-browse-inner">
           <div className="verify-browse-heading"><span>{locale === "zh" ? "探索 CHACONNE" : "EXPLORE CHACONNE"}</span><a href={MAIN_SITE_URL}>{t("product_main")}<ArrowUpRight size={14} aria-hidden="true" /></a></div>
           <div className="verify-browse-links">{NAV.map((n) => <Link key={n.href} href={n.href} aria-current={active(n.href) ? "page" : undefined} onClick={() => setOpen(false)}>{t(n.key)}<ArrowUpRight size={14} aria-hidden="true" /></Link>)}</div>

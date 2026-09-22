@@ -72,7 +72,7 @@ REFERENCE_CONTEXT 合格收盘 = `official` 来源，或 `pyth`(最后常规观�
 | `POST /v1/jobs/:id/prepare-execution` | body `{refreshKey}`（幂等键）；消耗再核验额度 → 新报告版本 + TradeIntent typed data + 证书签名 + Guard 调用参数 | 402 未付 / 409 额度耗尽 / 422 不合格(REJECTED，仍耗额) / 503 未配 Guard 或签名身份 |
 | `POST /v1/jobs/:id/submissions` | body `{attemptId, txHash}`；记录 tx hash，状态 SUBMITTED；服务端核实器按 RPC 回执推进：REORG_PENDING（确认数不足）→ CONFIRMED（回执成功 + Guard 事件 intentDigest 一致 + ≥6 确认）/ REVERTED / UNKNOWN（回执缺失 >10 min、事件缺失、摘要不符；带 reason）；`executions[].receipt` 与 `execution.receipt` 返回回执摘要 | 202；同尝试换 hash 409 |
 
-| `GET /pub/market/xlayer` | **公开行情**（主站 chaconne.xyz 的 poller 每 30 s 拉）：X Layer 允许执行的股票代币对 USDG 的 OKX 聚合器三档买入报价（100 / 1k / 10k USDG）；无鉴权无 x402；服务端缓存 30 s + single-flight；上游失败回上一份 `stale:true`；从未成功 503 `{error:"unavailable"}`。契约 §10.16 | 200 / 503 |
+| `GET /pub/market/xlayer` | **公开行情**（主站 chaconne.xyz 的 poller 定期拉）：X Layer 股票代币对 USDG 的 OKX 聚合器买入报价，分两层——execute（登记表内 2 只，100/1k/10k 三档带冲击 + 深链）、display（39 只，只有 100 USDG 档中间价，冲击与深链均 `null`）；无鉴权无 x402；服务端缓存 60 s + single-flight；上游失败回上一份 `stale:true`；从未成功 503 `{error:"unavailable"}`。契约 §10.16 | 200 / 503 |
 | `POST/GET /a2mcp/verify` | OKX AI A2MCP 单端点（平台调用，不带 API key；限频按 IP）。**CV-D10（2026-09-21）：OKX 调用客户端只接受 200/402，其它状态判 `endpoint_unreachable`** → 空参/参数错误回 **200** `{ok:false,status:"input_required",missingParams,problems,resolved,schema,example}`；免费成功 200 `{ok:true,status:"delivered",summary,resolvedInput,…报告}`；收费 402；同参幂等；凭证不得跨任务复用。输入宽容：资产可用符号/代码/0x 地址，金额可用人类单位 `amount`，常见别名，policyId 缺省 REFERENCE_CONTEXT、maxSlippageBps 缺省 50（`src/http/a2mcpInput.ts`）。`/a2mcp/plan`、`/a2mcp/monitor` 同约定 | 200 / 402 |
 
 鉴权：`x-api-key` 或 `Authorization: Bearer`，映射 callerId；他人任务一律 404。付款响应：`202 payment_unknown` 表示结算结果未知（只对账、勿重付）。Guard 调用签名：`execute(intent, intentSignature, cert, certSignature, routerCalldata)`（`apps/verify-service/src/execution/guardAbi.ts`）。
@@ -245,29 +245,43 @@ agent-wallet 模式（CV-D08）：`AGENT_WALLET_PRIVATE_KEY` 是用户自己的 
 - **A2MCP 传输约定**见 §5 表与 CV-D10；三个 A2MCP 端点（verify / plan / monitor）缺参数一律 HTTP 200 + `status:"input_required"`。
 - **策略版本缺省** = `LATEST_POLICY_VERSION`（1.1.0）：a2mcp、/v1/plans、网页 /new、MCP、SDK；两个 Guard 都已白名单 v1.0.0 与 v1.1.0。
 
-### 10.16 公开行情 `GET /pub/market/xlayer`（主站 ← Verify，2026-09-21 冻结）
-- **用途**：主站（`apps/poller`，分支 main）不持有 OKX 凭据，X Layer 也不在 DexScreener 覆盖内；由 verify-service 用已有 OKX key 报价并公开一份 30 s 快照，主站按 `address` 小写匹配 `assets(chain="xlayer")`。字段**一个不许增删**，缺省写 `null`（不省略）。
-- **路径**：`/pub/` 前缀（nginx `^/(v1|a2mcp|healthz|pub/)` 已分流到服务，无需改 nginx）。响应头 `Cache-Control: public, max-age=15, s-maxage=30`；503 时 `no-store`。
-- **成功 200**：
+### 10.16 公开行情 `GET /pub/market/xlayer`（主站 ← Verify，2026-09-21 冻结；2026-09-22 加 `tier` 扩两层）
+- **用途**：主站（`apps/poller`，分支 main）不持有 OKX 凭据，X Layer 也不在 DexScreener 覆盖内；由 verify-service 用已有 OKX key 报价并公开一份快照，主站按 `address` 小写匹配 `assets(chain="xlayer")`。字段**一个不许增删**，缺省写 `null`（不省略）。
+- **两层（2026-09-22）**：
+  - `tier:"execute"` —— 在 Verify 登记表 `xlayer-registry/1.1.0` 且 `executionAllowed` 的代币（当前 AAPLx、NVDAx）。报 100/1k/10k 三档，带冲击，带 `verifyUrl` 深链。
+  - `tier:"display"` —— 比价展示层，名单在 `apps/verify-service/config/xlayer.display.json`（`xlayer-display/1.1.0`，39 只）。**只报 100 USDG 一档**当中间价，`execPrice1k/10k` 与 `impact*Bps` 一律 `null`，`verifyUrl` 一律 `null`（它们不在登记表里，`/new?stock=` 会解析失败）。
+  - 展示名单**刻意不放进登记表**：登记表哈希在 Guard 合约白名单里，改它等于动链上配置。扩展示层只改这个独立文件，不触链。
+- **路径**：`/pub/` 前缀（nginx `^/(v1|a2mcp|healthz|pub/)` 已分流到服务，无需改 nginx）。响应头 `Cache-Control: public, max-age=30, s-maxage=60`；503 时 `no-store`。
+- **成功 200**（取自 2026-09-22 真实上游快照，41 只中各摘一只）：
 ```json
 {
   "schema": "chaconne-verify/market-xlayer/1",
   "chain": "xlayer", "chainIndex": "196", "source": "okx_dex_quote",
-  "asOf": "2026-09-21T10:00:00.000Z", "ttlSec": 30, "stale": false,
+  "asOf": "2026-09-22T09:36:49.183Z", "ttlSec": 60, "stale": false,
   "input": { "symbol": "USDG", "address": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8", "decimals": 6 },
   "tokens": [
     { "symbol": "AAPLx", "underlying": "AAPL", "address": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a", "decimals": 18,
-      "priceUsd": 335.86, "execPrice1k": 335.97, "impact1kBps": 0, "execPrice10k": 337.81, "impact10kBps": 52,
-      "receivedAt": "2026-09-21T10:00:00.000Z", "route": ["Uniswap V3", "xStocks wrap V2"],
-      "verifyUrl": "https://verify.chaconne.xyz/new?stock=AAPLx&from=main" }
+      "tier": "execute",
+      "priceUsd": 339.943919, "execPrice1k": 340.12641, "impact1kBps": 6, "execPrice10k": 340.466027, "impact10kBps": 16,
+      "receivedAt": "2026-09-22T09:36:20.978Z",
+      "route": ["Uniswap V3", "Uniswap V4", "Caliber propAMM", "xStocks wrap V2"],
+      "verifyUrl": "https://verify.chaconne.xyz/new?stock=AAPLx&from=main" },
+    { "symbol": "SPCXx", "underlying": "SPCX", "address": "0x68fa48b1c2fe52b3d776e1953e0e782b5044ce28", "decimals": 18,
+      "tier": "display",
+      "priceUsd": 152.670614, "execPrice1k": null, "impact1kBps": null, "execPrice10k": null, "impact10kBps": null,
+      "receivedAt": "2026-09-22T09:36:24.962Z",
+      "route": ["Uniswap V3", "xStocks wrap V2"],
+      "verifyUrl": null }
   ],
-  "errors": [ { "symbol": "NVDAx", "code": "no_route", "size": 10000 } ]
+  "errors": []
 }
 ```
-- **语义**：`priceUsd` = 100 USDG 买入档成交价（USDG≈USD，≈中间价）；`execPrice1k/10k` = 1,000 / 10,000 USDG 买入档成交价；成交价 = 金额 ÷ `toTokenAmount`（按 decimals 换算），保留 6 位小数。`impactNkBps`：OKX `priceImpactPercent` 存在则优先（`parseAdverseImpactBps`：×100、向不利方向取整、取非负），缺失则 `max(0, round((execPriceNk / priceUsd − 1) × 1e4))`。`route` = 报价路由的 DEX 名（去重保序，取 1k 档）。`tokens` 顺序 = 登记表顺序，只含 `role=stock_output && executionAllowed`（当前 AAPLx、NVDAx；SPYx 不在列）；`input` = 登记表 USDG。`verifyUrl` = `${PUBLIC_BASE_URL || https://verify.chaconne.xyz}/new?stock=<symbol>&from=main`。
-- **错误码** `errors[].code`：`no_route`（OKX 82000 或 `toTokenAmount=0`；只影响该档，其它档照报，不算失败）、`rate_limited`（50011/429：至多退避重试一次，仍限流即中止本轮，余下各档也记 rate_limited）、`upstream_error`（5xx / 网络异常 / 其它错误码；5xx 与网络异常中止本轮）。
-- **缓存与降级**：内存快照 TTL 30 s；过期后并发请求 single-flight；刷新失败（本轮无任何成交价）→ 返回上一份并 `stale:true`（`asOf` 保持旧值），随后 TTL 内**冷却**不再打上游；从未成功 → 503。主站侧：`stale:true` 或 `asOf` 超过 3 分钟一律视为无价。
-- **限流预算**：每轮 6 次 quote（2 代币 × 3 档），串行、档间 200 ms；与付费核验共用同一把 OKX key（任务侧报价自带 50011 退避重试）。
+- **语义**：`priceUsd` = 100 USDG 买入档成交价（USDG≈USD，≈中间价）；`execPrice1k/10k` = 1,000 / 10,000 USDG 买入档成交价（display 层恒 `null`）；成交价 = 金额 ÷ `toTokenAmount`（按 decimals 换算），保留 6 位小数。`impactNkBps`：OKX `priceImpactPercent` 存在则优先（`parseAdverseImpactBps`：×100、向不利方向取整、取非负），缺失则 `max(0, round((execPriceNk / priceUsd − 1) × 1e4))`；display 层不报 1k/10k，所以不补算，保持 `null`（**不要写 0**，0 会被读成"没有冲击"）。`route` = 报价路由的 DEX 名（去重保序，execute 取 1k 档，display 取 100 档）。`tokens` 顺序 = 先登记表顺序（execute），后展示名单顺序（display）；`input` = 登记表 USDG。`verifyUrl` = `${PUBLIC_BASE_URL || https://verify.chaconne.xyz}/new?stock=<symbol>&from=main`，**仅 execute 层**。
+- **去重**：展示名单里若出现已在登记表的地址，以登记表（execute）为准，展示层跳过，不会报两次。
+- **错误码** `errors[].code`：`no_route`（OKX 82000 或 `toTokenAmount=0`；只影响该档，其它档与其它代币照报，不算失败）、`rate_limited`（50011/429：至多退避重试一次，仍限流即中止本轮，余下各档也记 rate_limited）、`upstream_error`（5xx / 网络异常 / 其它错误码；5xx 与网络异常中止本轮）。单只代币失败只落一条 `errors`，不影响其余 40 只。
+- **缓存与降级**：内存快照 TTL 60 s；过期后并发请求 single-flight；刷新失败（本轮无任何成交价）→ 返回上一份并 `stale:true`（`asOf` 保持旧值），随后 TTL 内**冷却**不再打上游；从未成功 → 503。主站侧：`stale:true` 或 `asOf` 超过 3 分钟一律视为无价。
+- **限流预算**：每轮 45 次 quote（execute 2 × 3 档 + display 39 × 1 档），串行、档间 350 ms（260 ms 实测撞 OKX 50011）。实测整轮 ≈ 29 s（含上游 RTT），仍在 60 s TTL 内，限流不是瓶颈；与付费核验共用同一把 OKX key（任务侧报价自带 50011 退避重试）。
+- **名单取舍**（2026-09-22 实测 OKX RWA 名录 `category=47, chainIndex=196` 全量 100 只）：49 只在 X Layer 上可被聚合器路由，其余 51 只返回 82000（链上无池）→ 不接（接了只会是空行）。49 只里 41 只是美股/美股 ETF 底层 → 全部接入（execute 2 + display 39）；另 8 只底层是港股数字代码（TCENTx 700、SHEINx 625、XIAOx 1810、KUAIx 1024、MEITx 3690、HKEXCx 388、POPMTx 9992、MIXUx 2097）→ 暂不接：主站参考价管线是美股（`us-equity:` + 纽交所日历），接进来会把交易时段标错且无参考价，需另配港股日历与参考源。
 - **健康**：`GET /healthz` 增 `publicMarket: "/pub/market/xlayer" | null`（EVIDENCE_MODE=fixture 或无 OKX 凭据时为 null，端点 503）。
 - **发布指纹**：`GET /healthz` 增 `release: { treeHash, exportedAt } | null`——来自 `apps/verify-service/release.json`（私有仓导出公开快照时写入，公开仓库 `docs/RELEASE.json` 同值；评审 clone 公开仓库后 `pnpm release:hash` 复算比对，证明线上运行的就是公开源码）。文件缺失为 null。
-- **实现**：`apps/verify-service/src/market/xlayer.ts`；测试 `test/marketXlayer.test.ts`（8 例）；探针 `pnpm market:probe`（不起 HTTP/DB，直接打印一份快照）。
+- **实现**：`apps/verify-service/src/market/xlayer.ts` + `config/xlayer.display.json`；测试 `test/marketXlayer.test.ts`（13 例）；探针 `pnpm market:probe`（不起 HTTP/DB，直接打印一份快照）。展示名单文件缺失或格式不符时记一条 warn 并退化为"只有 execute 层"，端点不失败。

@@ -161,3 +161,17 @@ A2MCP 平台接入端点在 Lane C（`POST /a2mcp/verify`）；ASP #13803 已创
 | `mainnet:execute` 支持卖出方向（`SIDE=sell`、`INPUT_ASSET`/`OUTPUT_ASSET`、`AMOUNT_RAW=all`），并修正授权的代币 | `apps/verify-service/scripts/mainnetExecute.ts` | 同上 |
 | 真实链路测试装备（puppeteer-core + 注入式 Wallet Standard / EIP-6963 钱包，签名在 Node 端，证据自动打码） | `qa/real-path/` | W / VW / VJ / VP 系列证据 |
 | 链上对抗 12 组全部 revert（含主网 3 笔真实广播）、分叉不变量 4 项 | `packages/verify-contracts`、脚本 `fork:execute` / `fork:mandate` | `test-results.md` 真实链路一节 |
+
+## Verify 站定位与站名调整（2026-09-22）
+
+| 项 | 位置 | 说明 |
+|---|---|---|
+| 站名改为 Chaconne Agent（仅站内展示） | `apps/verify-web`（Logo 字标、metadata、页脚、i18n `brand`/`product_verify`、分享卡 OG、404 与错误页） | 运营者拍板：网站显示 Chaconne Agent，**评审材料与 ASP #13803 上架信息继续写 Chaconne Verify**（审核中不动）。域名、接口路径、合约名、`packages/verify-*` 包名、EIP-712 域字符串均未变；功能名词仍叫「核验 / Verify」。README 顶部已加一句说明，避免评审把两个名字当成两个产品 |
+| 首页文案重写 | `apps/verify-web/app/page.tsx`、`app/home.css` | 定位从「给别人用的核验工具」翻转为「用 Agent 交易的地方」。叙事改为：这是什么 → 为什么不能直接让它下单（三个风险：报价陈旧 / 同名代币 / 决定与成交之间的漂移）→ 我们怎么保证（核验 → 证书 → 链上执行）→ 怎么开始（自己试一次 / 接入 Agent / 看模拟 三个并列入口） |
+| 删除角色动效的手动暂停开关 | `apps/verify-web/components/Conductor.tsx`、`Conductor.css` | 动效本就有限次播放；`prefers-reduced-motion` 的统一停用保留 |
+
+## X Layer 行情接入扩容（2026-09-22）
+
+| 项 | 位置 | 说明 |
+|---|---|---|
+| `/pub/market/xlayer` 由 2 只扩到 41 只，加 `tier` 字段分执行层 / 展示层 | `apps/verify-service/src/market/xlayer.ts`、新增 `config/xlayer.display.json`、`src/http/app.ts`、`test/marketXlayer.test.ts`（13 例）、契约 `docs/interfaces.md` §10.16 | 运营者反馈主站 X Layer 只有 2 只股票。实测 OKX RWA 名录全量 100 只：49 只可路由、51 只无池（`82000`）；49 只里 41 只美股底层全部接入、8 只港股底层暂不接（参考价管线是美股 + 纽交所日历）。`tier:"execute"`（AAPLx/NVDAx）保持三档 + 冲击 + `verifyUrl`；`tier:"display"`（39 只）只报 100 USDG 档中间价，冲击与 `verifyUrl` 一律 `null`（不在登记表里，深链会失败）。展示名单走**独立文件**不进登记表——登记表哈希在 Guard 白名单里，改它等于动链上配置，本次扩容**零链上交易**。节流 200→350 ms、TTL 30→60 s、`Cache-Control: public, max-age=30, s-maxage=60`；真实上游实测整轮 ≈ 29 s，41/41 有报价、`errors: []`。39 个地址的双源核验（OKX 名录 × 链上 `name()`/`symbol()`/`decimals()`，0 处分歧）登记在 `the address-approval log (internal)` |

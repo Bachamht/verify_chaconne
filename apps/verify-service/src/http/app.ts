@@ -312,7 +312,8 @@ export function createApp(d: AppDeps) {
     app.get("/pub/live", (req, res, next) => { club.liveBoard(Number(req.query["limit"] ?? 50) || 50).then((items) => { res.setHeader("Cache-Control", "public, max-age=30"); res.json({ items }); }).catch(next); });
   }
 
-  /* ---------- 公开行情：主站 poller 每 30s 拉（契约 §10.16；nginx `/pub/` 前缀已分流到本服务） ---------- */
+  /* ---------- 公开行情：主站 poller 每 30s 拉（契约 §10.16；nginx `/pub/` 前缀已分流到本服务） ----------
+   * 2026-09-22 扩容到 27 只（执行层 3 档 + 展示层 1 档），一轮约 10 s，故服务端 TTL 60 s、边缘缓存同步放宽。 */
   const unavailable = (res: Response) => {
     res.setHeader("Cache-Control", "no-store");
     res.status(503).json({ error: "unavailable" });
@@ -327,7 +328,7 @@ export function createApp(d: AppDeps) {
           unavailable(res);
           return;
         }
-        res.setHeader("Cache-Control", "public, max-age=15, s-maxage=30");
+        res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60");
         res.json(snap);
       }),
     );

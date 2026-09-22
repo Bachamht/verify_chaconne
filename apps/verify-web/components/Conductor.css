@@ -62,9 +62,6 @@
 }
 .conductor__sticker { position: absolute; z-index: 3; left: 1%; bottom: 10%; padding: 12px 15px; color: #21122d; background: #c7a6ff; box-shadow: 4px 4px 0 #60369a; transform: rotate(-9deg); font: 700 10px/1.6 ui-monospace, monospace; letter-spacing: .04em; pointer-events: none; }
 .conductor__sticker strong { display: block; font-size: 13px; }
-.conductor__motion { position: absolute; z-index: 4; bottom: 0; right: 0; display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 6px 9px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: #b6a4cb; font-size: 11px; cursor: pointer; }
-.conductor__motion:hover { border-color: #634477; color: #e6d6f8; }
-.conductor__motion span { font-size: 16px; }
 .conductor[data-state="checking"] .conductor__pose,
 .conductor .conductor__pose[data-take="encore"] { animation: conductor-beat 650ms ease-in-out 2; }
 .conductor[data-state="passed"] .conductor__pose { animation: conductor-nod 750ms ease-in-out both; }
@@ -76,10 +73,6 @@
 .conductor--compact .conductor__speech { top: -1%; right: -3%; padding: 6px 9px; font-size: 10px; max-width: 95%; }
 .conductor--compact .conductor__puppet { inset: 12% 7% 0; width: 86%; }
 .conductor--compact .conductor__orbit--two { display: none; }
-.conductor[data-paused="true"] .conductor__pose,
-.conductor[data-paused="true"] .conductor__speech,
-.conductor[data-paused="true"] .conductor__score path { animation: none; }
-.conductor[data-paused="true"] .conductor__puppet { transform: none; transition: none; }
 @keyframes conductor-enter { from { opacity: 0; transform: translateY(24px) rotate(7deg) scale(.92); } to { opacity: 1; transform: none; } }
 @keyframes conductor-score { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes conductor-aside { from { opacity: 0; translate: 0 10px; } to { opacity: 1; translate: 0 0; } }
@@ -96,5 +89,4 @@
 @media (prefers-reduced-motion: reduce) {
   .conductor *, .conductor *::before, .conductor *::after { animation: none !important; transition: none !important; }
   .conductor__puppet { transform: none !important; }
-  .conductor__motion { display: none; }
 }
