@@ -39,6 +39,7 @@
 
 - [x] 主网 Guard 一笔真实成交（脚本版，2026-09-20）：tx `0x333a…5449`，事件与余额变化在 `deployments.json`。
 - [x] FORK 授权计划两买一卖（2026-09-21，第三方执行者）：`.probes/*_FORK_mandate.json`。
+- [x] **主网买入 + 卖出（2026-09-22）**：买入走单笔任务 `job_2bf82025…`（tx `0x086691dd…`），卖出走授权计划 PlanGuard `mnd_517dcbdb…`（`executeStep` tx `0xee9dce5e…`，received 2.996952 USDG、refunded 1e6 wei 容差余量）。**录像时卖出请走授权计划页面，不要用单笔任务的卖出**（股票代币是 share 记账，v1 Guard 无容差会 revert；见 `deployments.json → mainnetEvidence3`）。
 - [ ] 主网 Guard 浏览器钱包版成交（B4 录屏用，运营者）。
 - [ ] 主网 PlanGuard 授权计划 2 步买入（9/22 晚，agent-wallet 自驱）。
 - [ ] STRICT_LIVE 真实通过一次（9/21 晚 23:30 后，定时脚本已就绪）。
