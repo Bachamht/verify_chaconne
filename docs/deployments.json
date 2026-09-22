@@ -259,5 +259,33 @@
     "client": "Java-http-client/17.0.8.1 from 8.212.100-101.x (Alibaba Cloud HK)",
     "before_fix": "2026-09-20 13:17:43/45/47Z three POST /a2mcp/verify → 400 (with params, rejected by strict input layer)",
     "after_fix": "2026-09-21 07:04:58Z POST fields [ownerAddress, outputAssetKey, amount] → 200 delivered:eligible in 577 ms"
+  },
+  "mainnetEvidence3": {
+    "what": "first mainnet SELL through PlanGuard v2 (buy leg via v1 Guard job path)",
+    "date": "2026-09-22",
+    "buy": {
+      "jobId": "job_2bf820250c1406f87601b781",
+      "policy": "REFERENCE_CONTEXT 1.1.0",
+      "amountIn": "3000000 USDG",
+      "executeTx": "0x086691ddcc2cee5866178adac69531a43f536627b4a9d2be72932dd912ab799f"
+    },
+    "sell": {
+      "mandateId": "mnd_517dcbdb433423be2ced52b6",
+      "planGuard": "0xE8517f296211F4b9175796bAAB47979FB14Fd2F0",
+      "inputToken": "AAPLx",
+      "outputSet": [
+        "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8"
+      ],
+      "approveTx": "0x9df036bb8fe917759d3559dd391e10fce6d3365049d1138e17e457171c98629e",
+      "executeStepTx": "0xee9dce5e931974c2b9ef8cc593ad9871e1da906010bf9415651bc8cfb7e22180",
+      "gasUsed": 609047,
+      "event": {
+        "amountIn": "8853515005349799",
+        "spent": "8853515004349798",
+        "received": "2996952",
+        "refunded": "1000000"
+      }
+    },
+    "note": "AAPLx is share-accounted (rebasing): each transfer delivers 1 wei less than requested. v1 Guard has no inputShortfallTolerance, so a sell through the single-job path reverts InputTransferShortfall (0x03a3f9bc); PlanGuard v2 tolerates 1e6 wei and refunds the unused remainder."
   }
 }

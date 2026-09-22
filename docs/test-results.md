@@ -251,6 +251,32 @@
 - 门禁：`tsc --noEmit` ✓、eslint 0 错误、`next build` ✓、`pnpm lint:copy` ✓、diff 密钥扫描干净。真浏览器视口/横向溢出复核由服务器部署后做。
 - 未做：报告页 / 执行页视觉未重做（评审本次也未看）；`packages/ui` 共用包（UI-06 第二步）留到两站组件稳定后。
 
+## 真实链路测试（`plans/真实链路测试计划_2026-09-22.md`，2026-09-22）
+
+本地执行 EVM / Verify / 无资金 / API / 链上对抗部分（Solana 真金、BSC、Telegram、生产库相关交服务器）。完整结果与证据在本地 `plans/真实链路测试结果_2026-09-22.md`；这里只记与评审材料有关的结论。
+
+| 组 | 结果 |
+|---|---|
+| 钱包矩阵 W-01…W-05（Phantom / OKX / Solflare / Backpack / Bitget，注入式 Wallet Standard） | 5/5 发现、连接、自动重连、断开均正常；3 处小问题（断开后金额未清、连接失败提示被下拉吞掉、三家手机深链缺失） |
+| Verify 钱包 VW-01…VW-05（EIP-6963 双钱包） | 全过：选择器 OKX 置顶且记住选择、切链 56→196、表单与头部同步 |
+| 单笔核验与执行 VJ-05…VJ-08 | 全过：休市三策略判定符合预期、证据包 19 项全绿且篡改只翻相关两项、分享三档与取消公开、翻创模板 |
+| 授权计划 VM-01…VM-09 | 全过：登记、参数校验、逐步执行、暂停/继续/取消、链上撤销后旧证书失效、deadline → EXPIRED、monitor、账单与证据包 |
+| Agent 通道 VA-01…VA-08 | 全过：MCP v1/v2 全部工具、agent-wallet 启动保护（缺配置/多余私钥变量一律拒启）、SDK 复现全链路、A2MCP verify/plan、无 key 401 / 错 key 403 / 调用方隔离 |
+| 公开端点与隔离 VU-01…VU-04 | 全过 |
+| **链上对抗 VS-01…VS-12** | **12 组全部 revert，测试钱包资金分文未动**：证书与意图绑定（`CertificateIntentMismatch`）、过期（`IntentExpired`）、错签名者（`InvalidCertificateSignature`）、非 owner（`InvalidIntentSignature` / `NotOwnerOfIntent`）、域分离、epoch 停用（`EpochDisabled`）、重放、授权不足；分叉上 fee-on-transfer / rebasing / 半量 router 的 4 个不变量全过 |
+| 开发者 API 与 SEO | 申请限速 3 次/IP/小时、sitemap/robots/OG 图/周报 404 与 200 均符合 |
+
+### 主网首次「卖出」全链路（2026-09-22）
+
+买入照旧走单笔任务（v1 Guard）：`job_2bf820250c1406f87601b781`，3 USDG → AAPLx，tx `0x086691dd…`。
+卖出走授权计划（PlanGuard v2）：`mnd_517dcbdb433423be2ced52b6`，链上 `mandate.inputToken = AAPLx`、`outputSet = [USDG]`，
+`executeStep` tx `0xee9dce5e931974c2b9ef8cc593ad9871e1da906010bf9415651bc8cfb7e22180`（success，gas 609,047），
+`MandateStep`：`amountIn 8853515005349799 / spent …4349798 / received 2996952 USDG / refunded 1000000 AAPLx`。
+
+两个当天修掉的问题：
+- **rebasing 输入的零容差**：AAPLx 是 share 记账代币，实测每笔转账少 1 wei；v1 Guard 要求 `pulled ≥ amountIn`，因此**单笔任务的卖出必然以 `InputTransferShortfall`（`0x03a3f9bc`）回滚**。v2 PlanGuard 已配 `inputShortfallTolerance = 1e6`，服务在授权计划路径还会把路由额减 `SELL_INPUT_TOLERANCE_WEI`，多余部分按事件里的 `refunded` 原路退回。结论：**卖出走授权计划路径**；单笔任务的卖出在换用 v2 Guard 前不开放。
+- **登记表与链上方向不一致**：`registerMandate` 原先无论买卖都按「`mandate.inputToken` = 资金币种、输出集 = legs」校验，而步骤构建在 `side=sell` 时对调输入输出，导致步骤的 `outputToken` 永远不在 mandate 的输出集里——经 HTTP API 登记的卖出授权计划根本无法上链。现改为：卖出时链上输入 = 腿的股票代币、输出集 = `[资金币种]`，且卖出只允许一条腿；新增单测覆盖「正确形状 201 / 买入形状的卖出 422 / 两条腿 422」。
+
 ## 汇总
 
 - v1 68 条（PRE 10 + 清单 58）中：通过 56（含代码级通过 2）、部分 9、待执行 3、阻塞 0、不适用 0。

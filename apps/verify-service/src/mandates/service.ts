@@ -153,20 +153,32 @@ export class MandatesService implements ReceiptStore {
     if (Number(mandate.validFrom) > Number(mandate.deadline)) errors.push({ field: "mandate.validFrom", code: "after_deadline" });
 
     // registry / outputSet / policy hashes
+    //
+    // 方向语义（V-18）：登记表始终按「inputAssetKey = 资金币种，legs = 股票」书写，
+    // 但**链上的 mandate 描述的是这一步实际的转账方向**：
+    //   买入：合约拉 inputAssetKey（稳定币），输出集 = legs 的股票代币；
+    //   卖出：合约拉 legs 的股票代币（只允许一条腿），输出集 = [inputAssetKey]（换回的稳定币）。
+    // `nextStepJob` 在 side=sell 时同样对调输入/输出，两处必须一致，否则步骤的 outputToken
+    // 永远不在 mandate 的 outputSet 里，PlanGuard 的输出集校验必失败（卖出授权计划根本无法上链）。
     const inEntry = findEntry(this.d.registry, String(b.inputAssetKey).toLowerCase());
     if (!inEntry) errors.push({ field: "inputAssetKey", code: "asset_unsupported" });
-    else if (inEntry.tokenAddress.toLowerCase() !== mandate.inputToken.toLowerCase()) errors.push({ field: "mandate.inputToken", code: "registry_mismatch" });
     const legs = (b.legs ?? []).map((l) => ({ outputAssetKey: String(l.outputAssetKey).toLowerCase(), weightBps: Number(l.weightBps) }));
-    const outputSet: EvmAddress[] = [];
+    const legTokens: EvmAddress[] = [];
     let weightSum = 0;
     for (const l of legs) {
       const e = findEntry(this.d.registry, l.outputAssetKey);
       if (!e) errors.push({ field: "legs.outputAssetKey", code: "asset_unsupported" });
-      else outputSet.push(e.tokenAddress);
+      else legTokens.push(e.tokenAddress);
       if (!Number.isInteger(l.weightBps) || l.weightBps <= 0) errors.push({ field: "legs.weightBps", code: "invalid" });
       weightSum += l.weightBps;
     }
     if (weightSum !== 10_000) errors.push({ field: "legs.weightBps", code: "must_sum_to_10000" });
+    if (side === "sell" && legs.length !== 1) errors.push({ field: "legs", code: "sell_expects_single_leg" });
+    // 链上输入代币：买入 = 资金币种；卖出 = 被卖出的股票代币
+    const chainInput = side === "sell" ? legTokens[0] : inEntry?.tokenAddress;
+    if (chainInput && chainInput.toLowerCase() !== mandate.inputToken.toLowerCase()) errors.push({ field: "mandate.inputToken", code: "registry_mismatch" });
+    // 链上输出集：买入 = legs；卖出 = [资金币种]
+    const outputSet: EvmAddress[] = side === "sell" ? (inEntry ? [inEntry.tokenAddress] : []) : legTokens;
     if (outputSet.length > 0 && outputSetHash(outputSet).toLowerCase() !== mandate.outputSetHash.toLowerCase()) errors.push({ field: "mandate.outputSetHash", code: "mismatch" });
     const regHash = registryHash(this.d.registry);
     if (regHash.toLowerCase() !== mandate.registryHash.toLowerCase()) errors.push({ field: "mandate.registryHash", code: "registry_mismatch" });

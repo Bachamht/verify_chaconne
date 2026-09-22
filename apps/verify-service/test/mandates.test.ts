@@ -11,6 +11,7 @@ import { PLANGUARD_ABI } from "../src/execution/planGuardAbi";
 import { mandateStepMatcher, verifyReceiptsOnce, type ChainReceipt, type ReceiptSource } from "../src/execution/receipts";
 import { monitorOnce } from "../src/mandates/monitor";
 import { api, createTestEnv, signedMandateBody, TEST_PLANGUARD, type TestEnv } from "./helpers";
+import { FIXTURE_STABLE_KEY, FIXTURE_STOCK_KEY } from "@chaconne/core/verify/fixtures";
 
 let env: TestEnv | null = null;
 afterEach(async () => {
@@ -57,6 +58,38 @@ describe("POST /v1/mandates 登记", () => {
     const dup = await registered(env, { clientRequestId: "m2" });
     expect(dup.r.status).toBe(409);
     expect(dup.r.json["error"]).toBe("mandate_already_registered");
+  });
+
+  it("卖出授权计划（V-18）：链上输入 = 股票代币、输出集 = [资金币种]；买入形状的卖出被拒；卖出只允许一条腿", async () => {
+    env = await createTestEnv();
+    // 正确的卖出形状 → 201，且存下来的 outputSet 是资金币种
+    const ok = await registered(env, { clientRequestId: "sell-ok", side: "sell" });
+    expect(ok.r.status).toBe(201);
+    const reg = env.service.registry;
+    const stable = reg.entries.find((e) => e.assetKey === FIXTURE_STABLE_KEY)!;
+    const stock = reg.entries.find((e) => e.assetKey === FIXTURE_STOCK_KEY)!;
+    expect(ok.mandate.inputToken.toLowerCase()).toBe(stock.tokenAddress.toLowerCase());
+    expect(ok.r.json["outputSet"]).toEqual([stable.tokenAddress]);
+
+    // 旧的「买入形状 + side=sell」（inputToken=稳定币、输出集=股票）必须被拒：否则步骤的 outputToken 永远不在集合里
+    const buyShaped = await signedMandateBody(env, { clientRequestId: "sell-bad", side: "buy" });
+    const bad = await api(env, "POST", "/v1/mandates", { ...buyShaped.body, clientRequestId: "sell-bad", side: "sell" });
+    expect(bad.status).toBe(422);
+    const fields = (bad.json["details"] as Array<{ field: string }>).map((e) => e.field);
+    expect(fields.some((f) => f.includes("inputToken") || f.includes("outputSetHash"))).toBe(true);
+
+    // 卖出只允许一条腿
+    const twoLegs = await signedMandateBody(env, { clientRequestId: "sell-2legs", side: "sell" });
+    const multi = await api(env, "POST", "/v1/mandates", {
+      ...twoLegs.body,
+      clientRequestId: "sell-2legs",
+      legs: [
+        { outputAssetKey: FIXTURE_STOCK_KEY, weightBps: 5000 },
+        { outputAssetKey: FIXTURE_STOCK_KEY, weightBps: 5000 },
+      ],
+    });
+    expect(multi.status).toBe(422);
+    expect((multi.json["details"] as Array<{ field: string; code: string }>).some((e) => e.code === "sell_expects_single_leg")).toBe(true);
   });
 
   it("拒绝：签名不是 owner 签的 / outputSetHash 不符 / registryHash 不符 / deadline 过去 / perStepCap > budgetCap", async () => {

@@ -233,7 +233,8 @@ export function planBody(overrides: Record<string, unknown> = {}) {
 }
 
 /** 构造并用 owner 私钥签一份 TradeMandate（PlanGuard domain），返回可直接 POST /v1/mandates 的 body */
-export async function signedMandateBody(env: TestEnv, overrides: { budgetCap?: string; perStepCap?: string; maxSteps?: number; validFrom?: number; deadline?: number; policyId?: string; policyVersion?: string; sku?: string; clientRequestId?: string; nonce?: string } = {}) {
+/** side="sell" 时：链上输入 = 股票代币，输出集 = [资金币种]（V-18）；登记表仍按 inputAssetKey=资金币种 / legs=股票 书写 */
+export async function signedMandateBody(env: TestEnv, overrides: { budgetCap?: string; perStepCap?: string; maxSteps?: number; validFrom?: number; deadline?: number; policyId?: string; policyVersion?: string; sku?: string; clientRequestId?: string; nonce?: string; side?: "buy" | "sell" } = {}) {
   const owner = privateKeyToAccount(TEST_OWNER_KEY);
   const reg = env.service.registry;
   const inEntry = reg.entries.find((e) => e.assetKey === FIXTURE_STABLE_KEY)!;
@@ -248,8 +249,8 @@ export async function signedMandateBody(env: TestEnv, overrides: { budgetCap?: s
   const mandate: TradeMandate = {
     owner: owner.address.toLowerCase() as `0x${string}`,
     recipient: owner.address.toLowerCase() as `0x${string}`,
-    inputToken: inEntry.tokenAddress,
-    outputSetHash: outputSetHash([outEntry.tokenAddress]),
+    inputToken: overrides.side === "sell" ? outEntry.tokenAddress : inEntry.tokenAddress,
+    outputSetHash: outputSetHash(overrides.side === "sell" ? [inEntry.tokenAddress] : [outEntry.tokenAddress]),
     budgetCap: overrides.budgetCap ?? "200000000",
     perStepCap: overrides.perStepCap ?? "100000000",
     maxSteps: String(overrides.maxSteps ?? 2),
@@ -274,7 +275,7 @@ export async function signedMandateBody(env: TestEnv, overrides: { budgetCap?: s
       signature,
       inputAssetKey: FIXTURE_STABLE_KEY,
       legs: [{ outputAssetKey: FIXTURE_STOCK_KEY, weightBps: 10_000 }],
-      side: "buy",
+      side: overrides.side ?? "buy",
       policyId,
       policyVersion,
       maxSlippageBps: 50,

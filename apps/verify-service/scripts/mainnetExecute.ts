@@ -5,6 +5,8 @@
  * 默认 dry-run：到签完意图为止，打印硬边界与证书，不发任何链上交易。
  * 环境：VERIFY_SERVICE_URL、VERIFY_API_KEY、VERIFY_CALLER（=演示钱包地址）、DEMO_USER_PRIVATE_KEY（来自 .qa-live/demo-wallet.env）、
  *       POLICY（默认 REFERENCE_CONTEXT）、POLICY_VERSION（默认 1.1.0 = 最新；1.0.0 在休市时段不接受 close_last_tick 参考）、AMOUNT_RAW（默认 5000000 = 5 USDG）、EXECUTE=1 才广播。
+ *       SIDE=sell 走卖出方向（输入 AAPLx、输出 USDG，AMOUNT_RAW 按 18 位精度；`AMOUNT_RAW=all` = 卖掉钱包里全部输入代币）；
+ *       INPUT_ASSET / OUTPUT_ASSET 可显式覆盖 assetKey。
  * 证据写 .probes/<ts>_MAINNET_execute.json（不入库）。
  */
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -19,10 +21,13 @@ const KEY = process.env["VERIFY_API_KEY"] ?? "";
 const RPC = process.env["XLAYER_RPC_URL"] ?? "https://rpc.xlayer.tech";
 const POLICY = process.env["POLICY"] ?? "REFERENCE_CONTEXT";
 const POLICY_VERSION = process.env["POLICY_VERSION"] ?? "1.1.0";
-const AMOUNT = process.env["AMOUNT_RAW"] ?? "5000000";
 const EXECUTE = process.env["EXECUTE"] === "1";
 const USDG = "eip155:196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8";
 const AAPLX = "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a";
+const SIDE = process.env["SIDE"] === "sell" ? "sell" : "buy";
+const INPUT_ASSET = process.env["INPUT_ASSET"] ?? (SIDE === "sell" ? AAPLX : USDG);
+const OUTPUT_ASSET = process.env["OUTPUT_ASSET"] ?? (SIDE === "sell" ? USDG : AAPLX);
+const AMOUNT_ENV = process.env["AMOUNT_RAW"] ?? (SIDE === "sell" ? "all" : "5000000");
 const OUT = join(process.cwd(), "..", "..", "OKX dev day", "probes");
 
 const pk = process.env["DEMO_USER_PRIVATE_KEY"];
@@ -40,19 +45,27 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<{ s
 
 async function main() {
   mkdirSync(OUT, { recursive: true });
-  const log: Record<string, unknown> = { mode: EXECUTE ? "LIVE" : "LIVE-DRYRUN", service: SERVICE, demoWallet: demo.address, policy: POLICY, policyVersion: POLICY_VERSION, amountRaw: AMOUNT, at: new Date().toISOString() };
+  const inputToken = getAddress(INPUT_ASSET.split(":")[2]!);
+  // AMOUNT_RAW=all（卖出默认）：用钱包里输入代币的全部余额
+  const AMOUNT =
+    AMOUNT_ENV === "all"
+      ? (await pub.readContract({ address: inputToken, abi: erc20Abi, functionName: "balanceOf", args: [demo.address] })).toString()
+      : AMOUNT_ENV;
+  if (BigInt(AMOUNT) <= 0n) throw new Error(`输入代币余额为 0（${inputToken}）`);
+  const log: Record<string, unknown> = { mode: EXECUTE ? "LIVE" : "LIVE-DRYRUN", service: SERVICE, demoWallet: demo.address, side: SIDE, inputAsset: INPUT_ASSET, outputAsset: OUTPUT_ASSET, policy: POLICY, policyVersion: POLICY_VERSION, amountRaw: AMOUNT, at: new Date().toISOString() };
   console.info("demo wallet", demo.address, "| balances: OKB", (Number(await pub.getBalance({ address: demo.address })) / 1e18).toFixed(4), "| USDG", Number(await pub.readContract({ address: getAddress(USDG.split(":")[2]!), abi: erc20Abi, functionName: "balanceOf", args: [demo.address] })) / 1e6);
 
   /* 1. create job */
   const created = await api<Record<string, unknown>>("POST", "/v1/jobs", {
-    clientRequestId: `mainnet-${Date.now()}`,
+    clientRequestId: `mainnet-${SIDE}-${Date.now()}`,
     ownerAddress: demo.address,
     recipientAddress: demo.address,
     executionChainId: 196,
-    inputAssetKey: USDG,
-    outputAssetKey: AAPLX,
+    inputAssetKey: INPUT_ASSET,
+    outputAssetKey: OUTPUT_ASSET,
     amountInRaw: AMOUNT,
     mode: "exactIn",
+    ...(SIDE === "sell" ? { side: "sell" as const } : {}),
     policyId: POLICY,
     policyVersion: POLICY_VERSION,
     maxSlippageBps: 50,
@@ -77,7 +90,7 @@ async function main() {
     const hz = (await (await fetch(`${SERVICE}/healthz`)).json()) as { guard?: string };
     if (!hz.guard) throw new Error("healthz 未回显 guard 地址");
     const guardAddr = getAddress(hz.guard);
-    const token = getAddress(USDG.split(":")[2]!);
+    const token = inputToken; // 买入 = USDG，卖出 = 股票代币
     const allowance = await pub.readContract({ address: token, abi: erc20Abi, functionName: "allowance", args: [demo.address, guardAddr] });
     if (allowance >= BigInt(AMOUNT)) {
       console.info("allowance already sufficient:", allowance.toString(), "— skip approve");

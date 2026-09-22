@@ -152,3 +152,12 @@ A2MCP 平台接入端点在 Lane C（`POST /a2mcp/verify`）；ASP #13803 已创
 | I2 互通 | 两站互通：Verify 头部产品切换胶囊（← 主站 行情比价）、报告页「在主站看各版本比价」深链、`/new` 支持 `?stock=&amount=&input=&policy=` 预填（主站资产页深链的落点） | `apps/verify-web/{components/Header,JobClient,NewJobForm}.tsx`、`lib/productSwitch.ts` | build 绿 |
 | I2 集成 | **ASP 驳回修复（CV-D10）**：复现 OKX 客户端只认 200/402 → A2MCP 三端点缺参数改 200 input_required + 宽容输入层（符号/代码/别名/人类金额/默认值）+ summary + 请求日志 + 描述重写；PlanGuard 主网部署/配置/Sourcify；v1 Guard 白名单补 v1.1.0；规划器×真实 OKX 阶梯验证并修推荐并列规则；ABI 漂移核对工具（6 处手写 ABI 全匹配）；主网分叉验证部署配置脚本；**端到端集成（真实服务+分叉+PlanGuard）并修两个真实缺陷**（步骤路由收款人写成 v1 Guard；已提交步骤仍返回 READY） | `apps/verify-service/scripts/{planLive,e2eMandate,abiDrift,rotateOwner}.ts`、`src/evidence/{provider,live}.ts`、`src/mandates/service.ts`、`packages/core/.../contracts.ts` | `probes/*_LIVE_plan.json`、`probes/*_E2E_mandate.json`（24/24 离线校验） |
 | I2 行情 | **公开行情端点 `GET /pub/market/xlayer`**（主站接入 X Layer 的数据源）：OKX 聚合器三档买入报价（100/1k/10k USDG → AAPLx/NVDAx）、30 s 缓存 + single-flight、上游失败回上一份 `stale:true` + TTL 冷却、限流至多重试一次不风暴、从未成功 503；契约冻结 interfaces §10.16；healthz `publicMarket`；`pnpm market:probe` 探针 | `apps/verify-service/src/market/xlayer.ts`、`src/http/app.ts`、`src/index.ts`、`scripts/marketProbe.ts` | `test/marketXlayer.test.ts` 8 例；LIVE 探针 2026-09-21 12:10Z：AAPLx 335.86（10k 档 52 bps）、NVDAx 224.47（10k 档 21 bps），2.35 s |
+
+## 真实链路测试与卖出方向修复（2026-09-22）
+
+| 项 | 位置 | 证据 |
+|---|---|---|
+| 卖出授权计划的链上方向修正（卖出时 `mandate.inputToken` = 股票代币、输出集 = `[资金币种]`，只允许一条腿）+ 3 条单测 | `apps/verify-service/src/mandates/service.ts`、`test/mandates.test.ts` | 主网 `executeStep` tx `0xee9dce5e…`（received 2.996952 USDG、refunded 1e6 wei） |
+| `mainnet:execute` 支持卖出方向（`SIDE=sell`、`INPUT_ASSET`/`OUTPUT_ASSET`、`AMOUNT_RAW=all`），并修正授权的代币 | `apps/verify-service/scripts/mainnetExecute.ts` | 同上 |
+| 真实链路测试装备（puppeteer-core + 注入式 Wallet Standard / EIP-6963 钱包，签名在 Node 端，证据自动打码） | `qa/real-path/` | W / VW / VJ / VP 系列证据 |
+| 链上对抗 12 组全部 revert（含主网 3 笔真实广播）、分叉不变量 4 项 | `packages/verify-contracts`、脚本 `fork:execute` / `fork:mandate` | `test-results.md` 真实链路一节 |

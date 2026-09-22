@@ -13,6 +13,7 @@ import { Card, Pill, Row } from "@/components/ui";
 import { connect, fmtUnits } from "@/lib/wallet";
 import { MandateBuilder } from "@/components/MandateBuilder";
 import { addressProblem, blockingSummary, fmtLocal, isAddress, nextStepText, tzLabel } from "@/lib/format";
+import { useMounted } from "@/lib/useMounted";
 import { apiError } from "@/lib/errors";
 import { remember } from "@/lib/history";
 
@@ -40,7 +41,12 @@ export function PlanClient() {
   const [slippage, setSlippage] = useState(50);
   const [impact, setImpact] = useState(100);
   const [deviation, setDeviation] = useState(300);
-  const [deadline, setDeadline] = useState(() => new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 16));
+  // 水合安全：服务端不渲染任何依赖当前时刻/时区的值，挂载后再填
+  const mounted = useMounted();
+  const [deadline, setDeadline] = useState("");
+  useEffect(() => {
+    if (!deadline) setDeadline(new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 16));
+  }, [deadline]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [plan, setPlan] = useState<PlanView | null>(null);
@@ -239,7 +245,7 @@ export function PlanClient() {
               <label><span className="text-xs text-fg-2">{t("f_impact")}</span><input className="field mono mt-1" type="number" value={impact} onChange={(e) => setImpact(Number(e.target.value))} /></label>
               <label><span className="text-xs text-fg-2">{t("f_dev")}</span><input className="field mono mt-1" type="number" value={deviation} disabled={policy === "QUOTE_ONLY"} onChange={(e) => setDeviation(Number(e.target.value))} /></label>
             </div>
-            <label className="block"><span className="text-fg-2">{t("plan_deadline")} · {t("tz_note")} {tzLabel()}</span><input className="field mono mt-1" type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} /><span className="mono text-xs text-fg-3">{fmtLocal(new Date(deadline), locale)}</span></label>
+            <label className="block"><span className="text-fg-2">{t("plan_deadline")}{mounted ? ` · ${t("tz_note")} ${tzLabel()}` : ""}</span><input className="field mono mt-1" type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} /><span className="mono text-xs text-fg-3">{mounted && deadline ? fmtLocal(new Date(deadline), locale) : ""}</span></label>
           </div>
         </Card>
       </div>
