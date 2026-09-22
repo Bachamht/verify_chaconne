@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* 零空窗发版：旁路构建目录不参与 Tailwind 扫描（同主站 FIX-150） */
+@source not "../.next-build";
+@source not "../.next-prev";
 
 /* ══════════════════════════════════════════════════════════════════════
  * 设计 token 层（UI 设计评审 2026-09-22 §五；与主站 apps/web/app/globals.css 同一份值，UI-06 第一步）
