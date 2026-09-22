@@ -352,6 +352,13 @@ export function createApp(d: AppDeps) {
   app.post(A2MCP_PATH, wrap(a2mcp));
   app.get(A2MCP_PATH, wrap(a2mcp));
 
+  // OPTIONS 此前落到下面的 404。对外协议路径上任何非 2xx 都可能被判「端点不可达」，
+  // 而 OPTIONS 本来就该回 204 + Allow，不该算错误。
+  app.options(/^\/a2mcp\//, (_req, res) => {
+    res.setHeader("Allow", "GET, POST, OPTIONS");
+    res.status(204).end();
+  });
+
   app.use((_req, res) => {
     res.status(404).json({ error: "not_found" });
   });
@@ -370,18 +377,28 @@ export function createApp(d: AppDeps) {
       res.status(err.status).json({ error: err.code, message: err.message, details: err.details ?? undefined });
       return;
     }
-    if (err && typeof err === "object" && "type" in err && (err as { type?: string }).type === "entity.parse.failed") {
+    // body-parser 抛出的全部读体错误都是「客户端把请求发坏了」，统一按 4xx 处理。
+    // 判定只看 `status`/`statusCode`，不看 `type`：解压失败抛的是 zlib 原生错误
+    // （`{ code: "Z_DATA_ERROR", status: 400 }`，**没有 type**），此前只认 `type === "entity.parse.failed"`，
+    // 于是「声明 content-encoding: gzip 却发明文」落到兜底分支回了 500（线上实测）。
+    const bodyErr = err as { type?: string; code?: string; status?: number; statusCode?: number } | null;
+    const bodyErrStatus = bodyErr && typeof bodyErr === "object" ? (bodyErr.status ?? bodyErr.statusCode) : undefined;
+    if (typeof bodyErrStatus === "number" && bodyErrStatus >= 400 && bodyErrStatus < 500) {
+      const parseFailed = bodyErr?.type === "entity.parse.failed";
+      const code = parseFailed ? "invalid_json" : (bodyErr?.type?.replace(/\./g, "_") ?? bodyErr?.code ?? "bad_request");
       if (isA2mcp) {
         res.status(200).json({
           ok: false,
           status: "input_required",
-          error: "invalid_json",
-          message: "The request body is not valid JSON. Send a JSON object with content-type: application/json, or pass the same fields as a GET query string.",
+          error: code,
+          message: parseFailed
+            ? "The request body is not valid JSON. Send a JSON object with content-type: application/json, or pass the same fields as a GET query string."
+            : "The request body could not be read. Send a small JSON object with content-type: application/json and no content-encoding, or pass the same fields as a GET query string.",
           example: { ownerAddress: "0x1111111111111111111111111111111111111111", outputAssetKey: "AAPLx", amount: "100" },
         });
         return;
       }
-      res.status(400).json({ error: "invalid_json" });
+      res.status(bodyErrStatus).json({ error: code });
       return;
     }
     log.error("未处理错误", { error: err instanceof Error ? err.message : String(err) });

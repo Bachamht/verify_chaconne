@@ -64,6 +64,37 @@ describe("POST /a2mcp/verify", () => {
     expect(j.example).toBeTruthy();
   });
 
+  it("声明 content-encoding: gzip 却发明文 → 200 input_required（此前落到兜底分支回 500）", async () => {
+    env = await createTestEnv();
+    const res = await fetch(env.url + "/a2mcp/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-encoding": "gzip" },
+      body: "not-gzip",
+    });
+    expect(res.status).toBe(200);
+    const j = (await res.json()) as Record<string, unknown>;
+    expect(j.status).toBe("input_required");
+    expect(j.example).toBeTruthy();
+  });
+
+  it("body 超过 64kb → 200 input_required（entity.too.large 也是输入侧错误）", async () => {
+    env = await createTestEnv();
+    const res = await fetch(env.url + "/a2mcp/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ownerAddress: "a".repeat(80_000) }),
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as Record<string, unknown>).status).toBe("input_required");
+  });
+
+  it("OPTIONS /a2mcp/verify → 204 + Allow（此前 404）", async () => {
+    env = await createTestEnv();
+    const res = await fetch(env.url + "/a2mcp/verify", { method: "OPTIONS" });
+    expect(res.status).toBe(204);
+    expect(res.headers.get("allow")).toContain("POST");
+  });
+
   it("非 a2mcp 路径的非法 JSON 仍回 400（标准 HTTP 语义只对外放宽，不动 v1 API）", async () => {
     env = await createTestEnv();
     const res = await fetch(env.url + "/v1/jobs", {
