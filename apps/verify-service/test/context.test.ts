@@ -139,6 +139,22 @@ describe("X-04 / X-05 / X-06 响应裁剪与过滤", () => {
     const display = await api(env, "GET", "/v1/context?tier=display");
     expect(contextPathGet(display.json, "risk.vix")).toMatchObject({ value: "17.85" });
   });
+
+  it("X-04b 通配 key（web:*）不带 x-verify-caller → 按匿名放行、只给 agent 档，而不是 400 missing_caller；带 caller → display 档照常", async () => {
+    // 2026-09-23 v6 上线实测：verify-web 代理对所有请求都带 web:* key，未连钱包访客没有 caller，
+    // 原 optionalAuth 会 400 → /agent 首页上下文卡对每个未连钱包访客显示「尚未就绪 (HTTP 400)」
+    const kp = testKeypair();
+    env = await createTestEnv({ crowsnestPubkey: `${kp.publicKeyId}=${kp.publicKeyHex}`, extraKeys: "vk_test_web:web:*" });
+    await env.crowsnest.ingest(signedContext(kp, { at: AT, events }), { endpoint: "test", mode: "LIVE" });
+    const noCaller = await api(env, "GET", "/v1/context?tier=display", undefined, {}, "vk_test_web");
+    expect(noCaller.status).toBe(200);
+    expect((noCaller.json["meta"] as { tier: string }).tier).toBe("agent");
+    expect(contextPathGet(noCaller.json, "risk.vix")).toMatchObject({ value: null, status: "unavailable", note: "not_in_tier" });
+    const withCaller = await api(env, "GET", "/v1/context?tier=display", undefined, { "x-verify-caller": "0xbaCB138e0e9E1444Bae9b401C4615378C57c0381" }, "vk_test_web");
+    expect(withCaller.status).toBe(200);
+    expect((withCaller.json["meta"] as { tier: string }).tier).toBe("display");
+    expect(contextPathGet(withCaller.json, "risk.vix")).toMatchObject({ value: "17.85" });
+  });
   it("X-05 assetKey 过滤：只回宏观 + 该标的的公司事件；taskId 过滤：只回条件引用的事件类型与字段", async () => {
     const kp = testKeypair();
     env = await createTestEnv({ crowsnestPubkey: `${kp.publicKeyId}=${kp.publicKeyHex}` });

@@ -37,7 +37,9 @@ export function AgentShell({ children }: { children: ReactNode }) {
 /** 端点未部署 / 服务不可达：明确空态，不放假数据 */
 export function NotReady({ what, status, compact = true }: { what?: string; status?: number; compact?: boolean }) {
   const { t } = useI18n();
-  return <EmptyState compact={compact} icon={<PlugZap size={26} strokeWidth={1.5} />} title={what ? `${t("ag_not_ready_h")} · ${what}` : t("ag_not_ready_h")} description={<>{t("ag_not_ready_p")}{status ? <span className="mono"> (HTTP {status})</span> : null}</>} />;
+  // 文案按状态码分：只有 404/501/502/503 才是「端点未部署 / 不可达」；4xx 是请求被拒（鉴权、参数），5xx 是服务端出错——写成「未部署」会误导排查（服务器 2026-09-23 反馈）
+  const kind = !status || status === 404 || status === 501 || status === 502 || status === 503 ? "ag_not_ready_p" : status >= 500 ? "ag_not_ready_5xx" : "ag_not_ready_4xx";
+  return <EmptyState compact={compact} icon={<PlugZap size={26} strokeWidth={1.5} />} title={what ? `${t("ag_not_ready_h")} · ${what}` : t("ag_not_ready_h")} description={<>{t(kind)}{status ? <span className="mono"> (HTTP {status})</span> : null}</>} />;
 }
 
 export type Mode = "SIMULATION" | "REPLAY" | "LIVE" | "FIXTURE" | "sample" | "backfill" | "live" | "unknown";

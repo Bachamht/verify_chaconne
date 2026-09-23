@@ -396,9 +396,14 @@ export function createApp(d: AppDeps) {
   /* ================================================================== */
   {
     /** 免费档（D-085）：无 key 只给 agent 档；带合法 key 可指定档位（internal/display 只给受信调用方） */
+    const wildcardKeys = new Set(d.cfg.apiKeys.filter((e) => e.callerId.endsWith("*")).map((e) => e.key));
     const optionalAuth = (req: Request, res: Response, next: NextFunction) => {
-      const hasKey = !!(req.header("x-api-key") || req.header("authorization"));
-      if (hasKey) {
+      const rawKey = (req.header("x-api-key") || req.header("authorization")?.replace(/^Bearer\s+/i, "") || "").trim();
+      // v6 上线实测（2026-09-23）：verify-web 代理对所有请求都带 web:* 通配 key，未连钱包的访客没有
+      // x-verify-caller，走 auth 会被 400 missing_caller —— /agent 首页的上下文卡对每个未连钱包访客都显示
+      // 「尚未就绪 (HTTP 400)」。免费档本就允许匿名，这种情况按匿名处理（只给 agent 档），不该拒。
+      const wildcardWithoutCaller = rawKey && wildcardKeys.has(rawKey) && !/^0x[0-9a-f]{40}$/.test((req.header("x-verify-caller") ?? "").trim().toLowerCase());
+      if (rawKey && !wildcardWithoutCaller) {
         auth(req, res, next);
         return;
       }

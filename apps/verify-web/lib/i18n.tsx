@@ -278,6 +278,8 @@ const DICT = {
   nav_agent_lab: { en: "Lab", zh: "实验" },
   nav_agent_journal: { en: "Night journal", zh: "夜班日志" },
   ag_not_ready_h: { en: "This capability is not ready yet", zh: "该能力尚未就绪" },
+  ag_not_ready_4xx: { en: "The service rejected this request (authentication or parameters). Nothing is shown in its place: no sample data, no replay dressed up as live.", zh: "服务端拒绝了这次请求（鉴权或参数）。这里不放替代内容：没有示例数据，也不用回放冒充实时。" },
+  ag_not_ready_5xx: { en: "The service hit an error on this request. Nothing is shown in its place: no sample data, no replay dressed up as live.", zh: "服务端处理这次请求时出错。这里不放替代内容：没有示例数据，也不用回放冒充实时。" },
   ag_not_ready_p: { en: "The service endpoint for this section is not deployed on this server yet. Nothing is shown in its place: no sample data, no replay dressed up as live.", zh: "这一块对应的服务端点尚未部署到这台服务器。这里不放替代内容：没有示例数据，也不用回放冒充实时。" },
   ag_loading: { en: "Loading…", zh: "加载中…" },
   ag_connect_last: { en: "Connect wallet (last step)", zh: "连接钱包（最后一步）" },
