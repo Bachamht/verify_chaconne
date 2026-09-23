@@ -132,15 +132,21 @@
     "source": "docs/the address-approval log (internal) #7-#9b"
   },
   "registry": {
-    "file": "apps/verify-service/config/registry.xlayer.json",
-    "version": "xlayer-registry/1.0.0",
-    "hash": "0xb6d23cf356b27cf528529efc5af256f27c61d62d98fa91f55d9e32955a1d9fb6",
-    "v1_1": {
-      "file": "apps/verify-service/config/registry.xlayer.v1.1.json",
+    "current": "xlayer-registry/1.2.0",
+    "hash": "0x38a3249b8cac35cdfd6c7e80a2ee96c6a3461ad006b5087d73e29d21f21fe5f1",
+    "file": "apps/verify-service/config/registry.xlayer.v1.2.json",
+    "executableStocks": 40,
+    "notExecutable": [
+      "NKEx（买入可路由、卖出返回 82000，不放行）"
+    ],
+    "previous": {
       "version": "xlayer-registry/1.1.0",
       "hash": "0x8ea0c841891c81598b5eb7c55e4965d40ebc5ee5943bc0a3844289d1fbcc799a",
-      "change": "executionSides on stock entries (sell allowed for AAPLx/NVDAx)"
-    }
+      "stillEnabledOnChain": true
+    },
+    "promotedAt": "2026-09-23T03:10:00.000Z",
+    "promotionNote": "两个合约的 registryEnabled/tokenEnabled 都是 mapping，采取只增不减：新指纹启用后 1.1.0 仍有效，现有执行链路零中断。共 78 笔交易，gas 合计 0.0000745 OKB。",
+    "gates": "链上 symbol/decimals 一致 39/39；OKX 聚合器双向可路由 38/39；Finnhub 美股参考价 39/39。三条全过才放行。"
   },
   "forkEvidence": {
     "mode": "FORK",

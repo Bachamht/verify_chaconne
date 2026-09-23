@@ -1,0 +1,2092 @@
+{
+  "version": "xlayer-registry/1.2.0",
+  "chainId": 196,
+  "entries": [
+    {
+      "assetKey": "eip155:196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+      "chainId": 196,
+      "tokenAddress": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+      "tokenDecimals": 6,
+      "issuerId": "paxos",
+      "displaySymbol": "USDG",
+      "underlyingId": "fiat:USD",
+      "tokenForm": "plain",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stable_input",
+      "sharesPerToken": null,
+      "unitSource": null,
+      "usdPegSource": "okx_quote_from_token_unit_price+paxos_usdg",
+      "provenance": [
+        {
+          "source": "OKX Payments supported-networks doc (USDG on X Layer)",
+          "url": "https://web3.okx.com/onchainos/dev-docs/payments/supported-networks",
+          "verifiedAt": "2026-09-20T11:40:00.000Z"
+        },
+        {
+          "source": "X Layer RPC eth_call: symbol=USDG, name=Global Dollar, decimals=6 (EIP-1967 proxy)",
+          "verifiedAt": "2026-09-20T11:31:00.000Z"
+        },
+        {
+          "source": "OKX DEX quote accepted as fromToken with USD unit price",
+          "verifiedAt": "2026-09-20T11:31:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "chainId": 196,
+      "tokenAddress": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenDecimals": 6,
+      "issuerId": "circle",
+      "displaySymbol": "USDC",
+      "underlyingId": "fiat:USD",
+      "tokenForm": "plain",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stable_input",
+      "sharesPerToken": null,
+      "unitSource": null,
+      "usdPegSource": "okx_quote_from_token_unit_price+circle_usdc",
+      "provenance": [
+        {
+          "source": "OKX Payments supported-networks doc (USDC on X Layer)",
+          "url": "https://web3.okx.com/onchainos/dev-docs/payments/supported-networks",
+          "verifiedAt": "2026-09-20T11:40:00.000Z"
+        },
+        {
+          "source": "X Layer RPC eth_call: symbol=USDC, name=USDC, decimals=6",
+          "verifiedAt": "2026-09-20T11:31:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x779ded0c9e1022225f8e0630b35a9b54be713736",
+      "chainId": 196,
+      "tokenAddress": "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+      "tokenDecimals": 6,
+      "issuerId": "tether-usdt0",
+      "displaySymbol": "USD₮0",
+      "underlyingId": "fiat:USD",
+      "tokenForm": "plain",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stable_input",
+      "sharesPerToken": null,
+      "unitSource": null,
+      "usdPegSource": "okx_quote_from_token_unit_price+x402_default_asset",
+      "provenance": [
+        {
+          "source": "OKX Payments supported-networks doc (USD₮0 on X Layer)",
+          "url": "https://web3.okx.com/onchainos/dev-docs/payments/supported-networks",
+          "verifiedAt": "2026-09-20T11:40:00.000Z"
+        },
+        {
+          "source": "@okxweb3/x402-evm 0.2.1 DEFAULT_STABLECOINS eip155:196",
+          "verifiedAt": "2026-09-20T10:20:00.000Z"
+        },
+        {
+          "source": "X Layer RPC eth_call: symbol=USD₮0, decimals=6",
+          "verifiedAt": "2026-09-20T11:31:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "chainId": 196,
+      "tokenAddress": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "AAPLx",
+      "underlyingId": "us-equity:AAPL",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks docs: EVM xStocks are rebasing ERC-20; balanceOf() returns the equity-adjusted balance, so 1 transferable unit = 1 share of economic exposure at the current multiplier (OKX RWA tokenToAssetRatio 1.003269 on 2026-09-20 is the cumulative multiplier, already reflected in balances). Corporate-action re-check required before each execution.",
+        "verifiedAt": "2026-09-20T11:45:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA token list API (issuer=36 xStocks, chainIndex=196): tokenSymbol AAPLx, stockCode AAPL",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-20T11:31:36.000Z"
+        },
+        {
+          "source": "OKX token page X Layer AAPLx",
+          "url": "https://web3.okx.com/token/x-layer/0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+          "verifiedAt": "2026-09-20T11:45:00.000Z"
+        },
+        {
+          "source": "X Layer RPC eth_call: symbol=AAPLx, name=Apple xStock, decimals=18; EIP-1967 proxy impl 0x65c40d624af3b18c109fbf87b7deff34cdc5f19b",
+          "verifiedAt": "2026-09-20T11:45:00.000Z"
+        },
+        {
+          "source": "OKLink verified source (chainShortName=xlayer): BackedTokenProxy → BackedAutoFeeTokenImplementation 0x65c40d624af3b18c109fbf87b7deff34cdc5f19b, getCurrentMultiplier() 1e18; on-chain value read 2026-09-21 matches OKX RWA tokenToAssetRatio (6dp)",
+          "url": "https://www.oklink.com/api/v5/explorer/contract/verify-contract-info?chainShortName=xlayer&contractAddress=0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+          "verifiedAt": "2026-09-21T08:40:00.000Z"
+        },
+        {
+          "source": "xStocks public API GET /api/v1/token?limit=… lists XLayer deployment address for this symbol (network enum 'XLayer')",
+          "url": "https://api.xstocks.fi/api/v1/token",
+          "verifiedAt": "2026-09-21T08:35:00.000Z"
+        },
+        {
+          "source": "OKX DEX sell-direction swap probe (stock→USDG, receiver=Guard, selector 0x0c307f76 dagSwapTo) decoded and checked",
+          "verifiedAt": "2026-09-20T22:17:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "chainId": 196,
+      "tokenAddress": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "NVDAx",
+      "underlyingId": "us-equity:NVDA",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "Same rebasing semantics as AAPLx (xStocks EVM); OKX tokenToAssetRatio 1.001701 on 2026-09-20.",
+        "verifiedAt": "2026-09-20T11:45:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA token list API (issuer=36, chainIndex=196): NVDAx / NVDA",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-20T11:31:36.000Z"
+        },
+        {
+          "source": "X Layer RPC eth_call: symbol=NVDAx, name=NVIDIA xStock, decimals=18",
+          "verifiedAt": "2026-09-20T11:31:36.000Z"
+        },
+        {
+          "source": "OKLink verified source (chainShortName=xlayer): BackedTokenProxy → BackedAutoFeeTokenImplementation 0x65c40d624af3b18c109fbf87b7deff34cdc5f19b, getCurrentMultiplier() 1e18; on-chain value read 2026-09-21 matches OKX RWA tokenToAssetRatio (6dp)",
+          "url": "https://www.oklink.com/api/v5/explorer/contract/verify-contract-info?chainShortName=xlayer&contractAddress=0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+          "verifiedAt": "2026-09-21T08:40:00.000Z"
+        },
+        {
+          "source": "xStocks public API GET /api/v1/token?limit=… lists XLayer deployment address for this symbol (network enum 'XLayer')",
+          "url": "https://api.xstocks.fi/api/v1/token",
+          "verifiedAt": "2026-09-21T08:35:00.000Z"
+        },
+        {
+          "source": "OKX DEX sell-direction swap probe (stock→USDG, receiver=Guard, selector 0x0c307f76 dagSwapTo) decoded and checked",
+          "verifiedAt": "2026-09-20T22:17:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48",
+      "chainId": 196,
+      "tokenAddress": "0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "SPYx",
+      "underlyingId": "us-equity:SPY",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "Same rebasing semantics as AAPLx (xStocks EVM); OKX tokenToAssetRatio 1.005714 on 2026-09-20. decimals 已于 2026-09-23 链上确认为 18，双向报价实测可路由，放行执行。",
+        "verifiedAt": "2026-09-20T11:45:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA token list API (issuer=36, chainIndex=196): SPYx / SPY",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-20T11:31:36.000Z"
+        },
+        {
+          "source": "OKLink verified source (chainShortName=xlayer): BackedTokenProxy → BackedAutoFeeTokenImplementation 0x65c40d624af3b18c109fbf87b7deff34cdc5f19b, getCurrentMultiplier() 1e18; on-chain value read 2026-09-21 matches OKX RWA tokenToAssetRatio (6dp)",
+          "url": "https://www.oklink.com/api/v5/explorer/contract/verify-contract-info?chainShortName=xlayer&contractAddress=0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48",
+          "verifiedAt": "2026-09-21T08:40:00.000Z"
+        },
+        {
+          "source": "xStocks public API GET /api/v1/token?limit=… lists XLayer deployment address for this symbol (network enum 'XLayer')",
+          "url": "https://api.xstocks.fi/api/v1/token",
+          "verifiedAt": "2026-09-21T08:35:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=SPYx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（SPY），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x68fa48b1c2fe52b3d776e1953e0e782b5044ce28",
+      "chainId": 196,
+      "tokenAddress": "0x68fa48b1c2fe52b3d776e1953e0e782b5044ce28",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "SPCXx",
+      "underlyingId": "us-equity:SPCX",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：SPCXx / SPCX",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=SPCXx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（SPCX），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xfebded1b0986a8ee107f5ab1a1c5a813491deceb",
+      "chainId": 196,
+      "tokenAddress": "0xfebded1b0986a8ee107f5ab1a1c5a813491deceb",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "CRCLx",
+      "underlyingId": "us-equity:CRCL",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：CRCLx / CRCL",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=CRCLx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（CRCL），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xe1385fdd5ffb10081cd52c56584f25efa9084015",
+      "chainId": 196,
+      "tokenAddress": "0xe1385fdd5ffb10081cd52c56584f25efa9084015",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "HOODx",
+      "underlyingId": "us-equity:HOOD",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：HOODx / HOOD",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=HOODx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（HOOD），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xe5f6d3b2405abdfe6f660e63202b25d23763160d",
+      "chainId": 196,
+      "tokenAddress": "0xe5f6d3b2405abdfe6f660e63202b25d23763160d",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "GMEx",
+      "underlyingId": "us-equity:GME",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：GMEx / GME",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=GMEx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（GME），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x364f210f430ec2448fc68a49203040f6124096f0",
+      "chainId": 196,
+      "tokenAddress": "0x364f210f430ec2448fc68a49203040f6124096f0",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "COINx",
+      "underlyingId": "us-equity:COIN",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：COINx / COIN",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=COINx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（COIN），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xae2f842ef90c0d5213259ab82639d5bbf649b08e",
+      "chainId": 196,
+      "tokenAddress": "0xae2f842ef90c0d5213259ab82639d5bbf649b08e",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "MSTRx",
+      "underlyingId": "us-equity:MSTR",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：MSTRx / MSTR",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=MSTRx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（MSTR），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xb63efbc28860c8097e341de1fcf59456161e9d98",
+      "chainId": 196,
+      "tokenAddress": "0xb63efbc28860c8097e341de1fcf59456161e9d98",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "SNDKx",
+      "underlyingId": "us-equity:SNDK",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：SNDKx / SNDK",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=SNDKx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（SNDK），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xf8a80d1cb9cfd70d03d655d9df42339846f3b3c8",
+      "chainId": 196,
+      "tokenAddress": "0xf8a80d1cb9cfd70d03d655d9df42339846f3b3c8",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "INTCx",
+      "underlyingId": "us-equity:INTC",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：INTCx / INTC",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=INTCx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（INTC），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xaeb681b69e5094e04d11bcef51a71358a374c3ed",
+      "chainId": 196,
+      "tokenAddress": "0xaeb681b69e5094e04d11bcef51a71358a374c3ed",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "BMNRx",
+      "underlyingId": "us-equity:BMNR",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：BMNRx / BMNR",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=BMNRx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（BMNR），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xa753a7395cae905cd615da0b82a53e0560f250af",
+      "chainId": 196,
+      "tokenAddress": "0xa753a7395cae905cd615da0b82a53e0560f250af",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "QQQx",
+      "underlyingId": "us-equity:QQQ",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：QQQx / QQQ",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=QQQx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（QQQ），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xeaad46f4146ded5a47b55aa7f6c48c191deaec88",
+      "chainId": 196,
+      "tokenAddress": "0xeaad46f4146ded5a47b55aa7f6c48c191deaec88",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "MRVLx",
+      "underlyingId": "us-equity:MRVL",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：MRVLx / MRVL",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=MRVLx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（MRVL），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "chainId": 196,
+      "tokenAddress": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "TSLAx",
+      "underlyingId": "us-equity:TSLA",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：TSLAx / TSLA",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=TSLAx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（TSLA），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x2782df1cc877f720c81b4f6568db64563f1d3aa3",
+      "chainId": 196,
+      "tokenAddress": "0x2782df1cc877f720c81b4f6568db64563f1d3aa3",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "DELLx",
+      "underlyingId": "us-equity:DELL",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：DELLx / DELL",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=DELLx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（DELL），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xf6a873bae4ba1b304e45df52a4b7d176e1c6a8c4",
+      "chainId": 196,
+      "tokenAddress": "0xf6a873bae4ba1b304e45df52a4b7d176e1c6a8c4",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "MUx",
+      "underlyingId": "us-equity:MU",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：MUx / MU",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=MUx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（MU），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xe92f673ca36c5e2efd2de7628f815f84807e803f",
+      "chainId": 196,
+      "tokenAddress": "0xe92f673ca36c5e2efd2de7628f815f84807e803f",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "GOOGLx",
+      "underlyingId": "us-equity:GOOGL",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：GOOGLx / GOOGL",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=GOOGLx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（GOOGL），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x548308e91ec9f285c7bff05295badbd56a6e4971",
+      "chainId": 196,
+      "tokenAddress": "0x548308e91ec9f285c7bff05295badbd56a6e4971",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "ORCLx",
+      "underlyingId": "us-equity:ORCL",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：ORCLx / ORCL",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=ORCLx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（ORCL），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x3522513e5f146a2006e2901b05f16b2821485e19",
+      "chainId": 196,
+      "tokenAddress": "0x3522513e5f146a2006e2901b05f16b2821485e19",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "AMDx",
+      "underlyingId": "us-equity:AMD",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：AMDx / AMD",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=AMDx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（AMD），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x3557ba345b01efa20a1bddc61f573bfd87195081",
+      "chainId": 196,
+      "tokenAddress": "0x3557ba345b01efa20a1bddc61f573bfd87195081",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "AMZNx",
+      "underlyingId": "us-equity:AMZN",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：AMZNx / AMZN",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=AMZNx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（AMZN），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x38bac69cbbd28156796e4163b2b6dcb81e336565",
+      "chainId": 196,
+      "tokenAddress": "0x38bac69cbbd28156796e4163b2b6dcb81e336565",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "AVGOx",
+      "underlyingId": "us-equity:AVGO",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：AVGOx / AVGO",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=AVGOx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（AVGO），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x4833e7f4f0460f4b72a3a5879a6c9841bcc5b58b",
+      "chainId": 196,
+      "tokenAddress": "0x4833e7f4f0460f4b72a3a5879a6c9841bcc5b58b",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "SLVx",
+      "underlyingId": "us-equity:SLV",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：SLVx / SLV",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=SLVx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（SLV），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xc0b417e7f83db438631eb5e096684dd742e5294f",
+      "chainId": 196,
+      "tokenAddress": "0xc0b417e7f83db438631eb5e096684dd742e5294f",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "ASMLx",
+      "underlyingId": "us-equity:ASML",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：ASMLx / ASML",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=ASMLx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（ASML），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x5621737f42dae558b81269fcb9e9e70c19aa6b35",
+      "chainId": 196,
+      "tokenAddress": "0x5621737f42dae558b81269fcb9e9e70c19aa6b35",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "MSFTx",
+      "underlyingId": "us-equity:MSFT",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：MSFTx / MSFT",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=MSFTx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（MSFT），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x96702be57cd9777f835117a809c7124fe4ec989a",
+      "chainId": 196,
+      "tokenAddress": "0x96702be57cd9777f835117a809c7124fe4ec989a",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "METAx",
+      "underlyingId": "us-equity:META",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：METAx / META",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=METAx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（META），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x6d482cec5f9dd1f05ccee9fd3ff79b246170f8e2",
+      "chainId": 196,
+      "tokenAddress": "0x6d482cec5f9dd1f05ccee9fd3ff79b246170f8e2",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "PLTRx",
+      "underlyingId": "us-equity:PLTR",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：PLTRx / PLTR",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=PLTRx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（PLTR），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x80a77a372c1e12accda84299492f404902e2da67",
+      "chainId": 196,
+      "tokenAddress": "0x80a77a372c1e12accda84299492f404902e2da67",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "MCDx",
+      "underlyingId": "us-equity:MCD",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：MCDx / MCD",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=MCDx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（MCD），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x9e3bf4ecfc44eedd624f26656b6736a3f093b073",
+      "chainId": 196,
+      "tokenAddress": "0x9e3bf4ecfc44eedd624f26656b6736a3f093b073",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "TSMx",
+      "underlyingId": "us-equity:TSM",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：TSMx / TSM",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=TSMx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（TSM），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x12992613fdd35abe95dec5a4964331b1ee23b50d",
+      "chainId": 196,
+      "tokenAddress": "0x12992613fdd35abe95dec5a4964331b1ee23b50d",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "BRK.Bx",
+      "underlyingId": "us-equity:BRK.B",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：BRK.Bx / BRK.B",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=BRK.Bx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（BRK.B），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xdcc1a2699441079da889b1f49e12b69cc791129b",
+      "chainId": 196,
+      "tokenAddress": "0xdcc1a2699441079da889b1f49e12b69cc791129b",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "KOx",
+      "underlyingId": "us-equity:KO",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：KOx / KO",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=KOx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（KO），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xdadfb355c6110eda0908740d52c834d6c2bcddc7",
+      "chainId": 196,
+      "tokenAddress": "0xdadfb355c6110eda0908740d52c834d6c2bcddc7",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "IWMx",
+      "underlyingId": "us-equity:IWM",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：IWMx / IWM",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=IWMx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（IWM），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xd9913208647671fe0f48f7f260076b2c6f310aac",
+      "chainId": 196,
+      "tokenAddress": "0xd9913208647671fe0f48f7f260076b2c6f310aac",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "IBMx",
+      "underlyingId": "us-equity:IBM",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：IBMx / IBM",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=IBMx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（IBM），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x17d8186ed8f68059124190d147174d0f6697dc40",
+      "chainId": 196,
+      "tokenAddress": "0x17d8186ed8f68059124190d147174d0f6697dc40",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "MRKx",
+      "underlyingId": "us-equity:MRK",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：MRKx / MRK",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=MRKx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（MRK），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x39c31fc6038490ea4bf8a21ca18cd18f33b8d3fb",
+      "chainId": 196,
+      "tokenAddress": "0x39c31fc6038490ea4bf8a21ca18cd18f33b8d3fb",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "SMCIx",
+      "underlyingId": "us-equity:SMCI",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：SMCIx / SMCI",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=SMCIx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（SMCI），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x7aefc9965699fbea943e03264d96e50cd4a97b21",
+      "chainId": 196,
+      "tokenAddress": "0x7aefc9965699fbea943e03264d96e50cd4a97b21",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "WMTx",
+      "underlyingId": "us-equity:WMT",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：WMTx / WMT",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=WMTx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（WMT），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x58100046a4afcd4ee4fadbd4244f3f895a341c56",
+      "chainId": 196,
+      "tokenAddress": "0x58100046a4afcd4ee4fadbd4244f3f895a341c56",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "SKHYx",
+      "underlyingId": "us-equity:SKHY",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：SKHYx / SKHY",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=SKHYx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（SKHY），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xde916b8089cbd5e52551bd933c3ea2ea5c903465",
+      "chainId": 196,
+      "tokenAddress": "0xde916b8089cbd5e52551bd933c3ea2ea5c903465",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "ICEx",
+      "underlyingId": "us-equity:ICE",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：ICEx / ICE",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=ICEx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（ICE），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xefd30445a4ec1f4b3e0a6f4d9bdbd215f805047f",
+      "chainId": 196,
+      "tokenAddress": "0xefd30445a4ec1f4b3e0a6f4d9bdbd215f805047f",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "MRNAx",
+      "underlyingId": "us-equity:MRNA",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：MRNAx / MRNA",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=MRNAx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（MRNA），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x7c5e9e93ea0f8fe94ea94eb6283f200ba0b72be0",
+      "chainId": 196,
+      "tokenAddress": "0x7c5e9e93ea0f8fe94ea94eb6283f200ba0b72be0",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "NKEx",
+      "underlyingId": "us-equity:NKE",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：NKEx / NKE",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=NKEx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（NKE），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入可路由，**卖出返回 82000（X Layer 上无池）**。买得进卖不出，因此不放行执行；待卖出侧有池后再提升。",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": false
+    },
+    {
+      "assetKey": "eip155:196:0x52ce422d81e62a2c4bb87653d66f2235c73b152e",
+      "chainId": 196,
+      "tokenAddress": "0x52ce422d81e62a2c4bb87653d66f2235c73b152e",
+      "tokenDecimals": 18,
+      "issuerId": "xstocks",
+      "displaySymbol": "RDDTx",
+      "underlyingId": "us-equity:RDDT",
+      "tokenForm": "rebasing",
+      "registryVersion": "xlayer-registry/1.2.0",
+      "role": "stock_output",
+      "sharesPerToken": "1",
+      "unitSource": {
+        "description": "xStocks EVM 版为 rebasing ERC-20：balanceOf() 返回已按股权调整的余额，1 个可转移单位 = 当前乘数下 1 股的经济敞口。每次执行前重新核对公司行动。",
+        "verifiedAt": "2026-09-23T02:55:00.000Z"
+      },
+      "usdPegSource": null,
+      "provenance": [
+        {
+          "source": "OKX RWA 名录 API（category=47, chainIndex=196）登记项：RDDTx / RDDT",
+          "url": "https://web3.okx.com/api/v6/dex/market/rwa/tokens",
+          "verifiedAt": "2026-09-22T00:00:00.000Z"
+        },
+        {
+          "source": "X Layer 节点 eth_call：symbol()=RDDTx、decimals()=18，与名录一致；sharesOf() 存在（份额记账/rebasing）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "OKX 聚合器双向报价实测：买入 100 USDG 档可路由；把买到的数量原路卖回亦可路由（提升进执行层的硬条件）",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        },
+        {
+          "source": "Finnhub 美股参考价可取（RDDT），参考价管线覆盖该底层",
+          "verifiedAt": "2026-09-23T02:55:00.000Z"
+        }
+      ],
+      "executionAllowed": true,
+      "executionSides": [
+        "buy",
+        "sell"
+      ]
+    }
+  ],
+  "notes": [
+    "v",
+    "1",
+    ".",
+    "1",
+    ".",
+    "0",
+    ":",
+    " ",
+    "a",
+    "d",
+    "d",
+    "i",
+    "t",
+    "i",
+    "v",
+    "e",
+    " ",
+    "f",
+    "i",
+    "e",
+    "l",
+    "d",
+    " ",
+    "e",
+    "x",
+    "e",
+    "c",
+    "u",
+    "t",
+    "i",
+    "o",
+    "n",
+    "S",
+    "i",
+    "d",
+    "e",
+    "s",
+    " ",
+    "(",
+    "s",
+    "t",
+    "o",
+    "c",
+    "k",
+    " ",
+    "e",
+    "n",
+    "t",
+    "r",
+    "i",
+    "e",
+    "s",
+    ":",
+    " ",
+    "s",
+    "e",
+    "l",
+    "l",
+    " ",
+    "a",
+    "l",
+    "l",
+    "o",
+    "w",
+    "e",
+    "d",
+    " ",
+    "=",
+    " ",
+    "s",
+    "t",
+    "o",
+    "c",
+    "k",
+    "→",
+    "s",
+    "t",
+    "a",
+    "b",
+    "l",
+    "e",
+    " ",
+    "v",
+    "i",
+    "a",
+    " ",
+    "P",
+    "l",
+    "a",
+    "n",
+    "G",
+    "u",
+    "a",
+    "r",
+    "d",
+    " ",
+    "v",
+    "2",
+    ")",
+    ".",
+    " ",
+    "H",
+    "a",
+    "s",
+    "h",
+    " ",
+    "d",
+    "i",
+    "f",
+    "f",
+    "e",
+    "r",
+    "s",
+    " ",
+    "f",
+    "r",
+    "o",
+    "m",
+    " ",
+    "v",
+    "1",
+    ".",
+    "0",
+    ".",
+    "0",
+    " ",
+    "o",
+    "n",
+    "l",
+    "y",
+    " ",
+    "b",
+    "y",
+    " ",
+    "v",
+    "e",
+    "r",
+    "s",
+    "i",
+    "o",
+    "n",
+    " ",
+    "s",
+    "t",
+    "r",
+    "i",
+    "n",
+    "g",
+    " ",
+    "(",
+    "r",
+    "e",
+    "g",
+    "i",
+    "s",
+    "t",
+    "r",
+    "y",
+    "H",
+    "a",
+    "s",
+    "h",
+    "(",
+    ")",
+    " ",
+    "i",
+    "g",
+    "n",
+    "o",
+    "r",
+    "e",
+    "s",
+    " ",
+    "e",
+    "x",
+    "e",
+    "c",
+    "u",
+    "t",
+    "i",
+    "o",
+    "n",
+    "S",
+    "i",
+    "d",
+    "e",
+    "s",
+    ")",
+    ".",
+    " ",
+    "v",
+    "1",
+    " ",
+    "G",
+    "u",
+    "a",
+    "r",
+    "d",
+    " ",
+    "k",
+    "e",
+    "e",
+    "p",
+    "s",
+    " ",
+    "r",
+    "e",
+    "g",
+    "i",
+    "s",
+    "t",
+    "r",
+    "y",
+    ".",
+    "x",
+    "l",
+    "a",
+    "y",
+    "e",
+    "r",
+    ".",
+    "j",
+    "s",
+    "o",
+    "n",
+    " ",
+    "(",
+    "1",
+    ".",
+    "0",
+    ".",
+    "0",
+    ")",
+    ".",
+    "1.2.0（2026-09-23）：展示层 39 只逐只体检后提升进执行层，新增 38 条，放行 40 只股票。",
+    "提升判据：链上 symbol/decimals 一致 + OKX 聚合器双向可路由 + Finnhub 有美股参考价，三条全过才放行。",
+    "NKEx 只过两条（卖出无池），留在表内但 executionAllowed=false，理由记在其 provenance 里。",
+    "全部股票代币都是 rebasing（份额记账）：每笔转账少 1 wei，v1 Guard 无容差故单笔任务的卖出必然 revert，卖出须走 PlanGuard 授权计划。此限制与 AAPLx/NVDAx 相同，不因本次扩容而改变。"
+  ]
+}
