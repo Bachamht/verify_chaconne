@@ -25,6 +25,41 @@ import { MandatesService } from "../src/mandates/service";
 import { ClubService } from "../src/club/service";
 import { resetRateLimits } from "../src/http/auth";
 import type { XLayerMarket } from "../src/market/xlayer";
+/* v6 Lane B */
+import { EventStore } from "../src/events/store";
+import { CrowsnestAdapter } from "../src/context/crowsnest";
+import { ContextService } from "../src/context/service";
+import { parseKeyring } from "../src/context/keys";
+import { ThesesService } from "../src/theses/service";
+import { TasksService } from "../src/tasks/service";
+import { loadPlaybooks } from "../src/tasks/playbooks";
+import type { BudgetCoordinator } from "../src/tasks/budget";
+import { FanoutTaskNotifier } from "../src/tasks/notify";
+import { executorPresenceFromNotify, holdingsForLaneD, laneBConditionEvaluator, LaneCBudgetAdapter, LaneCNotifierAdapter, taskCommandsForLaneD, taskReaderForLaneE, tasksReaderForLaneD, taskTimelineSink } from "../src/tasks/integrations";
+import { createLaneD } from "../src/events/earnings/wire";
+import { DbReplayArchive } from "../src/lab/archive";
+import type { LaneDHandles } from "../src/events/earnings/wire";
+/* v6 Lane C */
+import type { AssetRegistry } from "@chaconne/core/verify";
+import { DbBudgetCoordinator } from "../src/budget/coordinator";
+import { BudgetService } from "../src/budget/service";
+import { MemoryPortfolioReader } from "../src/portfolio/chain";
+import { PortfolioService, staticPriceSource, noPriceSource } from "../src/portfolio/service";
+import { NotifyService, type FetchLike, type TelegramSender, type TimelineSink } from "../src/notify/service";
+import { RebalanceService } from "../src/rebalance/service";
+import { withBudgetSettlement } from "../src/budget/receiptHook";
+import type { ReceiptStore } from "../src/execution/receipts";
+/* v6 Lane E */
+import { createReferenceEvaluator, type ConditionEvaluator, type ReplayArchive } from "@chaconne/core/verify";
+import { LabService } from "../src/lab/service";
+import { InMemoryReplayArchive, type ReplayArchiveReader } from "../src/lab/archive";
+import { InMemoryTaskReader } from "../src/lab/tasks";
+import { ensureLabTables } from "../src/lab/store";
+/* v6 Lane F */
+import { RecapsService } from "../src/recaps/service";
+import { dbRecapSources, type RecapSources } from "../src/recaps/sources";
+import { MemoryRecapStore } from "../src/recaps/store";
+import type { AgentTasksDeps } from "../src/http/a2mcpAgentTasks";
 
 export const TEST_API_KEY = "vk_test_alpha";
 export const TEST_CALLER = "caller-alpha";
@@ -62,6 +97,29 @@ export interface TestEnvOptions {
   withPlanGuard?: boolean;
   /** 公开行情（默认不接 → /pub/market/xlayer 503） */
   market?: XLayerMarket | null;
+  /* v6 Lane B：crowsnest 公钥（hex/base64，`id=key`）；缺省无公钥 → 一切摄入拒收 */
+  crowsnestPubkey?: string;
+  /** "production"：Lane D / E 的任务读取、求值器、回放档案按 index.ts 的方式接 Lane B（本地端到端启动器用）；默认用各 lane 自己的内存 fixture */
+  wire?: "production";
+  budget?: BudgetCoordinator;
+  /** v6 Lane D：个人事件台装配（默认不接 → /v1/event-impacts 404） */
+  laneD?: (ctx: { cfg: VerifyConfig; db: Db; registry: ReturnType<typeof loadRegistry> }) => LaneDHandles | null;
+  /* v6 Lane C */
+  /** 改登记表（如加第二只股票做多腿调仓） */
+  registry?: (reg: AssetRegistry) => AssetRegistry;
+  /** 组合估值价格（assetKey → USD 串）；缺省无价格来源 */
+  pricesUsd?: Record<string, string | null>;
+  /** webhook 投递用的 fetch（缺省记录请求并回 200） */
+  webhookFetch?: FetchLike;
+  /** Telegram 发送器（缺省 null = 未配置 → not_configured） */
+  telegram?: TelegramSender | null;
+  timeline?: TimelineSink;
+  /* v6 Lane E：回放档案（默认空档案）与求值器（默认参考实现） */
+  labArchive?: ReplayArchive | ReplayArchiveReader | ((db: Db) => ReplayArchiveReader);
+  labEvaluator?: ConditionEvaluator;
+  /* v6 Lane F：Lane B/D 钩子（默认不接 → coverage unavailable / 回放任务） */
+  recapHooks?: Pick<RecapSources, "tasksForOwner" | "eventsBetween">;
+  agentHooks?: Pick<AgentTasksDeps, "impacts" | "events">;
 }
 
 export interface TestEnv {
@@ -76,6 +134,28 @@ export interface TestEnv {
   mandates: MandatesService;
   club: ClubService;
   signer: ReturnType<typeof createAttestationSigner> | null;
+  /* v6 Lane B */
+  events: EventStore;
+  crowsnest: CrowsnestAdapter;
+  context: ContextService;
+  theses: ThesesService;
+  tasks: TasksService;
+  notifier: FanoutTaskNotifier;
+  laneD: LaneDHandles | null;
+  /* v6 Lane C */
+  budget: BudgetService;
+  portfolio: PortfolioService;
+  rebalance: RebalanceService;
+  notify: NotifyService;
+  reader: MemoryPortfolioReader;
+  /** 步骤回执 → 资金组结算（verifyReceiptsOnce 用它代替 mandates） */
+  stepReceipts: ReceiptStore;
+  /** 缺省 webhookFetch 记录到这里 */
+  webhookCalls: Array<{ url: string; headers: Record<string, string>; body: string }>;
+  /* v6 Lane E */
+  lab: LabService;
+  labTasks: InMemoryTaskReader;
+  recaps: RecapsService;
   setNow(iso: string): void;
   /** 切换 fixture 证据场景（模拟时段变化） */
   setScenario(s: NonNullable<FixtureProviderOptions["scenario"]>): void;
@@ -109,7 +189,7 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
   });
   // 测试里“fixture 证据 + 收费”是被 O-01 护栏禁止的组合；这里通过 mock 支付模式绕开的是支付网络，不是证据真实性
   const { db, close } = await testDb();
-  const registry = loadRegistry(cfg);
+  const registry = opts.registry ? opts.registry(loadRegistry(cfg)) : loadRegistry(cfg);
   const signer = cfg.ATTESTATION_PRIVATE_KEY ? createAttestationSigner(cfg.ATTESTATION_PRIVATE_KEY, cfg.SIGNER_EPOCH) : null;
   const fixtureOpts: FixtureProviderOptions = {
     router: "0x5555555555555555555555555555555555555555",
@@ -131,7 +211,38 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
   const plans = new PlansService({ db, cfg, registry, evidence, engine, orders, jobs: service, now });
   const mandates = new MandatesService({ db, cfg, registry, evidence, signer, orders, now });
   const club = new ClubService({ db, cfg, registry, evidence, engine, jobs: service, plans, mandates, orders, now });
-  const app = createApp({ cfg, service, paywall, plans, mandates, club, signer, market: opts.market ?? null, health: () => ({}) });
+  /* v6 Lane C */
+  const reader = new MemoryPortfolioReader(cfg.EXECUTION_CHAIN_ID, now);
+  const webhookCalls: TestEnv["webhookCalls"] = [];
+  const webhookFetch: FetchLike = opts.webhookFetch ?? (async (url, init) => { webhookCalls.push({ url, headers: init.headers, body: init.body }); return { ok: true, status: 200 }; });
+  const notify = new NotifyService({ db, now, fetchImpl: webhookFetch, telegram: opts.telegram ?? null, timeline: opts.timeline, publicBaseUrl: "http://test", allowInsecureWebhook: true });
+  const budget = new BudgetService({ db, registry, coordinator: new DbBudgetCoordinator({ db, balances: reader, now }), notify, publicBaseUrl: "http://test", now });
+  const portfolio = new PortfolioService({ db, registry, reader, prices: opts.pricesUsd ? staticPriceSource(opts.pricesUsd) : noPriceSource, budget, notify, evidenceMode: "FIXTURE", now });
+  const rebalance = new RebalanceService({ db, cfg, registry, portfolio, reader, mandates, orders, budget, notify, now });
+  /* v6 Lane E：表在迁移 0018 合并前由 DDL 建 */
+  await ensureLabTables(db);
+  const labTasks = new InMemoryTaskReader();
+  const labArchiveOpt = opts.labArchive;
+  const labArchive: ReplayArchiveReader = typeof labArchiveOpt === "function" ? labArchiveOpt(db) : labArchiveOpt && "read" in labArchiveOpt ? labArchiveOpt : new InMemoryReplayArchive(labArchiveOpt ?? { records: [], contextSnapshots: [], eventVersions: [], referenceBars: [], referencePurged: [] });
+  /* v6 Lane B（在 C 之后：资金组 / 通知 / 在线态经适配器接 C；测试断言仍用 notifier.emitted） */
+  const events = new EventStore(db);
+  const crowsnest = new CrowsnestAdapter({ db, events, keyring: parseKeyring(opts.crowsnestPubkey ?? ""), now });
+  const context = new ContextService({ db, registry, events, evidenceMode: evidence.mode, now });
+  const theses = new ThesesService({ db, now });
+  const notifier = new FanoutTaskNotifier([new LaneCNotifierAdapter(notify)]);
+  const playbooks = loadPlaybooks();
+  const tasks = new TasksService({ db, cfg, registry, evidence, engine, mandates, theses, context, budget: opts.budget ?? new LaneCBudgetAdapter(budget.coordinator), notifier, orders, playbooks, executorPresence: executorPresenceFromNotify(notify), now });
+  if (!opts.timeline) notify.setTimelineSink(taskTimelineSink(db));
+  const laneD = opts.laneD
+    ? opts.laneD({ cfg, db, registry })
+    : opts.wire === "production"
+      ? createLaneD(cfg, db, registry, { tasks: tasksReaderForLaneD(tasks), commands: taskCommandsForLaneD(tasks), holdings: holdingsForLaneD(portfolio), clock: now, notify: { enqueue: async (p) => { await notify.notify(p.type, p.entityId, p.version, p.summary, p.url, ""); } } })
+      : null;
+  const lab = opts.wire === "production"
+    ? new LabService({ db, cfg, registry, evaluator: laneBConditionEvaluator(), taskReader: taskReaderForLaneE(tasks), archive: new DbReplayArchive(db), now })
+    : new LabService({ db, cfg, registry, evaluator: opts.labEvaluator ?? createReferenceEvaluator(), taskReader: labTasks, archive: labArchive, now });
+  const recaps = new RecapsService({ sources: dbRecapSources(db, () => "FIXTURE", opts.recapHooks ?? {}), store: new MemoryRecapStore(), now });
+  const app = createApp({ cfg, service, paywall, plans, mandates, club, signer, market: opts.market ?? null, context, crowsnest, events, tasks, theses, playbooks, laneD, budget, portfolio, rebalance, notify, lab, recaps, agentHooks: opts.agentHooks, now, health: () => ({}) });
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((r) => server.once("listening", () => r()));
   const { port } = server.address() as AddressInfo;
@@ -147,6 +258,23 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
     mandates,
     club,
     signer,
+    events,
+    crowsnest,
+    context,
+    theses,
+    tasks,
+    notifier,
+    laneD,
+    budget,
+    portfolio,
+    rebalance,
+    notify,
+    reader,
+    stepReceipts: withBudgetSettlement(db, mandates, budget.coordinator),
+    webhookCalls,
+    lab,
+    labTasks,
+    recaps,
     setNow: (iso) => {
       nowIso = iso;
     },

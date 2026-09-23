@@ -285,3 +285,105 @@ agent-wallet 模式（CV-D08）：`AGENT_WALLET_PRIVATE_KEY` 是用户自己的 
 - **健康**：`GET /healthz` 增 `publicMarket: "/pub/market/xlayer" | null`（EVIDENCE_MODE=fixture 或无 OKX 凭据时为 null，端点 503）。
 - **发布指纹**：`GET /healthz` 增 `release: { treeHash, exportedAt } | null`——来自 `apps/verify-service/release.json`（私有仓导出公开快照时写入，公开仓库 `docs/RELEASE.json` 同值；评审 clone 公开仓库后 `pnpm release:hash` 复算比对，证明线上运行的就是公开源码）。文件缺失为 null。
 - **实现**：`apps/verify-service/src/market/xlayer.ts` + `config/xlayer.display.json`；测试 `test/marketXlayer.test.ts`（13 例）；探针 `pnpm market:probe`（不起 HTTP/DB，直接打印一份快照）。展示名单文件缺失或格式不符时记一条 warn 并退化为"只有 execute 层"，端点不失败。
+
+## 11. v6 增补（Chaconne Agent · 开发计划 v6 §1，2026-09-23 冻结；Lane I）
+
+唯一类型事实来源仍是 `packages/core/src/verify/contracts.ts`（末尾「v6 增补」段，**只追加**；`REASON_CODES` 与 `EvidencePayload` 联合已扩）。本节只冻结约定、命名与路径；字段以代码为准。产品语义以上游 `Chaconne_Verify_升级计划_v6_Agent交易与crowsnest.md` §6 为准，冲突时以上游为准并记 CV-D。金额十进制字符串；链下时间 ISO-8601 UTC；哈希 keccak256（沿用 canonical `canon-1`）。新增子模块：`packages/core/src/verify/{events,context,conditions,tasks,thesis,budget,lab}/`。
+
+### 11.1 时间语义（所有 lane 共同遵守）
+- 四个时刻必须分开记：**事件发生时间**（`scheduledAtUtc`）、**观测/统计期**（`observedAt`：定盘日、K 线收盘）、**首次可知**（`firstKnownAt`）、**抓取/打包**（`fetchedAt` / `packagedAt`）。verify-service 另记 `receivedAt`。
+- `unfinished`：标签时间晚于打包时刻的未完成区间（如日线未收盘），**不得当已发生观测**。
+- 回放只读评估时点已可知的信息：事件按 `firstKnownAt ≤ t` 的版本；数值按 `receivedAt/packagedAt ≤ t`；不用后来修订的事件时间、宏观数值或补齐的财报结果。无档案 → 明确 `gaps`，不伪装。
+- 归档文件只能证明过去观测；从 git 读到的 `analyst/state/context.json` fallback **不得标 LIVE**。
+
+### 11.2 事件契约（C6 的根；`MarketEvent`）
+- id 稳定：`${source}:${kind}:${YYYY-MM-DD}:${slug}`；改期不换 id，`revision+1` 并保留 `revisedFrom`。
+- 来源：宏观/联储由 crowsnest 导出（其队列 `approx` → `datePrecision='estimate'`）；财报由 verify-service 从财报日历源摄入（Lane D，先探针 Finnhub `/calendar/earnings` 再定，源无确认字段一律 `estimated`）；假日/提前收盘来自 `packages/core/src/calendar.ts`（与 crowsnest NYSE 日历对拍一次，差异记 CV-D）。
+- **窗口不由 producer 决定**：每个任务按自己的条件参数算窗口；不提供 nextTier1/nextTier2 之类固定窗口字段。
+- 修订历史入 `verify_event_revisions`；`firstKnownAt` 取首次入库时刻与 producer 值的较早者。
+
+### 11.3 上下文契约（C1；`MarketContext` / `CtxField<T>`）
+- 每个字段 `{value, source, observedAt, fetchedAt, status, purposes, note?}`；取不到 `value=null,status='unavailable'`，**绝不省略、绝不用 0 冒充**。
+- **CV-D12**：数值型字段的 `value` 一律十进制字符串（canonical `canon-1` 只允许安全整数，浮点无法签名）；消费方按需解析。**CV-D13**：顶层可选 `provenance.mode ∈ live|backfill|sample`，只有 `live` 可参与 LIVE 判定，其余只用于回放与联调。
+- 参考实现与黄金样本：crowsnest 分支 `v6-context-export`（`sentinel/context_sign.py`、`sentinel/tests/golden/context_canon_{1_edge,2_rates,3_event}.json`，各含 input / canonical / sha256 / signature / publicKeyHex）；开发机测试公钥 `31bd65ba3273d04e572b9bc6deaff903b3cbf4d48efc151efd7dc0f1ea0570e4`（`publicKeyId=crowsnest-ctx-k1`），**服务器另生成一对**。
+- 签名：Ed25519，`signature` 覆盖 canonical(除 `signature` 外)；canonical 与 TS `canon-1` 对拍，Lane A 提供 3 个黄金样本给 Lane B 互检；公钥来自 env `CROWSNEST_PUBKEY_ED25519`（按 `publicKeyId` 选）。验签失败 → 整份拒收 + `CONTEXT_UNAVAILABLE`。
+- staleness 由 verify-service 按字段类判定（不信 producer 自报）：`session` 10 分钟；`events` 60 分钟；日度定盘（`rates.*`、`realYield10`）= 超过下一交易日 18:00 ET 未更新；`risk.vix/nq/es/dxy` 常规时段 20 分钟、休市按最后收盘并标 `observedAt`；`fed.hikeProb` 15 分钟；`crossAsset` 按事件 T+60 分钟内有效。过期 → 该字段 `stale`，只阻塞依赖它的条件（`CONTEXT_STALE`）。
+- 用途白名单（D-084 默认）：`agent`/`paid` 只含派生字段（时段、事件、窗口、静默期、曲线形态、漂移判定）与官方公开源数值（FRED/财政部/BLS/联储/Polymarket）；Yahoo（VIX/NQ/ES/DXY）与 Coinglass 派生值只 `internal`/`display`；`analyst/` 私有研究、预测台账、阈值一律不导出。响应按档位裁剪：字段不在档位 → 整个字段 `{status:'unavailable', note:'not_in_tier'}`（`CONTEXT_FIELD_NOT_IN_TIER`），**绝不省略键**。
+- 过滤：`GET /v1/context?assetKey=…|owner=…|taskId=…` 只返回相关事件与相关字段。
+- crowsnest 发布（Lane A）：`https://<crowsnest-host>/context/latest.json`（`Cache-Control: max-age=60`）、`/context/events.json`、`/context/history/YYYY-MM-DD.jsonl`（每 tick 一行，保留 30 天）；一次性 `backfill_context.py` 回填 30 天（只用当时已有数据）。crowsnest 若 9/24 12:00 仍不可用 → 上下文用 Chaconne 日历出降级版（多数字段 `unavailable`），条件层按「证据不足 = 等待」照常。
+
+### 11.4 条件 DSL（C2；`Condition` / `ConditionSet` / `evaluateConditions`）
+- `evaluateConditions(set, evidence, taskState, now) → ConditionEvaluation` **纯函数**；任一 `UNSATISFIED` / `INSUFFICIENT_EVIDENCE` → 不签发证书；`nextCheckAt` 取各项已知恢复点的最小值（事件窗口结束、下一常规时段开盘、下一交易日），未知（如 `cash_floor`）写 null。
+- 交易日按 `calendar.ts`（纽约、夏令时、假日、提前收盘）；`min_gap_trading_days` 以上一步 **确认** 的交易日计。
+- `ConditionSet.hash = keccak256(canonical({version, items}))`，进入 `effectivePolicyHash` 的展开参数 → 进证书与证据包；验证器用保存的输入复算（K-10）。**链上只约束预算/步序/期限/签名/承诺绑定；市场条件由服务判断。**
+- `premium_bps_lte` 的 `official_close` / `close_last_tick` 口径只允许 SIMULATION/观察；UI 与 API 都拒绝用它建 LIVE 执行条件（Y-05）。`not_in_fed_blackout` 默认不进任何模板（K-07）。`require_cross_asset_confirmation` 不接受 `undecided`（K-08）。
+- 改条件 = 新授权；新授权不自动使旧授权失效；展示旧授权状态、是否仍有可用证书、撤销确认状态（K-09）。
+- 通知只是唤醒（D-087）；执行前重新取证、报价、余额、额度、时效、全部条件。
+
+### 11.5 任务、理由卡、资金组、影响、对照、回放
+- `TaskStatus` 12 态（`contracts.ts TASK_STATUSES`）；`Task.blockers` 全量（不止第一个）；`ExecutorPresence` 三态：3 分钟内有心跳 = `online`，浏览器钱包路径 = `awaiting_signature`，都无 = `offline`（信息项，不阻塞签发）。
+- 模板（`apps/verify-service/config/playbooks.json` 版本化；`PLAYBOOK_IDS`）：`session_dca`（N 步、`session:[US_REGULAR]`、`min_gap_trading_days:1`、可选 `avoid_event_window`；错过窗口只顺延不合并）、`event_aware_accumulate`（`avoid_event_window(MACRO_TIER1, 30, 20)` + `earnings_window(1, 1, true, true)`）、`discount_watch`（`premium_bps_lte` live 才可执行）、`target_sell`（`target_price_*` 或 `tracked_cost_pnl_pct_gte`，成本覆盖率 <100% → `TRACKED_COST_UNKNOWN` 并建议只用目标价）、`portfolio_rebalance`（Lane C 编排：先卖后买、每腿单独授权、买力重算、允许 `PARTIAL`）。
+- 理由卡：machine 前提 = Condition 三态；research 前提只收 `reviewItems`（`sourceUrl` 必填）并保持 `unknown` 直到用户标记；任一机器前提 `invalidated` → `onInvalidation`：`notify` / `pause_issuance`（任务 PAUSED，说明只是停止签发）/ `draft_exit`（生成卖出/调仓草案，等待新授权）；`validUntil` 过期 → `WAITING(THESIS_EXPIRED)`。理由卡进证据包（T-05）。
+- 资金组（D-086，服务侧协调）：不变量 **`spentThisPeriod + Σ reservedRaw(可执行授权) ≤ capRaw`**；`pendingRaw` 计入 reserved 不重复；注册授权按 `priority → createdAt` 分配 reserved（全额或 0；0 → `WAITING(BUDGET_GROUP_CONFLICT)`）；步骤确认 → `spent += actual, reserved −= actual`；回滚/过期/撤销 **链上确认后** 才释放；跨周期授权必须指定归属周期；执行前重查链上余额，`cash_floor` 用真实余额。
+- 影响（C6）：`impacts(owner, horizon)` = 事件 × 相关资产（`underlyingIds` ↔ registry `underlyingId`）× 持仓 × 任务 → `relation` 三类 → `effect` → `actions`；宏观事件只标 `macro_research`，文案不写涨跌；事件 revision 变化 → 重算受影响任务并发 `event.revised`；`datePrecision='day'` 且用户预选 `wholeDayIfDayPrecision` → 整日等待，未预选 → 提示选择，不补时刻。
+- 对照（C9）：固定同一 `evidenceSnapshotId`；同资产/资金基准/费用假设；每个变体跑 `evaluateConditions` + 规划器（同 quote 证据）；`mode: SIMULATION`，不写任何授权。回放：数据源 `verify_evidence`（9/20 起）、`verify_context_snapshots` + crowsnest 30 天回填、`premium_1h`（只作背景不当 quote）；依赖 quote 的条件在无 quote 时点 → `INSUFFICIENT(NO_QUOTE)`；断供清空区间 → `gaps: REFERENCE_PURGED`；**不输出收益**。
+
+### 11.6 停止语义与授权变更（D-088）
+- `POST /v1/tasks/:id/{pause,resume,cancel}` = 服务侧停止：只阻止后续签发；已取走且未过期的证书仍可能可执行；响应体必须写明。彻底停止以链上 `revokeMandate` 确认为准（任务 `REVOKE_PENDING → REVOKED`）；UI 不把按钮响应当撤销完成。
+
+### 11.7 HTTP（verify-service 新增；旧接口不变）
+| 方法 路径 | 用途 | 状态码 |
+|---|---|---|
+| `GET /v1/context?tier&assetKey&owner&taskId` | C1；按档位裁剪；按资产/持仓/任务过滤；免费档（D-085） | 200（永远 200，字段级 unavailable） |
+| `GET /v1/events?from&to&underlyingId&kind`、`GET /v1/events/:id/revisions` | 事件列表（含修订号）与修订史 | 200 |
+| `POST /v1/tasks` | 从 playbook + 参数建任务：返回任务、待签授权草案（typedData）、理由卡草案、资金组分配结果；SIMULATION 立即可用 | 201 / 400（playbook 参数） / 409（幂等冲突） |
+| `GET /v1/tasks/:id`、`GET /v1/tasks?owner` | 详情（阻塞项全量、nextCheckAt、执行器在线态、账目）；owner 鉴权 | 200 / 403 |
+| `POST /v1/tasks/:id/{pause,resume,cancel}` | 服务侧停止语义（§11.6） | 200 / 409 |
+| `POST /v1/tasks/:id/authorize` | 提交已签 TradeMandate（复用 `/v1/mandates` 逻辑）并挂到任务 | 201 / 422 |
+| `POST /v1/tasks/:id/prepare-step` | 前置链 `evaluateConditions` → 资金组/现金下限 → 理由卡 → 现有 prepare-step（证据、报价、证书 TTL 规则不变） | 200 / 409（WAIT，带全部阻塞项） |
+| `POST /v1/mandates/:id/executor/heartbeat` | agent-wallet 执行器心跳（60 s） | 204 |
+| `GET /v1/event-impacts?owner&horizonHours=48` | C6 影响清单 | 200 |
+| `POST /v1/theses`、`GET /v1/theses/:id`、`POST /v1/theses/:id/review-items` | C7；review-items 只能 owner/agent 追加，不触发执行 | 201/200/201 |
+| `POST /v1/budget-groups`、`GET /v1/budget-groups/:id`、`POST /v1/budget-groups/:id/allocations` | C8 | 201/200/201 或 409（冲突 → 分配 `waiting`） |
+| `GET /v1/portfolio/:owner`、`POST /v1/portfolio/:owner/cost-overrides` | C4；自报成本标 `user_reported`；owner 鉴权 | 200/201 |
+| `POST /v1/notify/webhooks`、`GET/DELETE …/:id`、`POST /v1/notify/telegram/link`、`POST /v1/notify/test` | C4 通知；webhook HMAC-SHA256，3 次重试后停用并写任务时间线 | 201/200/204 |
+| `GET /v1/tasks/:id/explain-wait` | C9 等待诊断（全部阻塞项、证据时间、nextCheckAt、userActionRequired） | 200 |
+| `POST /v1/tasks/:id/compare-policies` | C9 同输入对照（SIMULATION，不改真实任务） | 201 |
+| `POST /v1/replays`、`GET /v1/replays/:id` | C9 决策回放（无前视） | 201/200 |
+| `POST /v1/rebalance/preview`、`POST /v1/rebalance/plans`、`GET /v1/rebalance/plans/:id` | C3 调仓编排（多授权协作、部分完成） | 200/201/200 |
+| `GET /v1/recaps?owner&date`、`GET /v1/recaps/:id` | C5 夜班日志（纽约实际收盘后 45 分钟生成，时区用 `session.ts`） | 200 |
+| `POST /a2mcp/agent-tasks` | OKX AI 服务：输入 owner 或资产集合 → 事件影响 + 任务草案；审核期价格 0；**等 #13803 结果后再提交上架** | 200（`delivered` / `input_required`），沿用 a2mcp 只回 200/402 约定 |
+
+鉴权：组合、任务、回调注册、理由卡与私密复盘一律验 owner（现有 `web:<address>` / API key caller 机制）；单凭钱包地址不能修改任务或获知私密信息。
+
+### 11.8 MCP 工具（verify-mcp 追加；旧工具保留）
+`get_market_context`、`get_events`、`create_task`、`get_task`、`pause_task` / `resume_task` / `cancel_task`、`authorize_task`（agent-wallet 模式下可代签 TradeMandate，限额内）、`get_my_event_impacts`、`watch_thesis`、`add_thesis_review_item`、`explain_task_wait`、`compare_task_policies`、`replay_policy`、`preview_rebalance`、`create_rebalance_plan`、`get_budget_group`、`create_budget_group`、`get_portfolio`、`report_cost_override`、`register_webhook`、`link_telegram`、`executor_heartbeat`（agent-wallet 模式自动调用）。复用 `plan_trade` / `prepare_mandate` / `execute_next_step` / `get_evidence_bundle` / `verify_evidence_bundle`。
+
+### 11.9 数据表（迁移 0018，Drizzle，Lane C 出迁移；B/D/E 只增列于各自表）
+`verify_events`、`verify_event_revisions`、`verify_context_snapshots`（每次摄入全量 + 哈希 + 逐字段 status）、`verify_tasks`、`verify_task_blockers`（每次评估的阻塞快照）、`verify_theses`、`verify_thesis_checks`、`verify_budget_groups`、`verify_budget_allocations`、`verify_budget_ledger`（预留/占用/释放/结算流水）、`verify_cost_overrides`、`verify_notification_channels`、`verify_notification_outbox`（幂等键 `${type}:${entityId}:${version}`）、`verify_executor_heartbeats`、`verify_policy_comparisons`、`verify_replays`、`verify_rebalance_plans`、`verify_rebalance_legs`、`verify_recaps`、`verify_missions`；`verify_mandates` 增列 `task_id`、`conditions_hash`。
+
+### 11.10 原因码（§1.8，已入 `REASON_CODES`）
+全部 non-HARD → 任务 `WAITING`：`CONTEXT_UNAVAILABLE`、`CONTEXT_STALE`、`CONTEXT_FIELD_NOT_IN_TIER`、`EVENT_WINDOW_ACTIVE`、`EVENT_DATE_UNCERTAIN`、`EARNINGS_WINDOW_ACTIVE`、`EARNINGS_COVERAGE_UNKNOWN`、`FED_BLACKOUT`（仅用户选择时）、`VOL_REGIME_EXCEEDED`、`SESSION_RULE_BLOCK`、`CROSS_ASSET_UNCONFIRMED`、`STEP_GAP_NOT_ELAPSED`、`DAILY_STEP_CAP_REACHED`、`PREMIUM_CONDITION_NOT_MET`、`TARGET_NOT_REACHED`、`TRACKED_COST_UNKNOWN`、`CASH_FLOOR_BLOCK`、`BUDGET_GROUP_CONFLICT`、`BUDGET_GROUP_EXHAUSTED`、`BUDGET_PENDING_OCCUPIED`、`THESIS_INVALIDATED`、`THESIS_UNKNOWN`、`THESIS_EXPIRED`；信息项（不阻塞签发）：`EXECUTOR_OFFLINE`、`AWAITING_USER_SIGNATURE`。
+
+### 11.11 通知事件（`NOTIFICATION_TYPES`）
+`task.status_changed`、`task.step_ready`、`task.step_confirmed`、`task.step_reverted`、`task.blocked`（阻塞集合变化时一次）、`event.revised`、`event.released`、`thesis.invalidated`、`thesis.unknown`、`budget.conflict`、`budget.released`、`task.expiring`（到期前 24 h）、`recap.ready`。载荷只含 id、类型、版本、摘要与链接；**不含任何签名、证书、calldata**；outbox 幂等键 `${type}:${entityId}:${version}`；重复/延迟通知不得导致重复步骤（幂等键 + 步序）。
+
+### 11.12 证据 payload（CV-D）
+新增 `market_context`（含 `signatureValid`、`contextHash`、逐字段 `fieldStatus`；全量入 `verify_context_snapshots`）、`market_event`（含 `revision`、`firstKnownAt`）、`portfolio_snapshot`（含区块号与可追溯数量）。`EvidenceMode` 不变；回放产出的评估标 `REPLAY`，对照标 `SIMULATION`。
+
+### 11.13 能力开关
+每个能力独立 env flag `AGENT_C1_ENABLED … AGENT_C9_ENABLED`（缺省 true）；9/25 12:00 验收没绿的关 flag 并从材料移除；数据接入失败的字段显示不可用，不用回放伪装实时。
+
+### 11.14 实现增补（各 lane 落地时超出 §11.7 的端点；Lane I 2026-09-23 裁决：**全部收进契约**，理由逐条注明）
+| 方法 路径 | 来源 | 理由 |
+|---|---|---|
+| `POST /v1/event-impacts/actions` | D | 六个动作需要一个执行入口；`effect: invalid → 400 / not_ready → 503`，不越权触发任何执行 |
+| `GET /v1/events/earnings/coverage`、`POST /v1/events/earnings/ingest`（运营者 key） | D | 覆盖率给页面「未知」标注；手动摄入只给运营者 |
+| `GET /v1/mandates/:id/executor` | C | 与心跳配对的读侧，页面按三态显示 |
+| `POST /v1/rebalance/plans/:id/legs/:n/authorize` | C | 每腿单独授权（§11.5 调仓语义） |
+| `POST /v1/recaps/:id/share`、`GET /pub/recaps/:shareId` | F | R-04 默认私密、公开可隐藏资产与金额；公开读走 `/pub/` 与既有战报一致 |
+| `GET /v1/missions` | F | Missions 从事件日历与资产覆盖生成，无事件时用标注日期的回放任务 |
+| `GET /a2mcp/agent-tasks`（与 POST 同体） | F | 沿用 a2mcp GET↔POST 回退约定 |
+前端代理 `apps/verify-web/app/api/verify/[...path]/route.ts` 的放行名单为以上全部 + §11.7 的并集（合并时已对齐）。
+
+**CV-D14**：任务证据包 `TaskEvidenceBundle` = `EvidenceBundle` + 附加段（理由卡、条件集与求值输入），`bundleHash` 覆盖附加段；旧 job/mandate 包不变。**迁移 0018 定稿**：`packages/db/migrations/0018_pink_darwin.sql`，22 张表（§11.9 的 20 张 + Lane D 的 `verify_earnings_ingests` / `verify_earnings_periods`）+ `verify_mandates` 增 `task_id`、`conditions_hash`；各 lane 的临时 0018/0019 已作废。

@@ -1,0 +1,57 @@
+{
+ "canonicalVersion": "canon-1",
+ "publicKeyId": "crowsnest-ctx-k1",
+ "publicKeyHex": "31bd65ba3273d04e572b9bc6deaff903b3cbf4d48efc151efd7dc0f1ea0570e4",
+ "input": {
+  "schemaVersion": "chaconne-context/1",
+  "producer": "crowsnest",
+  "packagedAt": "2026-09-23T10:00:00+00:00",
+  "signatureAlg": "ed25519",
+  "publicKeyId": "crowsnest-ctx-k1",
+  "rates": {
+   "y10": {
+    "value": "4.96",
+    "source": "official:FRED+财政部（DGS10）",
+    "observedAt": "2026-09-22T20:00:00+00:00",
+    "fetchedAt": "2026-09-23T09:50:00+00:00",
+    "status": "ok",
+    "purposes": [
+     "internal",
+     "display",
+     "agent",
+     "paid"
+    ],
+    "note": "定盘日 2026-09-22（observedAt 按当日 16:00 ET 记）"
+   },
+   "move": {
+    "value": null,
+    "source": "yahoo:^MOVE 日线",
+    "observedAt": null,
+    "fetchedAt": "2026-09-23T10:00:00+00:00",
+    "status": "unavailable",
+    "purposes": [
+     "internal",
+     "display"
+    ],
+    "note": "yfinance 失败"
+   },
+   "curveShape": {
+    "value": "bear_steepener",
+    "source": "official:30Y−2Y",
+    "observedAt": "2026-09-22T20:00:00+00:00",
+    "fetchedAt": "2026-09-23T09:50:00+00:00",
+    "status": "ok",
+    "purposes": [
+     "internal",
+     "display",
+     "agent",
+     "paid"
+    ]
+   }
+  }
+ },
+ "canonical": "{\"packagedAt\":\"2026-09-23T10:00:00+00:00\",\"producer\":\"crowsnest\",\"publicKeyId\":\"crowsnest-ctx-k1\",\"rates\":{\"curveShape\":{\"fetchedAt\":\"2026-09-23T09:50:00+00:00\",\"observedAt\":\"2026-09-22T20:00:00+00:00\",\"purposes\":[\"internal\",\"display\",\"agent\",\"paid\"],\"source\":\"official:30Y−2Y\",\"status\":\"ok\",\"value\":\"bear_steepener\"},\"move\":{\"fetchedAt\":\"2026-09-23T10:00:00+00:00\",\"note\":\"yfinance 失败\",\"observedAt\":null,\"purposes\":[\"internal\",\"display\"],\"source\":\"yahoo:^MOVE 日线\",\"status\":\"unavailable\",\"value\":null},\"y10\":{\"fetchedAt\":\"2026-09-23T09:50:00+00:00\",\"note\":\"定盘日 2026-09-22（observedAt 按当日 16:00 ET 记）\",\"observedAt\":\"2026-09-22T20:00:00+00:00\",\"purposes\":[\"internal\",\"display\",\"agent\",\"paid\"],\"source\":\"official:FRED+财政部（DGS10）\",\"status\":\"ok\",\"value\":\"4.96\"}},\"schemaVersion\":\"chaconne-context/1\",\"signatureAlg\":\"ed25519\"}",
+ "canonicalUtf8Sha256": "92fc67f433162fd981284e42f5548ede3641db0fe3b84ce4b458250f3f37dc0f",
+ "signature": "0x8286e0bc0eb0169114655292399817cddcb8dc51cf0f3b73cd81f8e9aff7d7bf1700da94833c617a139a83b1f7c7b35b868cd24588d0b23ec658e5a83fcc5d08",
+ "note": "signature = Ed25519(utf8(canonical(input)))；input 不含 signature 键；验签时先用 TS canonicalJson(input) 与 canonical 逐字节比对"
+}

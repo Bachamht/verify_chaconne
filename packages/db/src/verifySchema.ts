@@ -248,8 +248,13 @@ export const verifyMandates = pgTable(
     deadline: ts("deadline").notNull(),
     createdAt: ts("created_at").notNull(),
     updatedAt: ts("updated_at").notNull(),
+    /* ---- v6 Lane B ---- */
+    /** 所属任务（null = v5 独立授权计划，由 mandates monitor 直接评估；非 null 的只经任务前置链评估） */
+    taskId: text("task_id"),
+    /** 授权承诺的条件集哈希（进 effectivePolicyHash 展开参数 → 证书与证据包，K-10） */
+    conditionsHash: text("conditions_hash"),
   },
-  (t) => [unique("verify_mandates_caller_req_uq").on(t.callerId, t.clientRequestId), index("verify_mandates_state_idx").on(t.state)],
+  (t) => [unique("verify_mandates_caller_req_uq").on(t.callerId, t.clientRequestId), index("verify_mandates_state_idx").on(t.state), index("verify_mandates_task_idx").on(t.taskId)],
 );
 
 /* ---------- 授权计划评估：monitor 每轮一行 ---------- */
@@ -346,4 +351,494 @@ export const verifyShares = pgTable(
     updatedAt: ts("updated_at").notNull(),
   },
   (t) => [unique("verify_shares_ref_uq").on(t.kind, t.refId), index("verify_shares_public_idx").on(t.public, t.createdAt)],
+);
+
+
+/* ================================================================== */
+/* ---- v6 Lane B ----                                                 */
+/* 上下文快照 / 事件与修订 / 任务与阻塞快照 / 理由卡与检查；verify_mandates 增列在上方表定义里（task_id / conditions_hash）。 */
+/* 迁移 0018 由 Lane I 统一重生成（合并 B/C/D/E 的表）。                */
+/* ================================================================== */
+
+/* ---------- 上下文快照：每次摄入全量 + 哈希 + 逐字段 status（interfaces §11.9） ---------- */
+export const verifyContextSnapshots = pgTable(
+  "verify_context_snapshots",
+  {
+    id: text("id").primaryKey(), // ctx_<hex>
+    producer: text("producer").notNull(), // crowsnest
+    publicKeyId: text("public_key_id"),
+    packagedAt: ts("packaged_at"),
+    receivedAt: ts("received_at").notNull(),
+    /** ok | rejected（验签/结构失败）| unavailable（不可达） */
+    status: text("status").notNull(),
+    signatureValid: boolean("signature_valid").notNull().default(false),
+    contextHash: text("context_hash"),
+    /** CV-D13：live | backfill | sample（只有 live 可参与 LIVE 判定） */
+    provenanceMode: text("provenance_mode"),
+    fieldStatus: jsonb("field_status").notNull(), // Record<path, CtxStatus>
+    contextJson: jsonb("context_json"), // MarketContext（验签通过的全量；拒收时 null）
+    evidenceJson: jsonb("evidence_json").notNull(), // EvidenceRecord(kind=market_context)
+    rawHash: text("raw_hash").notNull(),
+    sourceEndpoint: text("source_endpoint").notNull(),
+    error: text("error"),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [index("verify_context_snapshots_received_idx").on(t.receivedAt), index("verify_context_snapshots_status_idx").on(t.status, t.receivedAt)],
+);
+
+/* verify_events / verify_event_revisions：见 packages/db/src/schema.ts 的 Lane D 块（同名同义，B 直接用 D 的表） */
+
+/* ---------- 任务：playbook + 条件 + 授权 + 理由卡 + 资金组 ---------- */
+export const verifyTasks = pgTable(
+  "verify_tasks",
+  {
+    id: text("id").primaryKey(), // tsk_<hex>
+    callerId: text("caller_id").notNull(),
+    clientRequestId: text("client_request_id").notNull(),
+    ownerAddress: text("owner_address").notNull(),
+    playbookId: text("playbook_id").notNull(),
+    playbookVersion: text("playbook_version").notNull(),
+    paramsJson: jsonb("params_json").notNull(),
+    goalJson: jsonb("goal_json").notNull(), // PlanGoal
+    conditionsJson: jsonb("conditions_json").notNull(), // ConditionSet
+    conditionsHash: text("conditions_hash").notNull(),
+    mode: text("mode").notNull(), // LIVE | SIMULATION
+    status: text("status").notNull(), // TaskStatus
+    mandateIds: jsonb("mandate_ids").notNull().$type<string[]>(),
+    thesisId: text("thesis_id"),
+    budgetGroupId: text("budget_group_id"),
+    blockersJson: jsonb("blockers_json").notNull(), // Blocker[]
+    nextCheckAt: ts("next_check_at"),
+    /** 最近一次评估（含 mandate 评估摘要），页面/explain-wait 用 */
+    lastEvaluationJson: jsonb("last_evaluation_json"),
+    planId: text("plan_id"),
+    planJson: jsonb("plan_json"), // PlanReport（候选）
+    mandateDraftJson: jsonb("mandate_draft_json"), // { mandate, domain, typedData }（未签）
+    budgetAllocationJson: jsonb("budget_allocation_json"),
+    /** 时间线：status 变更 / 停止 / 授权 / 理由卡动作 */
+    timelineJson: jsonb("timeline_json").notNull(),
+    exitDraftJson: jsonb("exit_draft_json"), // draft_exit 生成的卖出草案
+    stepsConfirmed: integer("steps_confirmed").notNull().default(0),
+    stepsPlanned: integer("steps_planned").notNull(),
+    lastConfirmedStepAt: ts("last_confirmed_step_at"),
+    deadline: ts("deadline").notNull(),
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [unique("verify_tasks_caller_req_uq").on(t.callerId, t.clientRequestId), index("verify_tasks_owner_idx").on(t.ownerAddress), index("verify_tasks_status_idx").on(t.status, t.nextCheckAt)],
+);
+
+/* ---------- 任务阻塞快照：阻塞集合变化才写一行（含可复算的求值输入） ---------- */
+export const verifyTaskBlockers = pgTable(
+  "verify_task_blockers",
+  {
+    id: serial("id").primaryKey(),
+    taskId: text("task_id").notNull(),
+    evaluatedAt: ts("evaluated_at").notNull(),
+    outcome: text("outcome").notNull(), // ConditionOutcome
+    blockersJson: jsonb("blockers_json").notNull(), // Blocker[]
+    blockerSetKey: text("blocker_set_key").notNull(),
+    nextCheckAt: ts("next_check_at"),
+    /** ConditionEvaluationRecord（input + output）——验证器复算用 */
+    evaluationJson: jsonb("evaluation_json").notNull(),
+    /** 本次求值用到的规范化证据记录（market_context / market_event / okx_quote…）；Lane E 对照与回放读 */
+    recordsJson: jsonb("records_json"),
+  },
+  (t) => [index("verify_task_blockers_task_idx").on(t.taskId, t.evaluatedAt)],
+);
+
+/* ---------- 理由卡 ---------- */
+export const verifyTheses = pgTable(
+  "verify_theses",
+  {
+    id: text("id").primaryKey(), // ths_<hex>
+    taskId: text("task_id").notNull(),
+    callerId: text("caller_id").notNull(),
+    ownerAddress: text("owner_address").notNull(),
+    goal: text("goal").notNull(),
+    rationale: text("rationale").notNull(),
+    premisesJson: jsonb("premises_json").notNull(), // Premise[]
+    validUntil: ts("valid_until").notNull(),
+    onInvalidation: text("on_invalidation").notNull(),
+    status: text("status").notNull(), // ThesisStatus
+    lastCheckedAt: ts("last_checked_at"),
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [index("verify_theses_task_idx").on(t.taskId), index("verify_theses_owner_idx").on(t.ownerAddress)],
+);
+
+/* ---------- 理由卡检查记录：每次重评一行 ---------- */
+export const verifyThesisChecks = pgTable(
+  "verify_thesis_checks",
+  {
+    id: serial("id").primaryKey(),
+    thesisId: text("thesis_id").notNull(),
+    checkedAt: ts("checked_at").notNull(),
+    status: text("status").notNull(),
+    premisesJson: jsonb("premises_json").notNull(),
+    /** 触发的 onInvalidation 动作（notify | pause_issuance | draft_exit | expired | null） */
+    actionTaken: text("action_taken"),
+    evidenceIds: jsonb("evidence_ids").notNull().$type<string[]>(),
+  },
+  (t) => [index("verify_thesis_checks_thesis_idx").on(t.thesisId, t.checkedAt)],
+);
+
+/* ================================================================== */
+/* ---- v6 Lane C ----（迁移 0018；interfaces §11.9。B/D/E 的表由 Lane I 并进同一份 0018） */
+/* ================================================================== */
+
+/* ---------- 资金组（C8，D-086 服务侧协调；一组 = 一个预算周期） ---------- */
+export const verifyBudgetGroups = pgTable(
+  "verify_budget_groups",
+  {
+    id: text("id").primaryKey(), // bgp_<hex>
+    callerId: text("caller_id").notNull(),
+    ownerAddress: text("owner_address").notNull(),
+    name: text("name").notNull(),
+    inputAssetKey: text("input_asset_key").notNull(),
+    periodStart: ts("period_start").notNull(),
+    periodEnd: ts("period_end").notNull(),
+    capRaw: text("cap_raw").notNull(),
+    cashFloorRaw: text("cash_floor_raw").notNull().default("0"),
+    priorityRule: text("priority_rule").notNull().default("priority_then_created"),
+    /** 乐观锁/账目版本：每次分配/结算/释放 +1（通知 version 也用它） */
+    version: integer("version").notNull().default(0),
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [index("verify_budget_groups_owner_idx").on(t.ownerAddress), check("verify_budget_groups_period_chk", sql`${t.periodEnd} > ${t.periodStart}`)],
+);
+
+/* ---------- 资金组分配：一条授权在一组内的预留/占用/支出（BudgetAllocation） ---------- */
+export const verifyBudgetAllocations = pgTable(
+  "verify_budget_allocations",
+  {
+    id: text("id").primaryKey(), // bal_<hex>
+    groupId: text("group_id").notNull(),
+    taskId: text("task_id").notNull(),
+    mandateId: text("mandate_id").notNull(),
+    priority: integer("priority").notNull().default(100),
+    requestedRaw: text("requested_raw").notNull(),
+    reservedRaw: text("reserved_raw").notNull().default("0"),
+    spentRaw: text("spent_raw").notNull().default("0"),
+    pendingRaw: text("pending_raw").notNull().default("0"),
+    state: text("state").notNull(), // reserved | waiting | released | settled
+    /** 归属周期（跨周期授权必须显式指定；缺省 = 组周期） */
+    periodStart: ts("period_start").notNull(),
+    periodEnd: ts("period_end").notNull(),
+    releaseReason: text("release_reason"), // reverted | expired | revoked | cancelled
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [unique("verify_budget_allocations_group_mandate_uq").on(t.groupId, t.mandateId), index("verify_budget_allocations_group_idx").on(t.groupId, t.state), index("verify_budget_allocations_mandate_idx").on(t.mandateId)],
+);
+
+/* ---------- 资金组流水：预留/等待/在途/结算/释放/现金下限检查（只追加） ---------- */
+export const verifyBudgetLedger = pgTable(
+  "verify_budget_ledger",
+  {
+    id: serial("id").primaryKey(),
+    groupId: text("group_id").notNull(),
+    allocationId: text("allocation_id"),
+    kind: text("kind").notNull(), // reserve | waiting | pending | settle | release | promote | cash_floor_check
+    amountRaw: text("amount_raw").notNull(),
+    spentAfterRaw: text("spent_after_raw").notNull(),
+    reservedAfterRaw: text("reserved_after_raw").notNull(),
+    /** 不变量断言结果（每次分配/结算后，B-02） */
+    invariantOk: boolean("invariant_ok").notNull(),
+    detail: jsonb("detail"),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [index("verify_budget_ledger_group_idx").on(t.groupId, t.createdAt)],
+);
+
+/* ---------- 自报成本（C4，Q-03：source 固定 user_reported，与链上可追溯成本分开展示） ---------- */
+export const verifyCostOverrides = pgTable(
+  "verify_cost_overrides",
+  {
+    id: text("id").primaryKey(), // ovr_<hex>
+    callerId: text("caller_id").notNull(),
+    ownerAddress: text("owner_address").notNull(),
+    assetKey: text("asset_key").notNull(),
+    qtyRaw: text("qty_raw").notNull(),
+    /** 该数量的总成本（资金币最小单位） */
+    costRaw: text("cost_raw").notNull(),
+    inputAssetKey: text("input_asset_key").notNull(),
+    source: text("source").notNull().default("user_reported"),
+    note: text("note"),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [index("verify_cost_overrides_owner_idx").on(t.ownerAddress, t.assetKey)],
+);
+
+/* ---------- 通知渠道：webhook（HMAC-SHA256）/ Telegram（独立 bot，只推送） ---------- */
+export const verifyNotificationChannels = pgTable(
+  "verify_notification_channels",
+  {
+    id: text("id").primaryKey(), // nch_<hex>
+    callerId: text("caller_id").notNull(),
+    ownerAddress: text("owner_address").notNull(),
+    kind: text("kind").notNull(), // webhook | telegram
+    /** webhook: URL；telegram: chat id（链接完成后） */
+    target: text("target"),
+    /** webhook 签名密钥（调用方提供的共享密钥，不是链上私钥）；telegram: null */
+    secret: text("secret"),
+    state: text("state").notNull(), // active | pending_link | disabled
+    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+    linkCode: text("link_code"),
+    linkExpiresAt: ts("link_expires_at"),
+    linkedAt: ts("linked_at"),
+    disabledAt: ts("disabled_at"),
+    disabledReason: text("disabled_reason"),
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [index("verify_notification_channels_owner_idx").on(t.ownerAddress, t.state), index("verify_notification_channels_link_idx").on(t.linkCode)],
+);
+
+/* ---------- 通知 outbox：幂等键 `${type}:${entityId}:${version}`；载荷只含 id/类型/版本/摘要/链接 ---------- */
+export const verifyNotificationOutbox = pgTable(
+  "verify_notification_outbox",
+  {
+    id: text("id").primaryKey(), // ntf_<hex>
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    ownerAddress: text("owner_address").notNull(),
+    type: text("type").notNull(),
+    entityId: text("entity_id").notNull(),
+    version: integer("version").notNull(),
+    payload: jsonb("payload").notNull(), // NotificationPayload
+    state: text("state").notNull(), // pending | sent | failed | no_channel
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: ts("next_attempt_at"),
+    /** 每渠道投递记录 [{channelId, kind, ok, status, at, error?}] */
+    deliveries: jsonb("deliveries").notNull().default([]),
+    lastError: text("last_error"),
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [index("verify_notification_outbox_state_idx").on(t.state, t.nextAttemptAt), index("verify_notification_outbox_entity_idx").on(t.entityId)],
+);
+
+/* ---------- 执行器心跳（60 s）：3 分钟内有心跳 = online ---------- */
+export const verifyExecutorHeartbeats = pgTable(
+  "verify_executor_heartbeats",
+  {
+    id: text("id").primaryKey(), // hb_<hex>
+    mandateId: text("mandate_id").notNull(),
+    executorId: text("executor_id").notNull(),
+    path: text("path").notNull(), // agent_wallet | browser_wallet
+    lastSeenAt: ts("last_seen_at").notNull(),
+    meta: jsonb("meta"),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [unique("verify_executor_heartbeats_mandate_executor_uq").on(t.mandateId, t.executorId), index("verify_executor_heartbeats_mandate_idx").on(t.mandateId, t.lastSeenAt)],
+);
+
+/* ---------- 调仓计划（C3 `portfolio_rebalance`）：先卖后买、每腿单独授权、允许 PARTIAL ---------- */
+export const verifyRebalancePlans = pgTable(
+  "verify_rebalance_plans",
+  {
+    id: text("id").primaryKey(), // rbp_<hex>
+    callerId: text("caller_id").notNull(),
+    clientRequestId: text("client_request_id").notNull(),
+    ownerAddress: text("owner_address").notNull(),
+    taskId: text("task_id"),
+    budgetGroupId: text("budget_group_id"),
+    inputAssetKey: text("input_asset_key").notNull(),
+    cashFloorRaw: text("cash_floor_raw").notNull(),
+    targetsJson: jsonb("targets_json").notNull(),
+    previewJson: jsonb("preview_json").notNull(), // RebalancePreview
+    snapshotJson: jsonb("snapshot_json").notNull(), // portfolio_snapshot 证据
+    policyJson: jsonb("policy_json").notNull(), // { policyId, policyVersion, maxSlippageBps, maxPriceImpactBps, maxReferenceDeviationBps }
+    state: text("state").notNull(), // DRAFT | ACTIVE | PARTIAL | COMPLETED | CANCELLED
+    phase: text("phase").notNull(), // selling | buying | done
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [unique("verify_rebalance_plans_caller_req_uq").on(t.callerId, t.clientRequestId), index("verify_rebalance_plans_owner_idx").on(t.ownerAddress)],
+);
+
+export const verifyRebalanceLegs = pgTable(
+  "verify_rebalance_legs",
+  {
+    id: text("id").primaryKey(), // rbl_<hex>
+    planId: text("plan_id").notNull(),
+    legIndex: integer("leg_index").notNull(),
+    side: text("side").notNull(), // sell | buy
+    assetKey: text("asset_key").notNull(),
+    amountRaw: text("amount_raw").notNull(),
+    estUsd: text("est_usd").notNull(),
+    state: text("state").notNull(), // PLANNED | READY_TO_AUTHORIZE | AUTHORIZED | CONFIRMED | FAILED | SKIPPED
+    mandateId: text("mandate_id"),
+    draftJson: jsonb("draft_json"), // 授权草案（未签 TradeMandate + typedData 域）
+    resultJson: jsonb("result_json"), // { spentRaw, receivedRaw, txHash, reason }
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [unique("verify_rebalance_legs_plan_leg_uq").on(t.planId, t.legIndex), index("verify_rebalance_legs_mandate_idx").on(t.mandateId)],
+);
+
+/* ---- v6 Lane E ---- */
+/* 决策实验（C9）：对照与回放的落库。迁移由 Lane I 合并进 0018；合并前测试/演示用 apps/verify-service/src/lab/store.ts 的 DDL 建表。 */
+
+/* ---------- 同输入对照：固定同一证据快照，SIMULATION，不写授权 ---------- */
+export const verifyPolicyComparisons = pgTable(
+  "verify_policy_comparisons",
+  {
+    id: text("id").primaryKey(), // cmp_<hex>（由内容派生）
+    callerId: text("caller_id").notNull(),
+    ownerAddress: text("owner_address").notNull(),
+    taskId: text("task_id").notNull(),
+    evidenceSnapshotId: text("evidence_snapshot_id").notNull(), // snap_<hash 前 24 hex>
+    snapshotHash: text("snapshot_hash").notNull(),
+    comparisonJson: jsonb("comparison_json").notNull(), // PolicyComparison
+    resultJson: jsonb("result_json").notNull(), // ComparePoliciesResult（含 planner 摘要、outcomeDiff、remix）
+    evaluatorId: text("evaluator_id").notNull(),
+    mode: text("mode").notNull().default("SIMULATION"),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [index("verify_policy_comparisons_task_idx").on(t.taskId, t.createdAt)],
+);
+
+/* ---------- 决策回放：无前视，输出覆盖与缺口，不输出收益 ---------- */
+export const verifyReplays = pgTable(
+  "verify_replays",
+  {
+    id: text("id").primaryKey(), // rpl_<hex>
+    callerId: text("caller_id").notNull(),
+    ownerAddress: text("owner_address"),
+    assetKey: text("asset_key").notNull(),
+    playbookId: text("playbook_id").notNull(),
+    conditionsHash: text("conditions_hash").notNull(),
+    fromAt: ts("from_at").notNull(),
+    toAt: ts("to_at").notNull(),
+    runJson: jsonb("run_json").notNull(), // ReplayRun
+    resultJson: jsonb("result_json").notNull(), // ReplayRunResult（含 sources 计数与说明）
+    evaluatorId: text("evaluator_id").notNull(),
+    mode: text("mode").notNull().default("REPLAY"),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [index("verify_replays_caller_idx").on(t.callerId, t.createdAt)],
+);
+
+/* ---- v6 Lane D ---- */
+/* 个人事件台（C6）。`verify_events` / `verify_event_revisions` 按 interfaces.md §11.2 契约定义（Lane B 同名同义，合并时 Lane I 去重）；
+ * `verify_earnings_*` 是 Lane D 自己的财报源摄入记录与"同一事件"匹配键。迁移 0018 由 Lane C 出，本文件只定义。 */
+export const verifyEvents = pgTable(
+  "verify_events",
+  {
+    /** `${source}:${kind}:${YYYY-MM-DD}:${slug}`；改期不换 id */
+    id: text("id").primaryKey(),
+    kind: text("kind").notNull(),
+    name: text("name").notNull(),
+    underlyingIds: jsonb("underlying_ids").notNull(), // string[]
+    scheduledAtUtc: ts("scheduled_at_utc"),
+    dateLocal: text("date_local").notNull(),
+    datePrecision: text("date_precision").notNull(), // exact | day | estimate
+    sessionHint: text("session_hint"), // bmo | amc | dmh | null
+    status: text("status").notNull(), // confirmed | estimated | revised | cancelled | released
+    revision: integer("revision").notNull(),
+    revisedFrom: jsonb("revised_from"), // { scheduledAtUtc, dateLocal } | null
+    source: text("source").notNull(),
+    sourceFetchedAt: ts("source_fetched_at").notNull(),
+    /** 首次入库时刻与 producer 值的较早者 */
+    firstKnownAt: ts("first_known_at").notNull(),
+    releasedAt: ts("released_at"),
+    tz: text("tz").notNull(),
+    /** 完整 MarketEvent（契约字段以此为准） */
+    eventJson: jsonb("event_json").notNull(),
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [index("verify_events_kind_date_idx").on(t.kind, t.dateLocal), index("verify_events_status_idx").on(t.status)],
+);
+
+export const verifyEventRevisions = pgTable(
+  "verify_event_revisions",
+  {
+    id: serial("id").primaryKey(),
+    eventId: text("event_id").notNull(),
+    revision: integer("revision").notNull(),
+    eventJson: jsonb("event_json").notNull(), // 该版本的完整 MarketEvent
+    changedFields: jsonb("changed_fields").notNull(), // string[]
+    changedAt: ts("changed_at").notNull(),
+  },
+  (t) => [unique("verify_event_revisions_uq").on(t.eventId, t.revision)],
+);
+
+/** 财报源每次请求一条：覆盖判定（EARNINGS_COVERAGE_UNKNOWN）与证据回溯都从这里读 */
+export const verifyEarningsIngests = pgTable(
+  "verify_earnings_ingests",
+  {
+    id: text("id").primaryKey(),
+    source: text("source").notNull(), // finnhub
+    symbol: text("symbol").notNull(),
+    underlyingId: text("underlying_id").notNull(),
+    httpStatus: integer("http_status").notNull(),
+    ok: boolean("ok").notNull(),
+    rowCount: integer("row_count").notNull(),
+    rawHash: text("raw_hash").notNull(),
+    requestedAt: ts("requested_at").notNull(),
+    receivedAt: ts("received_at").notNull(),
+    fromDate: text("from_date").notNull(),
+    toDate: text("to_date").notNull(),
+    eventIds: jsonb("event_ids").notNull(), // string[]
+    evidenceIds: jsonb("evidence_ids").notNull(), // string[]
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [index("verify_earnings_ingests_underlying_idx").on(t.underlyingId, t.receivedAt)],
+);
+
+/** "同一财报事件"匹配键（symbol + 财年 + 季度）→ 事件 id：改期时据此保住 id、只升 revision */
+export const verifyEarningsPeriods = pgTable("verify_earnings_periods", {
+  matchKey: text("match_key").primaryKey(), // `${source}:${symbol}:${year}Q${quarter}`
+  eventId: text("event_id").notNull(),
+  createdAt: ts("created_at").notNull(),
+});
+/* ---- v6 Lane F ----
+ * Chaconne Agent C5：夜班日志与事件任务（interfaces §11.9；迁移 0018 由 Lane C 统一出，
+ * 本块只定义列，与 verifySchema.ts 的 verify_* 表同一约定：金额 text、时间 timestamptz、JSON jsonb）。
+ * verify-service 在表未落地时自动退回内存缓存（recaps/store.ts），不会因此拒启。 */
+export const verifyRecaps = pgTable(
+  "verify_recaps",
+  {
+    id: text("id").primaryKey(), // rcp_<hex>（owner+date 确定性 id）
+    callerId: text("caller_id").notNull(),
+    ownerAddress: text("owner_address").notNull(),
+    /** 纽约本地交易日 YYYY-MM-DD */
+    nyDate: text("ny_date").notNull(),
+    /** 实际收盘（含提前收盘）+45 分钟，UTC */
+    generateAfter: ts("generate_after").notNull(),
+    generatedAt: ts("generated_at").notNull(),
+    recapJson: jsonb("recap_json").notNull(), // Recap（apps/verify-service/src/recaps/types.ts）
+    /** 分享：默认私密；公开时可隐藏资产与金额（R-04） */
+    shareId: text("share_id"),
+    public: boolean("public").notNull().default(false),
+    hideAssets: boolean("hide_assets").notNull().default(true),
+    hideAmounts: boolean("hide_amounts").notNull().default(true),
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [unique("verify_recaps_owner_date_uq").on(t.callerId, t.ownerAddress, t.nyDate), index("verify_recaps_share_idx").on(t.shareId)],
+);
+
+export const verifyMissions = pgTable(
+  "verify_missions",
+  {
+    id: text("id").primaryKey(), // msn_<hex>
+    callerId: text("caller_id"),
+    ownerAddress: text("owner_address"),
+    kind: text("kind").notNull(), // event | replay | simulation
+    eventId: text("event_id"),
+    assetKey: text("asset_key"),
+    /** 任务对应的标注日期（事件日或回放日，YYYY-MM-DD） */
+    dateLabel: text("date_label").notNull(),
+    mode: text("mode").notNull(), // LIVE | SIMULATION | REPLAY
+    missionJson: jsonb("mission_json").notNull(), // Mission（apps/verify-service/src/missions/build.ts）
+    /** 用户从该任务创建出的 task id（翻创记录，不是排行榜） */
+    createdTaskId: text("created_task_id"),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [index("verify_missions_owner_idx").on(t.ownerAddress, t.createdAt)],
 );

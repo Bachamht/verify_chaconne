@@ -38,7 +38,14 @@ function WalletStatus() {
   }}><span className="verify-wallet-full">{busy ? t("wallet_connecting") : t("connect")}</span><span className="verify-wallet-short">{busy ? "…" : t("wallet_short")}</span></button>;
 }
 
+/* v6：导航统一「Chaconne Agent」——/agent 为首页入口，任务/资金/日志为子页；旧 Verify 路由全部保留在展开菜单 */
 const NAV = [
+  { href: "/agent", key: "nav_agent" },
+  { href: "/agent/tasks", key: "nav_agent_tasks" },
+  { href: "/agent/events", key: "nav_agent_events" },
+  { href: "/agent/journal", key: "nav_agent_journal" },
+  { href: "/agent/funds", key: "nav_agent_funds" },
+  { href: "/agent/lab", key: "nav_agent_lab" },
   { href: "/new", key: "nav_new" },
   { href: "/plan", key: "nav_plan" },
   { href: "/play", key: "nav_play" },
@@ -67,7 +74,7 @@ export function Header() {
     document.addEventListener("pointerdown", closeOutside);
     return () => { document.removeEventListener("keydown", closeOnEscape); document.removeEventListener("pointerdown", closeOutside); };
   }, [open]);
-  const active = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const active = (href: string) => (href === "/agent" ? pathname === "/agent" : pathname === href || pathname.startsWith(`${href}/`));
   return (
     <header className="verify-header" ref={headerRef}>
       <div className="verify-header-inner">

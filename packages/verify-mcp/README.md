@@ -74,3 +74,13 @@ The process refuses to start if any `*PRIVATE_KEY*` / `MNEMONIC` variable is pre
 ## Tests
 
 `pnpm --filter @chaconne/verify-mcp test` — official SDK `Client` over `InMemoryTransport` (initialize, capability negotiation, tool discovery, calls, 402 challenge, error mapping) and over a real `StdioClientTransport` (spawned process).
+
+## v6 · Chaconne Agent 工具（interfaces §11.8，23 个；合计 43 个）
+
+`get_market_context` · `get_events` · `create_task` · `get_task` · `pause_task` / `resume_task` / `cancel_task` · `authorize_task` · `get_my_event_impacts` · `watch_thesis` · `add_thesis_review_item` · `explain_task_wait` · `compare_task_policies` · `replay_policy` · `preview_rebalance` · `create_rebalance_plan` · `get_budget_group` · `create_budget_group` · `get_portfolio` · `report_cost_override` · `register_webhook` · `link_telegram` · `executor_heartbeat`。
+
+- 端点尚未部署（HTTP 404 not_found / 501 / 503）时工具返回结构化 `{ status: "not_available", endpoint, httpStatus }`（`isError=false`），不用假数据、不用回放冒充实时。
+- `pause_task` / `cancel_task` 的摘要复述 D-088：服务侧停止只阻止后续签发，已取走且未过期的证书仍可能可执行，彻底停止以链上 `revokeMandate` 确认为准。
+- `authorize_task` 只在 agent-wallet 模式代签 TradeMandate：钱包必须是 owner、链在 `AGENT_WALLET_CHAIN_IDS` 内、`budgetCap`（按 `inputDecimals`，默认 6）折美元不超过 `AGENT_WALLET_MAX_SPEND_USD`；否则返回 `budget_exceeds_agent_limit`，不签名不上送。无 agent-wallet 时可传浏览器钱包产出的 `signature`。
+- agent-wallet 模式下进程每 60 s 自动向 `POST /v1/mandates/:id/executor/heartbeat` 报在线（只针对本进程 `authorize_task` / `execute_next_step` 过的 mandate）；`executor_heartbeat` 可手动加入/移出。心跳不携带任何权限。
+- 日志只走 stderr；stdout 是 JSON-RPC 通道。

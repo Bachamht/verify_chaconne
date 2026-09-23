@@ -20,6 +20,27 @@ import { buildBill } from "../products/bill";
 import { buildJobBundle, buildMandateBundle } from "../bundle/bundle";
 import { findEntry, type NormalizedJob } from "@chaconne/core/verify";
 import type { XLayerMarket } from "../market/xlayer";
+/* v6 Lane B */
+import { isContextTier, STOP_SEMANTICS_NOTE, type PlaybookCatalog, type Condition, type ConditionSet, type EventKind, EVENT_KINDS } from "@chaconne/core/verify";
+import type { ContextService } from "../context/service";
+import type { CrowsnestAdapter } from "../context/crowsnest";
+import type { EventStore } from "../events/store";
+import type { TasksService } from "../tasks/service";
+import type { ThesesService } from "../theses/service";
+import { buildTaskBundle } from "../tasks/bundle";
+import { playbookCatalogView } from "../tasks/playbooks";
+import { rateLimit } from "./auth";
+import type { LaneDHandles } from "../events/earnings/wire";
+import { IMPACT_ACTIONS } from "@chaconne/core/verify";
+import type { BudgetService } from "../budget/service";
+import type { PortfolioService } from "../portfolio/service";
+import type { RebalanceService } from "../rebalance/service";
+import type { NotifyService } from "../notify/service";
+import type { LabService } from "../lab/service";
+/* v6 Lane F */
+import type { RecapsService } from "../recaps/service";
+import { buildMissions } from "../missions/build";
+import { A2MCP_AGENT_TASKS_PATH, createA2mcpAgentTasksHandler, type AgentTasksDeps } from "./a2mcpAgentTasks";
 
 export interface AppDeps {
   cfg: VerifyConfig;
@@ -33,6 +54,26 @@ export interface AppDeps {
   signer?: AttestationSigner | null;
   /** 公开行情（主站消费，interfaces §10.16）；EVIDENCE_MODE=fixture / 无 OKX 凭据时为空 → 503 */
   market?: XLayerMarket | null;
+  /* v6 Lane B */
+  context?: ContextService | null;
+  crowsnest?: CrowsnestAdapter | null;
+  events?: EventStore | null;
+  tasks?: TasksService | null;
+  theses?: ThesesService | null;
+  playbooks?: PlaybookCatalog | null;
+  /* v6 Lane D：个人事件台（AGENT_C6_ENABLED=false 或未装配时为空 → 路由不挂） */
+  laneD?: LaneDHandles | null;
+  /* v6 Lane C（开关 AGENT_C4_ENABLED / AGENT_C8_ENABLED；为空 = 该能力未挂载 → 404） */
+  budget?: BudgetService | null;
+  portfolio?: PortfolioService | null;
+  rebalance?: RebalanceService | null;
+  notify?: NotifyService | null;
+  /* v6 Lane E：决策实验（C9） */
+  lab?: LabService | null;
+  /* v6 Lane F：C5 夜班日志（AGENT_C5_ENABLED=false 时不挂载）；A2MCP Agent Tasks 的可选钩子（Lane D 影响/事件） */
+  recaps?: RecapsService | null;
+  agentHooks?: Pick<AgentTasksDeps, "impacts" | "events">;
+  now?: () => Date;
 }
 
 export function createApp(d: AppDeps) {
@@ -313,6 +354,19 @@ export function createApp(d: AppDeps) {
     app.get("/pub/live", (req, res, next) => { club.liveBoard(Number(req.query["limit"] ?? 50) || 50).then((items) => { res.setHeader("Cache-Control", "public, max-age=30"); res.json({ items }); }).catch(next); });
   }
 
+  /* v6 Lane E ---------- 决策实验（C9）：等待诊断 / 同输入对照 / 决策回放；开关 AGENT_C9_ENABLED ---------- */
+  if (d.lab) {
+    const lab = d.lab;
+    const gate = (_req: Request, res: Response, next: NextFunction) => {
+      if (d.cfg.agentC9Enabled) return next();
+      res.status(503).json({ error: "feature_disabled", feature: "AGENT_C9_ENABLED" });
+    };
+    app.get("/v1/tasks/:id/explain-wait", auth, gate, wrap(async (req, res) => { res.json(await lab.explainWait(callerOf(res), String(req.params["id"]), req.query["locale"])); }));
+    app.post("/v1/tasks/:id/compare-policies", auth, gate, wrap(async (req, res) => { res.status(201).json(await lab.comparePolicies(callerOf(res), String(req.params["id"]), req.body)); }));
+    app.post("/v1/replays", auth, gate, wrap(async (req, res) => { res.status(201).json(await lab.createReplay(callerOf(res), req.body)); }));
+    app.get("/v1/replays/:id", auth, gate, wrap(async (req, res) => { res.json(await lab.getReplay(callerOf(res), String(req.params["id"]))); }));
+  }
+
   /* ---------- 公开行情：主站 poller 每 30s 拉（契约 §10.16；nginx `/pub/` 前缀已分流到本服务） ----------
    * 2026-09-22 扩容到 27 只（执行层 3 档 + 展示层 1 档），一轮约 10 s，故服务端 TTL 60 s、边缘缓存同步放宽。 */
   const unavailable = (res: Response) => {
@@ -337,6 +391,367 @@ export function createApp(d: AppDeps) {
     app.get("/pub/market/xlayer", (_req, res) => unavailable(res));
   }
 
+  /* ================================================================== */
+  /* v6 Lane B：上下文（C1）/ 事件 / 任务（C3）/ 理由卡（C7）——每个能力独立开关，缺省开        */
+  /* ================================================================== */
+  {
+    /** 免费档（D-085）：无 key 只给 agent 档；带合法 key 可指定档位（internal/display 只给受信调用方） */
+    const optionalAuth = (req: Request, res: Response, next: NextFunction) => {
+      const hasKey = !!(req.header("x-api-key") || req.header("authorization"));
+      if (hasKey) {
+        auth(req, res, next);
+        return;
+      }
+      res.setHeader("Cache-Control", "public, max-age=30");
+      if (!rateLimit(`anon:${req.ip ?? "?"}`, d.cfg.RATE_LIMIT_PER_MIN, 60_000)) {
+        res.status(429).json({ error: "rate_limited", retryAfterSeconds: 60 });
+        return;
+      }
+      res.locals["callerId"] = "";
+      next();
+    };
+    if (d.context && d.cfg.agentC1) {
+      const context = d.context;
+      const crowsnest = d.crowsnest;
+      app.get(
+        "/v1/context",
+        optionalAuth,
+        wrap(async (req, res) => {
+          const callerId = String(res.locals["callerId"] ?? "");
+          const requested = req.query["tier"];
+          const tier = callerId && isContextTier(requested) ? requested : "agent";
+          const assetKey = typeof req.query["assetKey"] === "string" ? req.query["assetKey"].toLowerCase() : undefined;
+          let conditions: Condition[] | undefined;
+          let underlyingIds: string[] | undefined;
+          const taskId = typeof req.query["taskId"] === "string" ? req.query["taskId"] : null;
+          if (taskId && d.tasks) {
+            if (!callerId) {
+              res.status(200).json({ ...(await context.view({ tier })), meta: undefined, error: "task_filter_requires_api_key" });
+              return;
+            }
+            const row = await d.tasks.requireTask(callerId, taskId);
+            const set = row.conditionsJson as ConditionSet;
+            conditions = set.items;
+            const goal = row.goalJson as { legs: Array<{ outputAssetKey: string }>; budget: { inputAssetKeys: string[] }; side: string };
+            const stockKey = goal.side === "sell" ? goal.budget.inputAssetKeys[0]! : goal.legs[0]!.outputAssetKey;
+            const u = context.underlyingOf(stockKey);
+            underlyingIds = u ? [u] : [];
+          }
+          if (typeof req.query["owner"] === "string" && d.tasks && callerId) {
+            // owner 过滤：该 owner 运行中任务涉及的标的
+            const rows = await d.tasks.list(callerId, req.query["owner"]);
+            underlyingIds = underlyingIds ?? [];
+            for (const r of rows) {
+              const goal = r.goalJson as { legs: Array<{ outputAssetKey: string }>; budget: { inputAssetKeys: string[] }; side: string };
+              const stockKey = goal.side === "sell" ? goal.budget.inputAssetKeys[0]! : goal.legs[0]!.outputAssetKey;
+              const u = context.underlyingOf(stockKey);
+              if (u && !underlyingIds.includes(u)) underlyingIds.push(u);
+            }
+          }
+          // 永远 200：不可达时字段级 unavailable（interfaces §11.7）
+          res.status(200).json(await context.view({ tier, ...(assetKey ? { assetKey } : {}), ...(underlyingIds ? { underlyingIds } : {}), ...(conditions ? { conditions } : {}) }));
+        }),
+      );
+      // 联调 / 回放投递：把一份 context.json 原文交给适配器（验签、schema、staleness 同 pull 路径）；需要 API key
+      if (crowsnest) {
+        app.post(
+          "/v1/context/ingest",
+          auth,
+          express.text({ type: "*/*", limit: "1mb" }),
+          wrap(async (req, res) => {
+            const raw = typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? {});
+            const mode = req.query["mode"] === "REPLAY" ? "REPLAY" : "LIVE";
+            const r = await crowsnest.ingest(raw, { endpoint: `ingest:${callerOf(res)}`, mode });
+            res.status(r.ok ? 201 : 422).json(r.ok ? { ok: true, snapshotId: r.snapshotId, contextHash: r.contextHash, provenance: r.provenance, fieldStatus: r.fieldStatus, events: r.events } : { ok: false, snapshotId: r.snapshotId, reason: r.reason, detail: r.detail, evidenceId: r.evidence.evidenceId });
+          }),
+        );
+      }
+    }
+    if (d.events && d.cfg.agentC1) {
+      const events = d.events;
+      app.get(
+        "/v1/events",
+        optionalAuth,
+        wrap(async (req, res) => {
+          const kind = typeof req.query["kind"] === "string" && (EVENT_KINDS as readonly string[]).includes(req.query["kind"]) ? (req.query["kind"] as EventKind) : undefined;
+          const list = await events.list({ ...(typeof req.query["from"] === "string" ? { from: req.query["from"] } : {}), ...(typeof req.query["to"] === "string" ? { to: req.query["to"] } : {}), ...(typeof req.query["underlyingId"] === "string" ? { underlyingId: req.query["underlyingId"] } : {}), ...(kind ? { kind } : {}) });
+          res.json({ events: list });
+        }),
+      );
+      app.get(
+        "/v1/events/:id/revisions",
+        optionalAuth,
+        wrap(async (req, res) => {
+          const id = String(req.params["id"]);
+          const revisions = await events.revisions(id);
+          if (revisions.length === 0) throw new HttpError(404, "event_not_found");
+          res.json({ eventId: id, revisions });
+        }),
+      );
+    }
+    if (d.playbooks && d.cfg.agentC3) {
+      const catalog = d.playbooks;
+      app.get("/v1/playbooks", (_req, res) => {
+        res.setHeader("Cache-Control", "public, max-age=300");
+        res.json(playbookCatalogView(catalog));
+      });
+    }
+    if (d.tasks && d.cfg.agentC3) {
+      const tasks = d.tasks;
+      app.post(
+        "/v1/tasks",
+        auth,
+        wrap(async (req, res) => {
+          const r = await tasks.create(callerOf(res), req.body);
+          res.status(r.status).json(r.body);
+        }),
+      );
+      app.get(
+        "/v1/tasks",
+        auth,
+        wrap(async (req, res) => {
+          const owner = typeof req.query["owner"] === "string" ? req.query["owner"] : undefined;
+          const rows = await tasks.list(callerOf(res), owner);
+          res.json({ tasks: await Promise.all(rows.map((r) => tasks.view(r).then((v) => v["task"]))) });
+        }),
+      );
+      app.get(
+        "/v1/tasks/:id",
+        auth,
+        wrap(async (req, res) => {
+          res.json(await tasks.view(await tasks.requireTask(callerOf(res), String(req.params["id"]))));
+        }),
+      );
+      for (const action of ["pause", "resume", "cancel"] as const) {
+        app.post(
+          `/v1/tasks/:id/${action}`,
+          auth,
+          wrap(async (req, res) => {
+            const { row, note } = await tasks.transition(callerOf(res), String(req.params["id"]), action);
+            // D-088：响应体必须写明——服务侧停止只阻止后续签发；已取走且未过期的证书仍可能可执行；彻底停止以链上撤销确认为准
+            res.json({ ...(await tasks.view(row)), note, stopSemantics: STOP_SEMANTICS_NOTE });
+          }),
+        );
+      }
+      app.post(
+        "/v1/tasks/:id/authorize",
+        auth,
+        wrap(async (req, res) => {
+          const r = await tasks.authorize(callerOf(res), String(req.params["id"]), req.body);
+          res.status(201).json({ ...(await tasks.view(r.row)), mandate: r.mandate, mandateId: (r.mandate as { mandateId?: string }).mandateId ?? null });
+        }),
+      );
+      app.post(
+        "/v1/tasks/:id/prepare-step",
+        auth,
+        wrap(async (req, res) => {
+          const r = await tasks.prepareStep(callerOf(res), String(req.params["id"]));
+          res.status(r.httpStatus).json(r.body);
+        }),
+      );
+      app.post(
+        "/v1/tasks/:id/conditions",
+        auth,
+        wrap(async (req, res) => {
+          const row = await tasks.updateConditions(callerOf(res), String(req.params["id"]), req.body);
+          res.json({ ...(await tasks.view(row)), note: "Conditions changed = new authorization. Previous mandates are paused server-side (not revoked): certificates already pulled may still execute until they expire; revoke on-chain to stop completely (K-09)." });
+        }),
+      );
+      app.get(
+        "/v1/tasks/:id/blockers",
+        auth,
+        wrap(async (req, res) => {
+          const row = await tasks.requireTask(callerOf(res), String(req.params["id"]));
+          const history = await tasks.blockerHistory(row.id);
+          res.json({ taskId: row.id, current: row.blockersJson, nextCheckAt: row.nextCheckAt?.toISOString() ?? null, history: history.map((h) => ({ evaluatedAt: h.evaluatedAt.toISOString(), outcome: h.outcome, blockers: h.blockersJson, nextCheckAt: h.nextCheckAt?.toISOString() ?? null })) });
+        }),
+      );
+      app.get(
+        "/v1/tasks/:id/bundle",
+        auth,
+        wrap(async (req, res) => {
+          if (!d.plans || !d.mandates || !d.theses) throw new HttpError(503, "v2_disabled");
+          res.json(await buildTaskBundle({ cfg: d.cfg, registry: d.service.registry, signer: d.signer ?? null, jobs: d.service, mandates: d.mandates, plans: d.plans, orders: d.service["d"].orders, tasks, theses: d.theses }, callerOf(res), String(req.params["id"])));
+        }),
+      );
+    }
+    if (d.theses && d.cfg.agentC7) {
+      const theses = d.theses;
+      app.get(
+        "/v1/theses/:id",
+        auth,
+        wrap(async (req, res) => {
+          res.json(await theses.view(await theses.require(callerOf(res), String(req.params["id"]))));
+        }),
+      );
+      app.post(
+        "/v1/theses",
+        auth,
+        wrap(async (req, res) => {
+          // 独立建卡：必须挂到本调用方的任务上（每任务一张，重复建 → 409）
+          if (!d.tasks) throw new HttpError(503, "tasks_disabled");
+          const b = (req.body ?? {}) as Record<string, unknown>;
+          const taskRow = await d.tasks.requireTask(callerOf(res), String(b["taskId"] ?? ""));
+          if (taskRow.thesisId && (await theses.byId(taskRow.thesisId))) throw new HttpError(409, "thesis_exists", "该任务已有理由卡；用 review-items / premises 更新", { thesisId: taskRow.thesisId });
+          const row = await theses.create({ callerId: callerOf(res), owner: taskRow.ownerAddress, taskId: taskRow.id, mode: taskRow.mode as "LIVE" | "SIMULATION", raw: b });
+          res.status(201).json(await theses.view(row));
+        }),
+      );
+      app.post(
+        "/v1/theses/:id/review-items",
+        auth,
+        wrap(async (req, res) => {
+          const addedBy = (req.body ?? {})["addedBy"] === "agent" ? "agent" : "user";
+          const row = await theses.addReviewItem(callerOf(res), String(req.params["id"]), req.body, addedBy);
+          res.status(201).json({ ...(await theses.view(row)), note: "Review item recorded for the owner to review. This never triggers execution." });
+        }),
+      );
+      app.post(
+        "/v1/theses/:id/premises/:pid",
+        auth,
+        wrap(async (req, res) => {
+          const { row, newlyInvalidated } = await theses.markPremise(callerOf(res), String(req.params["id"]), String(req.params["pid"]), (req.body ?? {})["status"]);
+          // research 前提失效不触发 onInvalidation（它不是机器前提），只记录；卡片状态由机器前提决定
+          res.json({ ...(await theses.view(row)), researchPremiseInvalidated: newlyInvalidated });
+        }),
+      );
+      app.post(
+        "/v1/theses/:id/renew",
+        auth,
+        wrap(async (req, res) => {
+          const row = await theses.renew(callerOf(res), String(req.params["id"]), (req.body ?? {})["validUntil"]);
+          if (d.tasks) {
+            const t = await d.tasks.byId(row.taskId);
+            if (t && t.callerId === callerOf(res)) await d.tasks.evaluateTask(t, { issue: false });
+          }
+          res.json(await theses.view(row));
+        }),
+      );
+      app.post(
+        "/v1/theses/:id/end",
+        auth,
+        wrap(async (req, res) => {
+          const row = await theses.end(callerOf(res), String(req.params["id"]));
+          if (d.tasks) {
+            const t = await d.tasks.byId(row.taskId);
+            if (t && t.callerId === callerOf(res)) await d.tasks.evaluateTask(t, { issue: false });
+          }
+          res.json({ ...(await theses.view(row)), note: "Thesis ended: the task now waits with THESIS_EXPIRED; cancel the task or renew the thesis." });
+        }),
+      );
+      app.post(
+        "/v1/theses/:id/check",
+        auth,
+        wrap(async (req, res) => {
+          if (!d.tasks) throw new HttpError(503, "tasks_disabled");
+          const r = await d.tasks.checkThesis(callerOf(res), String(req.params["id"]));
+          res.json({ thesis: await theses.view(r.thesis), task: (await d.tasks.view(r.task))["task"] });
+        }),
+      );
+    }
+  }
+
+  /* v6 Lane D */
+  if (d.laneD) {
+    const laneD = d.laneD;
+    // owner 鉴权：地址绑定的调用方（web:<addr> / 通配 key）只能查自己；非地址绑定的 API key（agent / 脚本）按参数 owner 查——与 ClubService.ownerOf 同一口径
+    const ownerOf = (callerId: string, given: unknown): string => {
+      const bound = callerId.match(/(0x[0-9a-f]{40})$/)?.[1] ?? null;
+      const g = typeof given === "string" && /^0x[0-9a-fA-F]{40}$/.test(given) ? given.toLowerCase() : null;
+      if (bound) {
+        if (g && g !== bound) throw new HttpError(403, "owner_mismatch", "只能查询与调用方绑定的 owner");
+        return bound;
+      }
+      if (!g) throw new HttpError(400, "owner_required", "需要 owner=<EVM 地址>");
+      return g;
+    };
+    app.get(
+      "/v1/event-impacts",
+      auth,
+      wrap(async (req, res) => {
+        const owner = ownerOf(callerOf(res), req.query["owner"]);
+        const h = req.query["horizonHours"] === undefined ? 48 : Number(req.query["horizonHours"]);
+        if (!Number.isFinite(h) || h <= 0) throw new HttpError(400, "invalid_horizon", "horizonHours 需为正数");
+        res.json(await laneD.impacts.impacts(owner, h));
+      }),
+    );
+    app.post(
+      "/v1/event-impacts/actions",
+      auth,
+      wrap(async (req, res) => {
+        const b = (req.body ?? {}) as Record<string, unknown>;
+        const owner = ownerOf(callerOf(res), b["owner"] ?? b["ownerAddress"]);
+        const action = b["action"];
+        if (typeof action !== "string" || !(IMPACT_ACTIONS as readonly string[]).includes(action)) throw new HttpError(400, "invalid_action", `action 需为 ${IMPACT_ACTIONS.join(" | ")}`);
+        if (typeof b["eventId"] !== "string" || !b["eventId"]) throw new HttpError(400, "event_required", "需要 eventId");
+        const r = await laneD.actions.apply({
+          owner,
+          eventId: b["eventId"],
+          action: action as (typeof IMPACT_ACTIONS)[number],
+          taskId: typeof b["taskId"] === "string" ? b["taskId"] : null,
+          wholeDayIfDayPrecision: b["wholeDayIfDayPrecision"] === true,
+          params: typeof b["params"] === "object" && b["params"] !== null ? (b["params"] as Record<string, unknown>) : undefined,
+          clientRequestId: typeof b["clientRequestId"] === "string" ? b["clientRequestId"] : undefined,
+        });
+        res.status(r.effect === "invalid" ? 400 : r.effect === "not_ready" ? 503 : 200).json(r);
+      }),
+    );
+    app.get(
+      "/v1/events/earnings/coverage",
+      auth,
+      wrap(async (_req, res) => {
+        const stocks = d.service.registry.entries.filter((e) => e.role === "stock_output");
+        const coverage = await laneD.store.coverage([...new Set(stocks.map((e) => e.underlyingId))]);
+        res.json({ source: "finnhub", store: laneD.storeKind, coverage, corporateActions: { status: "not_connected" } });
+      }),
+    );
+    // 运营者 / 脚本触发一轮摄入（地址绑定的网页调用方不可用）；无 Finnhub key → 503
+    app.post(
+      "/v1/events/earnings/ingest",
+      auth,
+      wrap(async (_req, res) => {
+        if (/(0x[0-9a-f]{40})$/.test(callerOf(res))) throw new HttpError(403, "operator_only");
+        if (!laneD.ingestor) throw new HttpError(503, "earnings_source_unavailable", "未配置 FINNHUB_API_KEY");
+        const s = await laneD.ingestor.ingestAll();
+        res.json({ ...s, runs: s.runs.map((r) => ({ symbol: r.symbol, underlyingId: r.underlyingId, httpStatus: r.httpStatus, ok: r.ok, rowCount: r.rowCount, receivedAt: r.receivedAt, eventIds: r.eventIds })) });
+      }),
+    );
+  }
+
+  /* v6 Lane C */
+  if (d.notify) {
+    const notify = d.notify;
+    app.post("/v1/notify/webhooks", auth, wrap(async (req, res) => { res.status(201).json(await notify.registerWebhook(callerOf(res), req.body)); }));
+    app.get("/v1/notify/webhooks/:id", auth, wrap(async (req, res) => { res.json(notify.channelView(await notify.requireChannel(callerOf(res), String(req.params["id"])))); }));
+    app.delete("/v1/notify/webhooks/:id", auth, wrap(async (req, res) => { await notify.deleteChannel(callerOf(res), String(req.params["id"])); res.status(204).end(); }));
+    app.post("/v1/notify/telegram/link", auth, wrap(async (req, res) => { const r = await notify.telegramLink(callerOf(res), req.body); res.status(r.step === "code_issued" ? 201 : 200).json(r); }));
+    app.post("/v1/notify/test", auth, wrap(async (req, res) => { res.json(await notify.sendTest(callerOf(res), req.body)); }));
+    app.post("/v1/mandates/:id/executor/heartbeat", auth, wrap(async (req, res) => { await notify.heartbeat(callerOf(res), String(req.params["id"]), req.body); res.status(204).end(); }));
+    app.get("/v1/mandates/:id/executor", auth, wrap(async (req, res) => { if (d.mandates) await d.mandates.requireMandate(callerOf(res), String(req.params["id"])); res.json(await notify.presence(String(req.params["id"]))); }));
+  }
+  if (d.portfolio) {
+    const portfolio = d.portfolio;
+    app.get("/v1/portfolio/:owner", auth, wrap(async (req, res) => { res.json(await portfolio.view(callerOf(res), String(req.params["owner"]))); }));
+    app.post("/v1/portfolio/:owner/cost-overrides", auth, wrap(async (req, res) => { res.status(201).json(await portfolio.addCostOverride(callerOf(res), String(req.params["owner"]), req.body)); }));
+  }
+  if (d.budget) {
+    const budget = d.budget;
+    app.post("/v1/budget-groups", auth, wrap(async (req, res) => { res.status(201).json(await budget.create(callerOf(res), req.body)); }));
+    app.get("/v1/budget-groups/:id", auth, wrap(async (req, res) => { res.json(await budget.view(callerOf(res), String(req.params["id"]))); }));
+    app.post("/v1/budget-groups/:id/allocations", auth, wrap(async (req, res) => { const r = await budget.allocate(callerOf(res), String(req.params["id"]), req.body); res.status(r.status).json(r.body); }));
+  }
+  if (d.rebalance) {
+    const rebalance = d.rebalance;
+    app.post("/v1/rebalance/preview", auth, wrap(async (req, res) => { res.json(await rebalance.preview(callerOf(res), req.body)); }));
+    app.post("/v1/rebalance/plans", auth, wrap(async (req, res) => { const r = await rebalance.createPlan(callerOf(res), req.body); res.status(r.status).json(r.body); }));
+    app.get("/v1/rebalance/plans/:id", auth, wrap(async (req, res) => { res.json(await rebalance.view(callerOf(res), String(req.params["id"]))); }));
+    app.post("/v1/rebalance/plans/:id/legs/:n/authorize", auth, wrap(async (req, res) => {
+      const n = Number(req.params["n"]);
+      if (!Number.isInteger(n) || n < 0) throw new HttpError(400, "invalid_leg_index");
+      res.status(201).json(await rebalance.authorizeLeg(callerOf(res), String(req.params["id"]), n, req.body));
+    }));
+  }
+
   /* ---------- OKX AI A2MCP 第二服务 Plan & Monitor（D-083） ---------- */
   if (d.plans && d.mandates) {
     const planHandler = createA2mcpPlanHandler({ cfg: d.cfg, plans: d.plans, paywall: d.paywall });
@@ -346,6 +761,44 @@ export function createApp(d: AppDeps) {
     app.post(A2MCP_MONITOR_PATH, wrap(mon.register));
     app.get(A2MCP_MONITOR_PATH, wrap(mon.register));
     app.get(`${A2MCP_MONITOR_PATH}/:id`, wrap(mon.status));
+  }
+
+  /* v6 Lane F */
+  const c5 = d.cfg.AGENT_C5_ENABLED === "true";
+  if (c5 && d.recaps) {
+    const recaps = d.recaps;
+    app.get(
+      "/v1/recaps",
+      auth,
+      wrap(async (req, res) => {
+        const owner = typeof req.query["owner"] === "string" ? req.query["owner"] : "";
+        const date = typeof req.query["date"] === "string" ? req.query["date"] : undefined;
+        res.json(await recaps.forOwner(callerOf(res), owner, date, req.query["refresh"] === "1"));
+      }),
+    );
+    app.get("/v1/recaps/:id", auth, wrap(async (req, res) => { res.json(await recaps.byId(callerOf(res), String(req.params["id"]))); }));
+    app.post("/v1/recaps/:id/share", auth, wrap(async (req, res) => { res.json({ recapId: String(req.params["id"]), share: await recaps.setShare(callerOf(res), String(req.params["id"]), req.body) }); }));
+    app.get("/pub/recaps/:shareId", (req, res, next) => { recaps.publicView(String(req.params["shareId"])).then((v) => { res.setHeader("Cache-Control", "public, max-age=30"); res.json(v); }).catch(next); });
+  }
+  if (c5) {
+    // Missions：事件日历 × 资产覆盖；事件源未接上 → 标注日期的回放任务
+    app.get(
+      "/v1/missions",
+      auth,
+      wrap(async (req, res) => {
+        const now = (d.now ?? (() => new Date()))();
+        const horizonDays = Math.min(14, Math.max(1, Number(req.query["horizonDays"] ?? 14) || 14));
+        const events = d.agentHooks?.events ? await d.agentHooks.events(new Date(now.getTime() - 6 * 3600_000), new Date(now.getTime() + horizonDays * 86_400_000)) : null;
+        const focus = typeof req.query["assetKey"] === "string" ? [req.query["assetKey"]] : [];
+        const assets = d.service.registry.entries.filter((e) => e.role === "stock_output").map((e) => ({ assetKey: e.assetKey, displaySymbol: e.displaySymbol, underlyingId: e.underlyingId, executionAllowed: e.executionAllowed }));
+        res.json({ generatedAt: now.toISOString(), eventsCoverage: events ? "ok" : "unavailable", missions: buildMissions({ now, events, assets, focus, horizonDays }) });
+      }),
+    );
+  }
+  {
+    const h = createA2mcpAgentTasksHandler({ cfg: d.cfg, registry: d.service.registry, now: d.now, ...(d.agentHooks ?? {}) });
+    app.post(A2MCP_AGENT_TASKS_PATH, wrap(h));
+    app.get(A2MCP_AGENT_TASKS_PATH, wrap(h));
   }
 
   /* ---------- OKX AI A2MCP 单端点（平台调用，不带本服务 API key） ---------- */

@@ -318,7 +318,11 @@ export type EvidencePayload =
   | RefCloseEvidence
   | StablecoinUsdEvidence
   | TokenMetaEvidence
-  | RegistryLookupEvidence;
+  | RegistryLookupEvidence
+  /* v6 (CV-D 2026-09-23) */
+  | MarketContextEvidence
+  | MarketEventEvidence
+  | PortfolioSnapshotEvidence;
 
 export type EvidenceMode = "LIVE" | "REPLAY" | "FIXTURE" | "FORK" | "SIMULATION";
 
@@ -375,6 +379,35 @@ export const REASON_CODES = [
   "CLOSE_UNCONFIRMED",
   /** v2 (I2 2026-09-21)：本步已提交、等待链上确认后才推进下一步（info，不是失败） */
   "STEP_AWAITING_CONFIRMATION",
+  /* ---- v6 (I 2026-09-23 冻结)：条件层原因码，全部 non-HARD → 任务进 WAITING；证据不足一律等待 ---- */
+  "CONTEXT_UNAVAILABLE",
+  "CONTEXT_STALE",
+  "CONTEXT_FIELD_NOT_IN_TIER",
+  "EVENT_WINDOW_ACTIVE",
+  "EVENT_DATE_UNCERTAIN",
+  "EARNINGS_WINDOW_ACTIVE",
+  "EARNINGS_COVERAGE_UNKNOWN",
+  /** 仅当用户显式加入 not_in_fed_blackout 条件时才会出现（模板默认不加） */
+  "FED_BLACKOUT",
+  "VOL_REGIME_EXCEEDED",
+  "SESSION_RULE_BLOCK",
+  "CROSS_ASSET_UNCONFIRMED",
+  "STEP_GAP_NOT_ELAPSED",
+  "DAILY_STEP_CAP_REACHED",
+  "PREMIUM_CONDITION_NOT_MET",
+  "TARGET_NOT_REACHED",
+  "TRACKED_COST_UNKNOWN",
+  "CASH_FLOOR_BLOCK",
+  "BUDGET_GROUP_CONFLICT",
+  "BUDGET_GROUP_EXHAUSTED",
+  "BUDGET_PENDING_OCCUPIED",
+  "THESIS_INVALIDATED",
+  "THESIS_UNKNOWN",
+  "THESIS_EXPIRED",
+  /** 信息项：执行器离线不阻塞签发，只影响页面「谁来执行」的提示 */
+  "EXECUTOR_OFFLINE",
+  /** 信息项：浏览器钱包路径等待用户签名 */
+  "AWAITING_USER_SIGNATURE",
 ] as const;
 export type ReasonCode = (typeof REASON_CODES)[number];
 
@@ -738,3 +771,309 @@ export interface Profile {
 }
 export type ShareStatus = "completed" | "partial" | "waiting" | "rejected" | "simulation";
 export type SharePrivacy = { amounts: "exact" | "range" | "hidden"; wallet: "hidden" };
+
+/* ================================================================== */
+/* v6 增补（Chaconne Agent，2026-09-23 冻结；Lane I）                    */
+/* 产品语义以上游 v6 文档 §6 为准；改动走 CV-D。金额十进制字符串；          */
+/* 链下时间 ISO-8601 UTC；哈希 keccak256（canonical `canon-1`）。        */
+/* ================================================================== */
+
+/* ---------- §1.1 事件契约（C6 的根） ---------- */
+export const EVENT_KINDS = ["MACRO_TIER1", "MACRO_TIER2", "FED_SPEECH", "FED_BLACKOUT", "EARNINGS", "CORPORATE_ACTION", "MARKET_HOLIDAY", "EARLY_CLOSE"] as const;
+export type EventKind = (typeof EVENT_KINDS)[number];
+export type EventStatus = "confirmed" | "estimated" | "revised" | "cancelled" | "released";
+export type EventDatePrecision = "exact" | "day" | "estimate";
+/** 财报时段：盘前 / 盘后 / 盘中；未知 null */
+export type EventSessionHint = "bmo" | "amc" | "dmh" | null;
+export interface MarketEvent {
+  /** 稳定：`${source}:${kind}:${YYYY-MM-DD}:${slug}`；改期不换 id，revision+1 */
+  id: string;
+  kind: EventKind;
+  name: string;
+  /** EARNINGS / CORPORATE_ACTION 必填；宏观为空数组 */
+  underlyingIds: string[];
+  /** datePrecision='exact' 时必填 */
+  scheduledAtUtc: IsoUtc | null;
+  /** YYYY-MM-DD（来源市场当地） */
+  dateLocal: string;
+  datePrecision: EventDatePrecision;
+  sessionHint: EventSessionHint;
+  status: EventStatus;
+  revision: number;
+  revisedFrom?: { scheduledAtUtc: IsoUtc | null; dateLocal: string };
+  source: string;
+  sourceFetchedAt: IsoUtc;
+  /** 首次可知时刻——回放只用 firstKnownAt ≤ t 的版本（无前视） */
+  firstKnownAt: IsoUtc;
+  releasedAt?: IsoUtc;
+  /** IANA 时区，如 'America/New_York' */
+  tz: string;
+}
+
+/* ---------- §1.2 上下文契约（C1） ---------- */
+export type CtxPurpose = "internal" | "display" | "agent" | "paid";
+/** unfinished = 标签时间晚于打包时刻的未完成区间（如日线未收），不得当已发生观测 */
+export type CtxStatus = "ok" | "stale" | "unavailable" | "unfinished";
+/**
+ * CV-D12（2026-09-23，Lane I 裁决）：canonical `canon-1` 只允许安全整数，浮点数无法进入签名。
+ * 因此**数值型上下文字段的 value 一律为十进制字符串**（`DecimalString`，如 "18.3"、"4.96"），
+ * 与仓库「所有金额十进制字符串」的惯例一致（复用第 24 行既有 `DecimalString`）。消费方按需解析，不得假设是 number。
+ */
+export interface CtxField<T> {
+  value: T | null;
+  source: string;
+  /** 观测/统计期时点（定盘日、K 线收盘）；与 fetchedAt（哨兵抓取）、packagedAt（打包）严格区分 */
+  observedAt: IsoUtc | null;
+  fetchedAt: IsoUtc;
+  status: CtxStatus;
+  purposes: CtxPurpose[];
+  note?: string;
+}
+export type SessionLabel = "ASIA" | "EU_OPEN" | "US_PRE" | "US_REGULAR" | "US_POST";
+export type CrossAssetState = "relief" | "transmission" | "divergence" | "undecided";
+export interface MarketContext {
+  schemaVersion: "chaconne-context/1";
+  producer: "crowsnest";
+  packagedAt: IsoUtc;
+  /** Ed25519 签名，覆盖 canonical(除 signature 外) */
+  signature: string;
+  signatureAlg: "ed25519";
+  publicKeyId: string;
+  session: {
+    label: CtxField<SessionLabel>;
+    usTradingDay: CtxField<boolean>;
+    holiday: CtxField<string | null>;
+    earlyClose: CtxField<boolean>;
+    hoursToUsOpen: CtxField<DecimalString>;
+    hoursToUsClose: CtxField<DecimalString>;
+    etDate: CtxField<string>;
+  };
+  /** 未来 14 天 + 过去 2 天，宏观与联储层 */
+  events: MarketEvent[];
+  fed: { blackout: CtxField<boolean>; blackoutUntil: CtxField<IsoUtc | null>; hikeProb: CtxField<DecimalString>; hikeProbDrift24hPp: CtxField<DecimalString> };
+  rates: { y2: CtxField<DecimalString>; y10: CtxField<DecimalString>; y30: CtxField<DecimalString>; s2s30Bp: CtxField<DecimalString>; curveShape: CtxField<string | null>; realYield10: CtxField<DecimalString>; move: CtxField<DecimalString> };
+  risk: { vix: CtxField<DecimalString>; nqOvernightPct: CtxField<DecimalString>; esOvernightPct: CtxField<DecimalString>; dxy: CtxField<DecimalString>; dxyPct1d: CtxField<DecimalString> };
+  crossAsset: { lastDataRelease: CtxField<{ eventId: string; state: CrossAssetState; atUtc: IsoUtc } | null> };
+  driftVerdict: CtxField<string>;
+  /** CV-D13：产物来源模式，防归档/回填冒充实时——`live` 才可参与 LIVE 判定；`backfill`/`sample` 只能用于回放与联调 */
+  provenance?: { mode: "live" | "backfill" | "sample" };
+}
+/** 按调用方档位裁剪后的上下文：字段不在档位 → 整个字段 `{status:'unavailable', note:'not_in_tier'}`，绝不省略键 */
+export type ContextTier = "internal" | "display" | "agent" | "paid";
+
+/* ---------- §1.3 条件 DSL（C2）与三态 ---------- */
+export type ConditionOutcome = "SATISFIED" | "UNSATISFIED" | "INSUFFICIENT_EVIDENCE";
+/** referenceKind 复用第 210 行既有的 ReferenceKind（live | official_close | close_last_tick） */
+export type Condition =
+  | { type: "session"; allow: Array<"US_REGULAR" | "US_PRE" | "US_POST"> }
+  | { type: "avoid_event_window"; kinds: EventKind[]; beforeMin: number; afterMin: number; includeEstimated: boolean; wholeDayIfDayPrecision: boolean }
+  | { type: "earnings_window"; beforeTradingDays: number; afterSessions: number; requireRegularSessionAfter: boolean; requireLiveReferenceAfter: boolean }
+  /** 默认不加入任何模板 */
+  | { type: "not_in_fed_blackout" }
+  | { type: "max_vix"; value: number }
+  | { type: "max_move"; value: number }
+  /** LIVE 执行条件只允许 referenceKind='live'；官方收盘/最后成交口径只用于 SIMULATION/观察 */
+  | { type: "premium_bps_lte"; value: number; referenceKind: ReferenceKind; liveOnlyForExecution: true }
+  /** 以上一步「确认」的交易日计 */
+  | { type: "min_gap_trading_days"; days: number }
+  | { type: "max_steps_per_trading_day"; value: number; scope: "task" | "budget_group" }
+  /** 不含 undecided */
+  | { type: "require_cross_asset_confirmation"; acceptStates: Array<Exclude<CrossAssetState, "undecided">> }
+  | { type: "target_price_gte"; underlyingPriceUsd: string; referenceKind: "live" }
+  | { type: "target_price_lte"; underlyingPriceUsd: string; referenceKind: "live" }
+  /** 成本覆盖率 < 100% → INSUFFICIENT_EVIDENCE（TRACKED_COST_UNKNOWN） */
+  | { type: "tracked_cost_pnl_pct_gte"; value: number }
+  | { type: "cash_floor"; inputAssetKey: string; floorRaw: RawAmount }
+  /** 理由卡任一机器前提失效/未知 → 不通过 */
+  | { type: "thesis_holds"; thesisId: string };
+export type ConditionType = Condition["type"];
+export interface ConditionSet {
+  version: "conditions/1";
+  items: Condition[];
+  /** keccak256(canonical({version, items}))；进入 effectivePolicyHash 的展开参数 → 进证书与证据包 */
+  hash: Bytes32;
+}
+export interface ConditionItemResult {
+  item: Condition;
+  outcome: ConditionOutcome;
+  reasons: Reason[];
+  evidenceIds: string[];
+  /** 已知恢复点；未知写 null */
+  nextCheckAt: IsoUtc | null;
+}
+export interface ConditionEvaluation {
+  outcome: ConditionOutcome;
+  perItem: ConditionItemResult[];
+  /** 各项 nextCheckAt 的最小值；全部未知 → null */
+  nextCheckAt: IsoUtc | null;
+  evaluatedAt: IsoUtc;
+  conditionsHash: Bytes32;
+}
+
+/* ---------- §1.4 任务、理由卡、资金组、影响、对照、回放 ---------- */
+export const TASK_STATUSES = ["DRAFT", "AWAITING_AUTHORIZATION", "ACTIVE", "WAITING", "STEP_PREPARED", "PARTIAL", "COMPLETED", "PAUSED", "REVOKE_PENDING", "REVOKED", "EXPIRED", "CANCELLED"] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+/** online = 3 分钟内有心跳；awaiting_signature = 浏览器钱包路径；offline = 都没有 */
+export type ExecutorPresence = "online" | "awaiting_signature" | "offline";
+export const PLAYBOOK_IDS = ["session_dca", "event_aware_accumulate", "discount_watch", "target_sell", "portfolio_rebalance"] as const;
+export type PlaybookId = (typeof PLAYBOOK_IDS)[number];
+export interface Blocker {
+  code: ReasonCode;
+  evidenceIds: string[];
+  evidenceAt: IsoUtc | null;
+  nextCheckAt: IsoUtc | null;
+  userActionRequired: boolean;
+  /** 由原因码映射的说明文案，不生成预测 */
+  text: string;
+}
+export interface Task {
+  id: string;
+  owner: EvmAddress;
+  playbookId: PlaybookId;
+  goal: PlanGoal;
+  conditions: ConditionSet;
+  mandateIds: string[];
+  thesisId?: string;
+  budgetGroupId?: string;
+  status: TaskStatus;
+  /** 全量阻塞项（不止第一个） */
+  blockers: Blocker[];
+  nextCheckAt: IsoUtc | null;
+  executorPresence: ExecutorPresence;
+  createdAt: IsoUtc;
+  updatedAt: IsoUtc;
+}
+
+export type PremiseKind = "machine" | "research";
+export type PremiseStatus = "holds" | "invalidated" | "unknown";
+export interface PremiseReviewItem { side: "support" | "counter"; text: string; sourceUrl: string; addedBy: "agent" | "user"; at: IsoUtc }
+export interface Premise {
+  id: string;
+  kind: PremiseKind;
+  text: string;
+  /** machine 前提 = Condition 求值三态；research 前提只收 reviewItems 并保持 unknown 直到用户标记 */
+  condition?: Condition;
+  status: PremiseStatus;
+  lastCheckedAt: IsoUtc | null;
+  evidenceIds: string[];
+  reviewItems?: PremiseReviewItem[];
+}
+export type ThesisOnInvalidation = "notify" | "pause_issuance" | "draft_exit";
+export type ThesisStatus = "holds" | "invalidated" | "unknown" | "expired";
+export interface ThesisCard {
+  id: string;
+  taskId: string;
+  goal: string;
+  rationale: string;
+  premises: Premise[];
+  validUntil: IsoUtc;
+  onInvalidation: ThesisOnInvalidation;
+  status: ThesisStatus;
+}
+
+export interface BudgetGroup {
+  id: string;
+  owner: EvmAddress;
+  name: string;
+  inputAssetKey: string;
+  periodStart: IsoUtc;
+  periodEnd: IsoUtc;
+  capRaw: RawAmount;
+  cashFloorRaw: RawAmount;
+  priorityRule: "priority_then_created";
+}
+export type BudgetAllocationState = "reserved" | "waiting" | "released" | "settled";
+/** 不变量：spentThisPeriod + Σ reservedRaw(可执行授权) ≤ capRaw；pendingRaw 计入 reserved 内不重复 */
+export interface BudgetAllocation {
+  groupId: string;
+  taskId: string;
+  mandateId: string;
+  priority: number;
+  reservedRaw: RawAmount;
+  spentRaw: RawAmount;
+  pendingRaw: RawAmount;
+  state: BudgetAllocationState;
+}
+
+export type ImpactRelation = "company_direct" | "user_rule" | "macro_research";
+export type ImpactEffect = "wait" | "pause_issuance" | "recheck" | "none";
+export const IMPACT_ACTIONS = ["view_evidence", "create_watch_task", "keep_plan", "wait_by_rule", "pause_issuance", "preview_new_plan"] as const;
+export type ImpactAction = (typeof IMPACT_ACTIONS)[number];
+export interface EventImpact {
+  eventId: string;
+  relation: ImpactRelation;
+  assets: string[];
+  holdings: Array<{ assetKey: string; balanceRaw: RawAmount }>;
+  tasks: Array<{ taskId: string; matchedRules: string[]; effect: ImpactEffect }>;
+  actions: ImpactAction[];
+}
+
+export interface PolicyComparisonVariant { label: string; conditions: ConditionSet; outcome: ConditionOutcome; perItem: ConditionItemResult[] }
+export interface PolicyComparison {
+  id: string;
+  taskId: string;
+  /** 固定同一证据快照（最近一次评估的证据集合 + 上下文快照 + 事件版本） */
+  evidenceSnapshotId: string;
+  variants: PolicyComparisonVariant[];
+  diff: Array<{ itemType: ConditionType; a: unknown; b: unknown }>;
+  mode: "SIMULATION";
+}
+export type ReplayGapReason = "NO_ARCHIVE" | "NO_QUOTE" | "REFERENCE_PURGED";
+export interface ReplayRun {
+  id: string;
+  playbookId: PlaybookId;
+  conditions: ConditionSet;
+  assetKey: string;
+  from: IsoUtc;
+  to: IsoUtc;
+  /** 每个评估点只用 receivedAt/packagedAt/firstKnownAt ≤ t 的数据（knownAsOf 记录用到的最晚可知时刻） */
+  points: Array<{ t: IsoUtc; outcome: ConditionOutcome; blockers: Blocker[]; knownAsOf: IsoUtc }>;
+  coverage: Array<{ from: IsoUtc; to: IsoUtc; sources: string[] }>;
+  gaps: Array<{ from: IsoUtc; to: IsoUtc; reason: ReplayGapReason }>;
+}
+
+/* ---------- §1.9 通知事件 ---------- */
+export const NOTIFICATION_TYPES = ["task.status_changed", "task.step_ready", "task.step_confirmed", "task.step_reverted", "task.blocked", "event.revised", "event.released", "thesis.invalidated", "thesis.unknown", "budget.conflict", "budget.released", "task.expiring", "recap.ready"] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+/** 载荷只含 id、类型、版本、摘要与链接；不含任何签名、证书、calldata（D-087：通知不携带权限） */
+export interface NotificationPayload {
+  type: NotificationType;
+  entityId: string;
+  version: number;
+  /** 幂等键 `${type}:${entityId}:${version}` */
+  idempotencyKey: string;
+  summary: string;
+  url: string;
+  at: IsoUtc;
+}
+
+/* ---------- CV-D 新增证据 payload ---------- */
+export interface MarketContextEvidence {
+  kind: "market_context";
+  schemaVersion: "chaconne-context/1";
+  producer: "crowsnest";
+  packagedAt: IsoUtc;
+  publicKeyId: string;
+  /** 验签结果与逐字段 staleness 由 verify-service 判定，不信 producer 自报 */
+  signatureValid: boolean;
+  contextHash: Bytes32;
+  fieldStatus: Record<string, CtxStatus>;
+}
+export interface MarketEventEvidence {
+  kind: "market_event";
+  eventId: string;
+  eventKind: EventKind;
+  revision: number;
+  status: EventStatus;
+  datePrecision: EventDatePrecision;
+  scheduledAtUtc: IsoUtc | null;
+  dateLocal: string;
+  firstKnownAt: IsoUtc;
+}
+export interface PortfolioSnapshotEvidence {
+  kind: "portfolio_snapshot";
+  owner: EvmAddress;
+  chainId: number;
+  blockNumber: number;
+  holdings: Array<{ assetKey: string; balanceRaw: RawAmount; tracedQtyRaw: RawAmount | null }>;
+}

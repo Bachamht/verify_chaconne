@@ -10,6 +10,8 @@ export interface FakeOptions {
   network?: string;
   payTo?: string;
   asset?: string;
+  /** v6 端点（tasks/context/events/…）；false = 全部 404，用于测「尚未就绪」路径 */
+  v6?: boolean;
 }
 export interface Seen {
   method: string;
@@ -21,7 +23,7 @@ export interface Seen {
 const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64");
 const fromB64 = (s: string) => JSON.parse(Buffer.from(s, "base64").toString("utf8")) as Record<string, unknown>;
 
-export async function startFakeService(opts: FakeOptions = {}): Promise<{ url: string; seen: Seen[]; settled: unknown[]; close: () => Promise<void>; server: Server }> {
+export async function startFakeService(opts: FakeOptions = {}): Promise<{ url: string; seen: Seen[]; settled: unknown[]; heartbeats: Array<{ mandateId: string; at: number }>; close: () => Promise<void>; server: Server }> {
   const priceUsd = opts.priceUsd ?? "0";
   const network = opts.network ?? "eip155:1952";
   const payTo = opts.payTo ?? "0x5e7914a9fb0243d22d863107b994d58f6043e1bc";
@@ -32,6 +34,11 @@ export async function startFakeService(opts: FakeOptions = {}): Promise<{ url: s
   const jobs = new Map<string, Record<string, unknown>>();
   const mandates = new Map<string, Record<string, unknown>>();
   const paidJobs = new Set<string>();
+  const v6 = opts.v6 ?? true;
+  const tasks = new Map<string, Record<string, unknown>>();
+  const drafts = new Map<string, Record<string, unknown>>();
+  const heartbeats: Array<{ mandateId: string; at: number }> = [];
+  const theses = new Map<string, Record<string, unknown>>();
 
   const readBody = (req: IncomingMessage) =>
     new Promise<unknown>((resolve) => {
@@ -159,6 +166,85 @@ export async function startFakeService(opts: FakeOptions = {}): Promise<{ url: s
     if (path === "/v1/shares" && method === "POST") return json(201, { shareId: "sh_1", url: "/r/sh_1", public: false });
     m = /^\/pub\/reports\/([^/?]+)$/.exec(path);
     if (m) return json(200, { shareId: m[1], status: "completed" });
+    /* ---------- v6（interfaces §11.7）：契约形状的最小假实现 ---------- */
+    if (v6) {
+      const ctxField = (value: unknown, status = "ok") => ({ value, source: "crowsnest", observedAt: "2026-09-18T15:00:00Z", fetchedAt: "2026-09-18T15:00:10Z", status, purposes: ["agent"] });
+      if (path.startsWith("/v1/context")) return json(200, { schemaVersion: "chaconne-context/1", producer: "crowsnest", packagedAt: "2026-09-18T15:00:10Z", session: { label: ctxField("US_REGULAR"), usTradingDay: ctxField(true) }, events: [], fed: { blackout: ctxField(false) }, risk: { vix: { value: null, source: "yahoo", observedAt: null, fetchedAt: "2026-09-18T15:00:10Z", status: "unavailable", purposes: ["internal"], note: "not_in_tier" } }, driftVerdict: ctxField("neutral") });
+      if (/^\/v1\/events\/[^/]+\/revisions/.test(path)) return json(200, { revisions: [] });
+      if (path.startsWith("/v1/events")) return json(200, { events: [{ id: "crowsnest:MACRO_TIER1:2026-09-22:cpi", kind: "MACRO_TIER1", name: "CPI", underlyingIds: [], scheduledAtUtc: "2026-09-22T12:30:00Z", dateLocal: "2026-09-22", datePrecision: "exact", sessionHint: null, status: "confirmed", revision: 1, source: "crowsnest", sourceFetchedAt: "2026-09-18T00:00:00Z", firstKnownAt: "2026-09-01T00:00:00Z", tz: "America/New_York" }] });
+      if (path.startsWith("/v1/event-impacts")) return json(200, { impacts: [{ eventId: "crowsnest:MACRO_TIER1:2026-09-22:cpi", relation: "macro_research", assets: [], holdings: [], tasks: [], actions: ["view_evidence", "create_watch_task"] }] });
+      if (path === "/v1/tasks" && method === "POST") {
+        const b = body as Record<string, unknown>;
+        const id = `tsk_${String(b["clientRequestId"])}`;
+        const mode = b["mode"] === "LIVE" ? "LIVE" : "SIMULATION";
+        const task = { id, owner: String(b["ownerAddress"]).toLowerCase(), playbookId: b["playbookId"], goal: { side: "buy", legs: [], budget: { inputAssetKeys: [] } }, conditions: { ...(b["conditions"] as object), hash: "0x" + "c1".repeat(32) }, mandateIds: [], status: mode === "LIVE" ? "AWAITING_AUTHORIZATION" : "WAITING", blockers: [{ code: "EVENT_WINDOW_ACTIVE", evidenceIds: ["ev_1"], evidenceAt: "2026-09-18T15:00:00Z", nextCheckAt: "2026-09-22T13:30:00Z", userActionRequired: false, text: "inside an event window" }], nextCheckAt: "2026-09-22T13:30:00Z", executorPresence: "offline", createdAt: "2026-09-18T15:00:00Z", updatedAt: "2026-09-18T15:00:00Z" };
+        tasks.set(id, task);
+        const mandateDraft = { typedData: { domain: { name: "ChaconneVerifyPlanGuard", version: "1", chainId: 196, verifyingContract: "0x" + "55".repeat(20) }, types: {}, primaryType: "TradeMandate", message: { owner: task.owner, recipient: task.owner, inputToken: "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8", outputSetHash: "0x" + "22".repeat(32), budgetCap: "15000000", perStepCap: "5000000", maxSteps: "3", policyDefinitionHash: "0x" + "11".repeat(32), effectivePolicyHash: "0x" + "12".repeat(32), registryHash: "0x" + "13".repeat(32), validFrom: "1", deadline: "9999999999", nonce: "9" } }, outputSet: ["0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"] };
+        drafts.set(id, mandateDraft);
+        return json(201, { task, mandateDraft, thesisDraft: null, budgetAllocation: null });
+      }
+      if (path.startsWith("/v1/tasks?")) return json(200, { tasks: [...tasks.values()] });
+      m = /^\/v1\/tasks\/([^/?]+)\/(pause|resume|cancel|authorize|prepare-step|explain-wait|compare-policies)$/.exec(path);
+      if (m) {
+        const t = tasks.get(m[1]!);
+        if (!t) return json(404, { error: "task_not_found" });
+        const a = m[2]!;
+        if (a === "pause" || a === "resume" || a === "cancel") {
+          t["status"] = a === "pause" ? "PAUSED" : a === "resume" ? "ACTIVE" : "CANCELLED";
+          return json(200, { task: t, note: "Service-side stop only blocks new certificates; an already-issued, unexpired certificate may still execute. A hard stop is the on-chain revokeMandate confirmation." });
+        }
+        if (a === "authorize") {
+          const b = body as { signature?: string };
+          if (!b.signature) return json(422, { error: "signature_required" });
+          const mid = `mnd_task_${m[1]}`;
+          mandates.set(mid, { mandateId: mid, state: "ACTIVE", mandate: {}, spent: "0", stepsDone: 0, maxSteps: 3, nextStepIndex: 0, steps: [] });
+          (t["mandateIds"] as string[]).push(mid);
+          t["status"] = "ACTIVE";
+          return json(201, { task: t, mandateId: mid });
+        }
+        if (a === "prepare-step") return json(409, { status: "WAIT", blockers: t["blockers"], nextCheckAt: t["nextCheckAt"] });
+        if (a === "explain-wait") return json(200, { taskId: m[1], blockers: t["blockers"], nextCheckAt: t["nextCheckAt"], userActionRequired: false, evidenceAt: "2026-09-18T15:00:00Z" });
+        if (a === "compare-policies") return json(201, { id: "cmp_1", taskId: m[1], evidenceSnapshotId: "snap_1", variants: ((body as { variants?: unknown[] }).variants ?? []).map((v) => ({ ...(v as object), outcome: "INSUFFICIENT_EVIDENCE", perItem: [] })), diff: [], mode: "SIMULATION" });
+      }
+      m = /^\/v1\/tasks\/([^/?]+)$/.exec(path);
+      if (m) return tasks.has(m[1]!) ? json(200, { task: tasks.get(m[1]!), mandateDraft: (tasks.get(m[1]!)!["mandateIds"] as string[]).length ? null : (drafts.get(m[1]!) ?? null) }) : json(404, { error: "task_not_found" });
+      m = /^\/v1\/mandates\/([^/?]+)\/executor\/heartbeat$/.exec(path);
+      if (m && method === "POST") {
+        heartbeats.push({ mandateId: m[1]!, at: Date.now() });
+        res.writeHead(204);
+        return res.end();
+      }
+      if (path === "/v1/theses" && method === "POST") {
+        const id = `ths_${theses.size + 1}`;
+        theses.set(id, { id, ...(body as object), status: "unknown" });
+        return json(201, theses.get(id));
+      }
+      m = /^\/v1\/theses\/([^/?]+)(\/review-items)?$/.exec(path);
+      if (m) return theses.has(m[1]!) ? json(m[2] ? 201 : 200, m[2] ? { thesisId: m[1], item: body } : theses.get(m[1]!)) : json(404, { error: "thesis_not_found" });
+      if (path === "/v1/budget-groups" && method === "POST") return json(201, { id: "bg_1", ...(body as object), priorityRule: "priority_then_created" });
+      m = /^\/v1\/budget-groups\/([^/?]+)(\/allocations)?$/.exec(path);
+      if (m) return json(m[2] ? 201 : 200, m[2] ? { groupId: m[1], state: "reserved", ...(body as object) } : { id: m[1], capRaw: "100000000", cashFloorRaw: "5000000", allocations: [] });
+      m = /^\/v1\/portfolio\/([^/?]+)(\/cost-overrides)?$/.exec(path);
+      if (m) return json(m[2] ? 201 : 200, m[2] ? { owner: m[1], override: body, source: "user_reported" } : { owner: m[1], chainId: 196, blockNumber: 1, holdings: [] });
+      if (path === "/v1/notify/webhooks" && method === "POST") return json(201, { id: "wh_1", url: (body as { url?: string }).url });
+      m = /^\/v1\/notify\/webhooks\/([^/?]+)$/.exec(path);
+      if (m) return method === "DELETE" ? (res.writeHead(204), res.end()) : json(200, { id: m[1] });
+      if (path === "/v1/notify/telegram/link") return json(201, { code: "TG-1234", expiresAt: "2026-09-18T16:00:00Z" });
+      if (path === "/v1/notify/test") return json(200, { ok: true });
+      if (path === "/v1/replays" && method === "POST") return json(201, { id: "rpl_1", ...(body as object), points: [], coverage: [], gaps: [{ from: "2026-09-17T00:00:00Z", to: "2026-09-17T23:59:59Z", reason: "NO_ARCHIVE" }] });
+      m = /^\/v1\/replays\/([^/?]+)$/.exec(path);
+      if (m) return json(200, { id: m[1], points: [], coverage: [], gaps: [] });
+      if (path === "/v1/rebalance/preview") return json(200, { legs: [], partialAllowed: true });
+      if (path === "/v1/rebalance/plans" && method === "POST") return json(201, { id: "rbp_1", legs: [] });
+      m = /^\/v1\/rebalance\/plans\/([^/?]+)$/.exec(path);
+      if (m) return json(200, { id: m[1], legs: [] });
+      if (path.startsWith("/v1/recaps?")) return json(200, { id: "rcp_1", owner: "0x", date: "2026-09-17", modes: ["SIMULATION"], sections: { handled: [], waited: [], trades: [], remaining: [], decisions: [] }, ledger: [], timeline: [], milestones: [], remixable: [], share: { public: false, hideAssets: true, hideAmounts: true, shareId: null, publicUrl: null } });
+      m = /^\/v1\/recaps\/([^/?]+)(\/share)?$/.exec(path);
+      if (m) return json(200, m[2] ? { recapId: m[1], share: { ...(body as object), shareId: "rsh_1" } } : { id: m[1] });
+      if (path.startsWith("/v1/missions")) return json(200, { eventsCoverage: "unavailable", missions: [] });
+      if (path === "/a2mcp/agent-tasks") return json(200, { ok: true, status: "delivered", taskDrafts: [] });
+    }
+
     if (path === "/a2mcp/verify" && method === "POST") {
       if (priceUsd !== "0" && !requirePay("http://svc/a2mcp/verify")) return;
       return json(200, { service: "Chaconne Verify / StockProof", jobId: "job_a2mcp", verdict: "eligible" });
@@ -167,5 +253,5 @@ export async function startFakeService(opts: FakeOptions = {}): Promise<{ url: s
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
   const port = (server.address() as { port: number }).port;
-  return { url: `http://127.0.0.1:${port}`, seen, settled, server, close: () => new Promise<void>((r) => server.close(() => r())) };
+  return { url: `http://127.0.0.1:${port}`, seen, settled, heartbeats, server, close: () => new Promise<void>((r) => server.close(() => r())) };
 }

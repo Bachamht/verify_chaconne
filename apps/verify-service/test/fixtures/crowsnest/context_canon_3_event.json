@@ -1,0 +1,43 @@
+{
+ "canonicalVersion": "canon-1",
+ "publicKeyId": "crowsnest-ctx-k1",
+ "publicKeyHex": "31bd65ba3273d04e572b9bc6deaff903b3cbf4d48efc151efd7dc0f1ea0570e4",
+ "input": {
+  "schemaVersion": "chaconne-events/1",
+  "producer": "crowsnest",
+  "packagedAt": "2026-09-23T10:00:00+00:00",
+  "signatureAlg": "ed25519",
+  "publicKeyId": "crowsnest-ctx-k1",
+  "horizonDays": 45,
+  "originsRefreshed": [
+   "crowsnest.fred",
+   "crowsnest.yaml"
+  ],
+  "events": [
+   {
+    "id": "crowsnest.fred:MACRO_TIER2:2026-09-24:jobless-claims",
+    "kind": "MACRO_TIER2",
+    "name": "初请失业金",
+    "underlyingIds": [],
+    "scheduledAtUtc": "2026-09-25T12:30:00+00:00",
+    "dateLocal": "2026-09-25",
+    "datePrecision": "estimate",
+    "sessionHint": null,
+    "status": "revised",
+    "revision": 1,
+    "revisedFrom": {
+     "scheduledAtUtc": "2026-09-24T12:30:00+00:00",
+     "dateLocal": "2026-09-24"
+    },
+    "source": "crowsnest.fred",
+    "sourceFetchedAt": "2026-09-23T08:00:00+00:00",
+    "firstKnownAt": "2026-09-20T01:05:00+00:00",
+    "tz": "America/New_York"
+   }
+  ]
+ },
+ "canonical": "{\"events\":[{\"dateLocal\":\"2026-09-25\",\"datePrecision\":\"estimate\",\"firstKnownAt\":\"2026-09-20T01:05:00+00:00\",\"id\":\"crowsnest.fred:MACRO_TIER2:2026-09-24:jobless-claims\",\"kind\":\"MACRO_TIER2\",\"name\":\"初请失业金\",\"revisedFrom\":{\"dateLocal\":\"2026-09-24\",\"scheduledAtUtc\":\"2026-09-24T12:30:00+00:00\"},\"revision\":1,\"scheduledAtUtc\":\"2026-09-25T12:30:00+00:00\",\"sessionHint\":null,\"source\":\"crowsnest.fred\",\"sourceFetchedAt\":\"2026-09-23T08:00:00+00:00\",\"status\":\"revised\",\"tz\":\"America/New_York\",\"underlyingIds\":[]}],\"horizonDays\":45,\"originsRefreshed\":[\"crowsnest.fred\",\"crowsnest.yaml\"],\"packagedAt\":\"2026-09-23T10:00:00+00:00\",\"producer\":\"crowsnest\",\"publicKeyId\":\"crowsnest-ctx-k1\",\"schemaVersion\":\"chaconne-events/1\",\"signatureAlg\":\"ed25519\"}",
+ "canonicalUtf8Sha256": "c80552b41c748bc3beb5c443b710f9b343bd354c231c165f65bcb59263f9bbe3",
+ "signature": "0xa944704c1cacf79364c869e77dbe5be1e00bca7c8550ac494e27018e5e15ba2cc166e93cd96df30c8ef047e1ea4f60e3215219bb060eb72b4e947e18ef197400",
+ "note": "signature = Ed25519(utf8(canonical(input)))；input 不含 signature 键；验签时先用 TS canonicalJson(input) 与 canonical 逐字节比对"
+}

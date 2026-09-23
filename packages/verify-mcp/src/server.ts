@@ -10,6 +10,7 @@
  *   prepare_guard_trade       POST /v1/jobs/:id/prepare-execution （返回 typed data / 证书 / Guard 调用参数，不签名）
  *   get_execution_status      GET  /v1/jobs/:id + 链上回执核实（可选 RPC）
  * 返回内容一律 structuredContent + 文本摘要；上游错误 isError=true 并保留状态码，不吞错。
+ * v2 工具见 toolsV2.ts（13 个），v6 工具见 toolsV6.ts（23 个，interfaces §11.8）；共 43 个。
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -17,6 +18,8 @@ import { createPublicClient, decodeEventLog, http, type Hex } from "viem";
 import { VerifyClient } from "./client";
 import { GUARD_ABI } from "./guardAbi";
 import { registerV2Tools, TOOL_NAMES_V2 } from "./toolsV2";
+import { registerV6Tools, TOOL_NAMES_V6 } from "./toolsV6";
+import type { ExecutorHeartbeat } from "./heartbeat";
 import type { AgentWallet } from "./wallet";
 
 export interface ServerDeps {
@@ -25,6 +28,8 @@ export interface ServerDeps {
   chainId?: number;
   /** agent-wallet 模式（CV-D08）；null/undefined = 关闭 */
   wallet?: AgentWallet | null;
+  /** v6：agent-wallet 模式下的执行器心跳循环（60 s）；null = 不自动心跳 */
+  heartbeat?: ExecutorHeartbeat | null;
 }
 
 export const TOOL_NAMES = [
@@ -36,6 +41,7 @@ export const TOOL_NAMES = [
   "prepare_guard_trade",
   "get_execution_status",
   ...TOOL_NAMES_V2,
+  ...TOOL_NAMES_V6,
 ] as const;
 
 export { ADDR, ASSET_KEY, fromHttp, ok, type ToolResult } from "./toolUtil";
@@ -190,6 +196,7 @@ export function createVerifyMcpServer(deps: ServerDeps): McpServer {
     },
   );
 
-  registerV2Tools(server, { client: c, wallet: deps.wallet ?? null, rpcUrl: deps.rpcUrl, chainId: deps.chainId ?? 196 });
+  registerV2Tools(server, { client: c, wallet: deps.wallet ?? null, rpcUrl: deps.rpcUrl, chainId: deps.chainId ?? 196, heartbeat: deps.heartbeat ?? null });
+  registerV6Tools(server, { client: c, wallet: deps.wallet ?? null, heartbeat: deps.heartbeat ?? null });
   return server;
 }

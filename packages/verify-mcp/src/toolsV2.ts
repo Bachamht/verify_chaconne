@@ -12,6 +12,7 @@ import { verifyBundle } from "./bundleVerify";
 import { ADDR, ASSET_KEY, fail, fromHttp, HEX32, ok, UINT, type ToolResult } from "./toolUtil";
 import { normalizeOutputSet } from "./planGuardAbi";
 import { AgentWalletError, type AgentWallet } from "./wallet";
+import type { ExecutorHeartbeat } from "./heartbeat";
 
 export const TOOL_NAMES_V2 = [
   "plan_trade",
@@ -34,6 +35,8 @@ export interface V2Deps {
   wallet: AgentWallet | null;
   rpcUrl?: string;
   chainId: number;
+  /** v6：执行成功后把 mandate 加入 60 s 心跳循环（agent-wallet 模式） */
+  heartbeat?: ExecutorHeartbeat | null;
 }
 
 const POLICY = z.enum(["STRICT_LIVE", "REFERENCE_CONTEXT", "QUOTE_ONLY"]);
@@ -246,6 +249,7 @@ export function registerV2Tools(server: McpServer, d: V2Deps): void {
       try {
         const sent = await d.wallet.sendStep({ chainId, planGuard, mandate: m, mandateSignature: a.mandateSignature as Hex, outputSet, step: step as unknown as Record<string, string>, certificate: cert as unknown as Record<string, string>, certificateSignature: certSig, routerCalldata: calldata });
         const sub = await c.call("POST", `/v1/mandates/${a.mandateId}/steps/${step.stepIndex}/submissions`, { txHash: sent.txHash });
+        d.heartbeat?.watch(a.mandateId);
         const ev = sent.receipt?.event ?? null;
         return ok(`step ${step.stepIndex} sent: ${sent.txHash}${sent.receipt ? ` → ${sent.receipt.status}${ev ? ` spent ${String(ev["spent"])} received ${String(ev["received"])} refunded ${String(ev["refunded"])}` : ""}; allowance after ${sent.receipt.allowanceAfter}` : " (receipt pending; service verifier will confirm)"} (submission ${sub.status}); executor ${d.wallet.address}`, { status: 200, executed: true, txHash: sent.txHash, approveTxHash: sent.approveTxHash ?? preApprove?.approveTxHash ?? null, preApprove, gas: sent.gas ?? null, receipt: sent.receipt ?? null, stepIndex: step.stepIndex, stepDigest: sd, submission: sub.body as Record<string, unknown>, executor: d.wallet.address, onchainBefore: onchain });
       } catch (e) {

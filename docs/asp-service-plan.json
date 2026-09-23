@@ -34,5 +34,37 @@
       "Admin can pause, rotate the signer epoch and edit allowlists - a stated trust boundary, not trustlessness."
     ],
     "disclaimer": "Verification of data comparability and execution constraints only. Not investment advice; no guarantee of fill or profit."
+  },
+  "agentTasksService": {
+    "note": "Third OKX AI ASP service (A2MCP) — Agent Tasks (v6 Lane F). Submission deferred until ASP #13803 review completes (D-085). Draft only; nothing submitted. No secrets in this file.",
+    "agentId": "13803",
+    "service": {
+      "type": "A2MCP",
+      "name": "Agent Tasks — event impacts and task drafts for tokenized US stocks",
+      "fee": "0",
+      "feeNote": "Free during listing review; a paid tier would need its own SKU (CV-D) and x402 on the network stated in GET /v1/products.",
+      "endpoint": "https://verify.chaconne.xyz/a2mcp/agent-tasks",
+      "freeContextEndpoint": "https://verify.chaconne.xyz/v1/context?tier=agent",
+      "whatItIs": "Given an owner wallet and/or a set of xStocks tokens, returns which scheduled market events (earnings, tier-1 macro, Fed, holidays, early closes) touch those assets, and a set of ready-to-create task drafts: playbook + machine-checkable conditions (session, event window, earnings window, step gap) in SIMULATION mode, or a dated REPLAY when no event is in range. The same conditions later gate certificate issuance for a signed TradeMandate; execution is always authorized separately by the owner's wallet.",
+      "whatYouGet": [
+        "Event impacts per asset: relation (company_direct / user_rule / macro_research), effect on existing tasks, and the six allowed actions; macro events are labelled research-only and never phrased as a price prediction.",
+        "Task drafts with an explicit conditions hash (conditions/1) that can be POSTed to /v1/tasks unchanged; each draft names its mode (SIMULATION or REPLAY with the replay date).",
+        "Field-level honesty: when the event calendar or impacts are not available, the field says status=unavailable and the drafts fall back to a dated replay instead of pretending to be live.",
+        "GET /v1/context free tier (tier=agent): session, event list, Fed blackout, curve shape and drift verdict — derived fields only, every field with source, observedAt and status."
+      ],
+      "whatNoResultMeans": "An empty impact list or a replay-only draft set is a delivered result: it means nothing scheduled touches these assets in the horizon (or the calendar is unavailable and says so). Nothing is executed and nothing is charged.",
+      "inputs": [
+        "owner? (EVM address)",
+        "assets? (symbols or eip155 keys; at least one of owner/assets)",
+        "horizonHours? (default 48)"
+      ],
+      "transport": "HTTP 200 only during review: missing input → 200 status=input_required with schema and example; success → 200 status=delivered. Invalid JSON also returns 200 input_required.",
+      "limits": [
+        "Drafts are not investment advice; conditions describe when the agent may act, not what the price will do.",
+        "Impacts need an owner with holdings/tasks on this service; asset-only calls return event coverage without holdings.",
+        "The service holds exactly one key: the attestation signer. It cannot move user funds."
+      ],
+      "disclaimer": "Event and condition information only. Not investment advice; no guarantee of fill or profit."
+    }
   }
 }

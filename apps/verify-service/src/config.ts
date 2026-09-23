@@ -70,6 +70,50 @@ const Env = z.object({
   SELL_INPUT_TOLERANCE_WEI: z.string().regex(/^\d+$/).optional().default("1000000"),
   /** 逗号分隔地址：这些付款人/owner 视为自付演示（账单 selfPayment=true） */
   DEMO_SELF_PAYMENT_ADDRESSES: z.string().optional().default(""),
+
+  /* ---- v6（Chaconne Agent；每个能力独立开关，缺省 true）---- */
+  /** C1 MarketContext（/v1/context、crowsnest 摄入） */
+  AGENT_C1_ENABLED: z.enum(["true", "false"]).optional().default("true"),
+  /** C2 Conditions（条件前置链；关闭 = 任务不评估条件、不签发） */
+  AGENT_C2_ENABLED: z.enum(["true", "false"]).optional().default("true"),
+  /** C3 Playbooks / 任务（/v1/tasks*） */
+  AGENT_C3_ENABLED: z.enum(["true", "false"]).optional().default("true"),
+  /** C7 Thesis Watch（/v1/theses*） */
+  AGENT_C7_ENABLED: z.enum(["true", "false"]).optional().default("true"),
+  /** crowsnest 发布地址（空 = 不轮询；可用 POST /v1/context/ingest 手动投递联调） */
+  CROWSNEST_CONTEXT_URL: z.string().optional().default(""),
+  CROWSNEST_EVENTS_URL: z.string().optional().default(""),
+  /** Ed25519 公钥：逗号分隔 `publicKeyId=<hex|base64>`（单个裸值 = 对任何 publicKeyId 生效）。只是公钥，不是私钥 */
+  CROWSNEST_PUBKEY_ED25519: z.string().optional().default(""),
+  CONTEXT_POLL_INTERVAL_MS: z.coerce.number().int().min(5000).optional().default(60_000),
+  /* ---- v6 ---- */
+  /** C6 个人事件台开关（Lane D；缺省开） */
+  AGENT_C6_ENABLED: z.enum(["true", "false"]).optional().default("true"),
+  /** C6 事件存储：db（迁移 0018 落地后）/ memory（本地演示；重启即空，不伪装持久） */
+  AGENT_C6_STORE: z.enum(["db", "memory"]).optional().default("db"),
+  /** 财报源摄入：周期、请求间隔（Finnhub 免费档 60/min）、向前覆盖天数 */
+  EARNINGS_INGEST_INTERVAL_MS: z.coerce.number().int().min(60_000).optional().default(6 * 3600_000),
+  EARNINGS_REQUEST_SPACING_MS: z.coerce.number().int().min(0).optional().default(1100),
+  EARNINGS_HORIZON_DAYS: z.coerce.number().int().min(1).max(366).optional().default(120),
+  /* ---- v6（Chaconne Agent；每个能力独立开关，缺省 true，interfaces §11.13）---- */
+  /** C4 组合 / 通知 / 执行器心跳（Lane C） */
+  AGENT_C4_ENABLED: z.enum(["true", "false"]).optional().default("true"),
+  /** C8 资金组（Lane C）；调仓编排同时需要 C4 与 C8 */
+  AGENT_C8_ENABLED: z.enum(["true", "false"]).optional().default("true"),
+  /** Telegram 独立推送 bot 的 token（普通配置，不是私钥；只用于 sendMessage）。空 = 链接端点回 not_configured */
+  VERIFY_TG_BOT_TOKEN: z.string().optional().default(""),
+  /** 通知 outbox 派发间隔（毫秒） */
+  NOTIFY_DISPATCH_INTERVAL_MS: z.coerce.number().int().min(1000).optional().default(5000),
+  /** webhook 请求超时（毫秒） */
+  NOTIFY_WEBHOOK_TIMEOUT_MS: z.coerce.number().int().min(500).optional().default(8000),
+  /** 组合视图价格来源：market = 公开行情快照（需 OKX 凭据）；none = 只给数量，调仓 preview 需调用方提供 pricesUsd */
+  PORTFOLIO_PRICE_SOURCE: z.enum(["market", "none"]).optional().default("market"),
+  /* ---- v6（Chaconne Agent；每个能力独立开关，缺省 true，interfaces §11.13）---- */
+  /** C9 决策实验（Lane E）：explain-wait / compare-policies / replays；关掉 → 503 feature_disabled */
+  AGENT_C9_ENABLED: z.enum(["true", "false"]).optional().default("true"),
+  /* ---- v6（Chaconne Agent；每个能力独立开关，缺省 true；9/25 验收没绿的关掉并从材料移除） ---- */
+  /** C5 Crew / Missions / Recap：false = /v1/recaps* 与 /v1/missions 不挂载（页面显示「尚未就绪」） */
+  AGENT_C5_ENABLED: z.enum(["true", "false"]).optional().default("true"),
 });
 
 export type VerifyConfig = ReturnType<typeof loadConfig>;
@@ -123,8 +167,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     ...e,
     isProd,
     paid,
+    /* v6 */
+    agentC1: e.AGENT_C1_ENABLED === "true",
+    agentC2: e.AGENT_C2_ENABLED === "true",
+    agentC3: e.AGENT_C3_ENABLED === "true",
+    agentC7: e.AGENT_C7_ENABLED === "true",
     apiKeys: parseApiKeys(e.VERIFY_API_KEYS),
     selfPaymentAddresses: new Set(e.DEMO_SELF_PAYMENT_ADDRESSES.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean)),
+    /* v6 */
+    agentC9Enabled: e.AGENT_C9_ENABLED === "true",
   };
 }
 

@@ -25,7 +25,12 @@ import {
   resolveParams,
   stepDigest,
   HARD_BLOCK_CODES,
+  effectivePolicyHash as computeEffectivePolicyHash,
+  withConditionsHash,
   type AssetRegistry,
+  type Bytes32,
+  type IsoUtc,
+  type Reason,
   type EffectivePolicy,
   type EvidenceRecord,
   type EvmAddress,
@@ -80,7 +85,27 @@ export interface RegisterMandateBody {
   maxSlippageBps: number;
   maxPriceImpactBps: number | null;
   maxReferenceDeviationBps?: number | null;
+  /* v6 Lane B：授权承诺的条件集哈希（进 effectivePolicyHash 展开参数；K-10） */
+  conditionsHash?: Bytes32;
 }
+
+/* ---- v6 Lane B：任务前置链的闸门（条件层在报价证据齐备后再算一次，不过则不签发） ---- */
+export interface EvaluateGateInput {
+  report: VerifyReport;
+  evidence: EvidenceRecord[];
+  nowIso: IsoUtc;
+}
+export interface EvaluateGateResult {
+  ok: boolean;
+  reasons: Reason[];
+  nextCheckAt: IsoUtc | null;
+}
+export interface EvaluateOptions {
+  gate?: (input: EvaluateGateInput) => Promise<EvaluateGateResult>;
+  /** false = 只评估不签发（任务建立/授权/恢复后的首评）；缺省签发 */
+  issue?: boolean;
+}
+export type StepConfirmedListener = (args: { mandateId: string; taskId: string | null; stepIndex: number; spentRaw: string; confirmedAt: Date }) => Promise<void>;
 
 export interface MandateJson {
   mandate: TradeMandate;
@@ -92,6 +117,9 @@ export interface MandateJson {
   sku: "task_bundle" | "monitor_window";
   planId: string | null;
   jobId: string | null;
+  /* v6 Lane B */
+  conditionsHash?: Bytes32 | null;
+  taskId?: string | null;
 }
 
 /** 这些阻断原因意味着"等条件变化"，不是"授权本身不可行" */
@@ -99,8 +127,13 @@ const WAIT_CODES: ReadonlySet<ReasonCode> = new Set(["MARKET_OUTSIDE_REGULAR", "
 
 export class MandatesService implements ReceiptStore {
   private readonly now: () => Date;
+  /* v6 Lane B：步骤确认监听（任务层推进 stepsConfirmed / lastConfirmedStepAt / 资金组结算） */
+  private stepListener: StepConfirmedListener | null = null;
   constructor(private readonly d: MandatesDeps) {
     this.now = d.now ?? (() => new Date());
+  }
+  setStepConfirmedListener(fn: StepConfirmedListener | null): void {
+    this.stepListener = fn;
   }
 
   private planGuard(): EvmAddress {
@@ -111,10 +144,12 @@ export class MandatesService implements ReceiptStore {
 
   /* ---------- 登记 ---------- */
 
-  async register(callerId: string, raw: unknown): Promise<{ status: 200 | 201; row: MandateRow }> {
+  async register(callerId: string, raw: unknown, internal: { taskId?: string } = {}): Promise<{ status: 200 | 201; row: MandateRow }> {
     const planGuard = this.planGuard();
     const b = (raw ?? {}) as Partial<RegisterMandateBody>;
     const errors: Array<{ field: string; code: string }> = [];
+    const conditionsHash = b.conditionsHash === undefined || b.conditionsHash === null ? null : b.conditionsHash;
+    if (conditionsHash !== null && !/^0x[0-9a-f]{64}$/.test(String(conditionsHash))) errors.push({ field: "conditionsHash", code: "invalid_bytes32" });
     if (typeof b.clientRequestId !== "string" || !/^[A-Za-z0-9_\-:.]{1,128}$/.test(b.clientRequestId)) errors.push({ field: "clientRequestId", code: "required" });
     const m = b.mandate as Partial<TradeMandate> | undefined;
     if (!m || typeof m !== "object") errors.push({ field: "mandate", code: "required" });
@@ -184,7 +219,8 @@ export class MandatesService implements ReceiptStore {
     if (regHash.toLowerCase() !== mandate.registryHash.toLowerCase()) errors.push({ field: "mandate.registryHash", code: "registry_mismatch" });
     const resolved = resolveParams(def!, { maxSlippageBps: b.maxSlippageBps as number, maxPriceImpactBps: b.maxPriceImpactBps ?? null, maxReferenceDeviationBps: policyId === "QUOTE_ONLY" ? null : (b.maxReferenceDeviationBps ?? null) });
     if (!resolved.ok) errors.push({ field: "params", code: "policy_param_out_of_range" });
-    const policy: EffectivePolicy | null = resolved.ok ? buildEffectivePolicy(def!, resolved.params) : null;
+    // v6：任务授权把 conditionsHash 并入展开参数（证书、证据包、验证器复算都用这份 params）
+    const policy: EffectivePolicy | null = resolved.ok ? (conditionsHash ? policyWithConditions(def!, resolved.params, conditionsHash) : buildEffectivePolicy(def!, resolved.params)) : null;
     if (policy && (policy.policyDefinitionHash.toLowerCase() !== mandate.policyDefinitionHash.toLowerCase() || policy.effectivePolicyHash.toLowerCase() !== mandate.effectivePolicyHash.toLowerCase())) errors.push({ field: "mandate.policyDefinitionHash|effectivePolicyHash", code: "policy_hash_mismatch" });
     if (errors.length > 0) throw new HttpError(422, "mandate_rejected", "授权计划与登记表/策略不一致", errors);
 
@@ -207,7 +243,7 @@ export class MandatesService implements ReceiptStore {
     const nowDate = this.now();
     const priceUsd = sku === "monitor_window" ? this.d.cfg.PRODUCT_PRICE_MONITOR_WINDOW_USD : this.d.cfg.PRODUCT_PRICE_TASK_BUNDLE_USD;
     const free = priceUsd === "0" || Number(priceUsd) === 0;
-    const json: MandateJson = { mandate, domain, inputAssetKey: inEntry!.assetKey, legs, outputSet, side, sku, planId: typeof b.planId === "string" ? b.planId : null, jobId: typeof b.jobId === "string" ? b.jobId : null };
+    const json: MandateJson = { mandate, domain, inputAssetKey: inEntry!.assetKey, legs, outputSet, side, sku, planId: typeof b.planId === "string" ? b.planId : null, jobId: typeof b.jobId === "string" ? b.jobId : null, conditionsHash, taskId: internal.taskId ?? null };
     const [row] = await this.d.db
       .insert(verifyMandates)
       .values({
@@ -235,6 +271,8 @@ export class MandatesService implements ReceiptStore {
         deadline: new Date(Number(mandate.deadline) * 1000),
         createdAt: nowDate,
         updatedAt: nowDate,
+        taskId: internal.taskId ?? null,
+        conditionsHash,
       })
       .onConflictDoNothing()
       .returning();
@@ -307,6 +345,11 @@ export class MandatesService implements ReceiptStore {
       latestEvaluation: latest ? this.evalView(latest) : null,
       stepRecords: steps.map((s) => this.stepView(s)),
       evidenceMode: this.d.evidence.mode,
+      /* v6 Lane B */
+      taskId: row.taskId ?? null,
+      conditionsHash: row.conditionsHash ?? null,
+      /** 已取走且未过期的步骤证书（服务侧停止后仍可能可执行，D-088） */
+      pulledUnexpiredSteps: steps.filter((s) => s.pulledAt && !s.txHash && s.validUntil.getTime() > this.now().getTime()).map((s) => s.stepIndex),
     };
   }
 
@@ -402,15 +445,17 @@ export class MandatesService implements ReceiptStore {
     return rows.length;
   }
 
-  async activeMandates(): Promise<MandateRow[]> {
-    return this.d.db.select().from(verifyMandates).where(inArray(verifyMandates.state, ["ACTIVE", "PAUSED"]));
+  async activeMandates(opts: { standalone?: boolean } = {}): Promise<MandateRow[]> {
+    const rows = await this.d.db.select().from(verifyMandates).where(inArray(verifyMandates.state, ["ACTIVE", "PAUSED"]));
+    // v6：挂在任务上的授权只经任务前置链（条件闸门）评估，mandates monitor 不直接对它签发
+    return opts.standalone ? rows.filter((r) => !r.taskId) : rows;
   }
 
   /**
    * 一次评估：取新证据 → 报告 → 状态 → delta → 落库；ACTIVE 且 READY → 预生成步骤证书（未拉取不算已发出）。
    * PAUSED：照常评估（记录变化），但不签发步骤（M-14）。
    */
-  async evaluate(row0: MandateRow): Promise<{ evaluation: EvaluationRow; step: StepRow | null }> {
+  async evaluate(row0: MandateRow, opts: EvaluateOptions = {}): Promise<{ evaluation: EvaluationRow; step: StepRow | null }> {
     const row = (await this.byId(row0.id)) ?? row0;
     const nowDate = this.now();
     const nowIso = nowDate.toISOString();
@@ -443,13 +488,22 @@ export class MandatesService implements ReceiptStore {
       status = blocks.length === 0 || blocks.every((c) => WAIT_CODES.has(c)) || !withinWindow ? "WAIT" : blocks.some((c) => HARD_BLOCK_CODES.has(c) && !WAIT_CODES.has(c)) ? "BLOCKED" : "WAIT";
     }
     const delta = explainDelta(prevReport, report);
+    // v6 Lane B：条件闸门——授权层 READY 也要过条件层（用本轮报价/参考价证据），不过 → WAIT，不签发
+    let reasons: Reason[] = report.reasons;
+    if (opts.gate) {
+      const g = await opts.gate({ report, evidence: collected.evidence, nowIso });
+      if (!g.ok) {
+        status = status === "BLOCKED" ? "BLOCKED" : "WAIT";
+        reasons = [...report.reasons, ...g.reasons];
+      }
+    }
     const [evaluation] = await this.d.db
       .insert(verifyMandateEvaluations)
-      .values({ id: newId("evl"), mandateId: row.id, evaluatedAt: nowDate, status, reportJson: report, jobJson: next.job, reportHash: reportHash(report), evidenceJson: collected.evidence, reasonsJson: report.reasons, deltaJson: delta, preparedStepIndex: null })
+      .values({ id: newId("evl"), mandateId: row.id, evaluatedAt: nowDate, status, reportJson: report, jobJson: next.job, reportHash: reportHash(report), evidenceJson: collected.evidence, reasonsJson: reasons, deltaJson: delta, preparedStepIndex: null })
       .returning();
 
     let step: StepRow | null = null;
-    if (status === "READY" && row.state === "ACTIVE") {
+    if (status === "READY" && row.state === "ACTIVE" && opts.issue !== false) {
       // 已有未过期的 PREPARED 步骤（同 index）→ 复用，不重复签发
       const existing = (await this.d.db.select().from(verifyMandateSteps).where(and(eq(verifyMandateSteps.mandateId, row.id), eq(verifyMandateSteps.stepIndex, row.stepsDone))).limit(1))[0];
       if (existing && (existing.state === "SUBMITTED" || existing.state === "REORG_PENDING" || existing.state === "CONFIRMED")) step = existing;
@@ -501,12 +555,12 @@ export class MandatesService implements ReceiptStore {
 
   /* ---------- prepare-step / submissions ---------- */
 
-  async prepareStep(callerId: string, id: string) {
+  async prepareStep(callerId: string, id: string, opts: EvaluateOptions = {}) {
     const row = await this.requireMandate(callerId, id);
     if (!["ACTIVE", "PAUSED"].includes(row.state)) throw new HttpError(409, "mandate_not_active", `授权计划状态 ${row.state}`);
     if (row.state === "PAUSED") return { status: "WAIT" as const, reasons: [], delta: null, message: "mandate is paused; no step certificate is issued while paused", step: null, stepIndex: row.stepsDone };
     await this.expireSteps();
-    const { evaluation, step } = await this.evaluate(row);
+    const { evaluation, step } = await this.evaluate(row, opts);
     // 同一步已提交/待重组确认：不能再当 READY 交出去，否则执行者重复提交会被合约以 StepOutOfOrder 回滚
     // （链上 stepIndex 只在回执确认后推进；I2 2026-09-21 端到端发现）
     if (step && (step.state === "SUBMITTED" || step.state === "REORG_PENDING")) {
@@ -584,6 +638,7 @@ export class MandatesService implements ReceiptStore {
       const done = stepsDone >= row.maxSteps || remaining <= 0n || remaining < (minStep < BigInt(json.mandate.perStepCap) ? minStep : BigInt(json.mandate.perStepCap)) / 10n;
       await this.d.db.update(verifyMandates).set({ spent, stepsDone, state: done && (row.state === "ACTIVE" || row.state === "PAUSED") ? "COMPLETED" : row.state, updatedAt: now }).where(eq(verifyMandates.id, row.id));
       log.info("授权计划步骤已确认", { mandateId: row.id, stepIndex: step.stepIndex, spent, stepsDone, completed: done });
+      if (this.stepListener) await this.stepListener({ mandateId: row.id, taskId: row.taskId ?? null, stepIndex: step.stepIndex, spentRaw: ev?.spent ?? "0", confirmedAt: now }).catch((err) => log.warn("任务步骤确认监听失败", { error: err instanceof Error ? err.message : String(err) }));
     }
   }
 
@@ -591,4 +646,11 @@ export class MandatesService implements ReceiptStore {
   intervalMs(): number {
     return sessionAt(this.now()).session === "REGULAR" ? this.d.cfg.MONITOR_INTERVAL_REGULAR_MS : this.d.cfg.MONITOR_INTERVAL_CLOSED_MS;
   }
+}
+
+/* ---- v6 Lane B：带 conditionsHash 的有效策略（结构扩展，不改冻结的 EffectivePolicyParams） ---- */
+export function policyWithConditions(def: EffectivePolicy["definition"], params: EffectivePolicy["params"], conditionsHash: Bytes32): EffectivePolicy {
+  const base = buildEffectivePolicy(def, params);
+  const withHash = withConditionsHash(params, conditionsHash);
+  return { definition: def, policyDefinitionHash: base.policyDefinitionHash, params: withHash, effectivePolicyHash: computeEffectivePolicyHash(base.policyDefinitionHash, withHash) };
 }

@@ -3,7 +3,7 @@
  * v2 接口的唯一接入点（E2 定稿）。所有字段名假设集中在此，集成时与 C2 对齐只改这一处。
  * 路径：interfaces.md §10.4；类型：@chaconne/core/verify v2 增补。
  */
-import type { Bill, DeltaExplanation, EvidenceBundle, MandateEvalStatus, MandateState, MandateStep, MandateStepState, PersonaId, PlanCandidate, PlanGoal, PlanReport, Product, ShareStatus, StepCertificate, TradeMandate } from "@chaconne/core/verify";
+import type { Bill, BudgetAllocation, BudgetGroup, Condition, ConditionSet, DeltaExplanation, EventImpact, EvidenceBundle, MandateEvalStatus, MandateState, MandateStep, MandateStepState, MarketContext, MarketEvent, PersonaId, PlanCandidate, PlanGoal, PlanReport, PlaybookId, PolicyComparison, Product, ReplayRun, ShareStatus, StepCertificate, Task, ThesisCard, TradeMandate } from "@chaconne/core/verify";
 import { api } from "./api";
 
 /* ---------- 假设的响应形态（C2 定稿后在此对齐） ---------- */
@@ -283,3 +283,184 @@ export async function pubList(): Promise<{ status: number; data: { items: Public
 }
 
 export type { PlanCandidate };
+
+/* ====================================================================== */
+/* v6（Chaconne Agent · Lane F）——路径按 interfaces §11.7，类型按 contracts.ts v6 段。   */
+/* 响应包装形态（{task} / {tasks} / {events} …）是页面假设，B/C/D/E 定稿后只改这一段。      */
+/* 端点未部署（404 not_found / 501 / 503）→ notReady()=true，页面显示「该能力尚未就绪」空态， */
+/* 绝不放假数据、不用回放冒充实时（CV-D13：provenance.mode 非 live 一律可见标注）。            */
+/* ====================================================================== */
+export type TaskMode = "SIMULATION" | "LIVE";
+export interface MandateDraftView {
+  typedData: { domain: { name: string; version: string; chainId: number; verifyingContract: `0x${string}` }; types: Record<string, Array<{ name: string; type: string }>>; primaryType: "TradeMandate"; message: TradeMandate };
+  outputSet: `0x${string}`[];
+}
+export interface CreateTaskBody {
+  clientRequestId: string;
+  ownerAddress: string;
+  playbookId: PlaybookId;
+  params: Record<string, unknown>;
+  conditions: { version: "conditions/1"; items: Condition[] };
+  mode: TaskMode;
+  thesis?: Record<string, unknown>;
+  budgetGroupId?: string;
+}
+export interface TaskCreated {
+  task: Task;
+  mandateDraft: MandateDraftView | null;
+  thesisDraft: ThesisCard | null;
+  budgetAllocation: (Partial<BudgetAllocation> & { state: string }) | null;
+}
+/** 服务侧停止（D-088）：响应体里的 note 必须写明只阻止后续签发 */
+export interface TaskStopped {
+  task: Task;
+  note: string;
+}
+export interface ExplainWaitView {
+  /** Lane E 的响应没有顶层 taskId（任务 id 在路径里） */
+  taskId?: string;
+  blockers: Task["blockers"];
+  nextCheckAt: string | null;
+  /** 服务端实际返回：需要用户处理的阻塞项**子集**（数组），不是布尔；每个 blocker 自己也带 userActionRequired */
+  userActionRequired: Task["blockers"];
+  i18n?: Array<{ code: string; en: string; zh: string }>;
+  contextProvenance?: string | null;
+  evidenceAt?: string | null;
+}
+export interface PortfolioView {
+  owner: string;
+  chainId: number;
+  /** 服务端实际返回 block:{number,hash,timestamp}；旧字段 blockNumber 兼容保留为可选 */
+  block?: { number: number; hash?: string; timestamp?: number | string };
+  blockNumber?: number;
+  /** 服务端把 tracedQtyRaw 剥掉了（成本只覆盖可追溯数量，覆盖率走 costCoverageBps）；这里一律当可选 */
+  holdings: Array<{ assetKey: string; displaySymbol?: string; balanceRaw: string; tracedQtyRaw?: string | null; costUsd?: string | null; costCoverageBps?: number | null; source?: string }>;
+  cash?: unknown;
+  authorizations?: unknown[];
+  budgetGroups?: unknown[];
+  notes?: Record<string, string>;
+  /** 乘数调整换算标注（Q-04） */
+  unitAdjustments?: Array<{ assetKey: string; note: string }>;
+}
+export interface BudgetGroupView extends BudgetGroup {
+  spentRaw?: string;
+  reservedRaw?: string;
+  pendingRaw?: string;
+  allocations: BudgetAllocation[];
+}
+export type RecapMode = "LIVE" | "SIMULATION" | "REPLAY" | "FIXTURE";
+export interface RecapView {
+  id: string;
+  owner: string;
+  date: string;
+  tz: "America/New_York";
+  closeAtUtc: string;
+  earlyClose: boolean;
+  generateAfterUtc: string;
+  generatedAt: string;
+  modes: RecapMode[];
+  coverage: { mandates: "ok" | "unavailable"; tasks: "ok" | "unavailable"; events: "ok" | "unavailable" };
+  sections: {
+    handled: Array<{ refId: string; refKind: "mandate" | "task"; label: string; status: string; mode: RecapMode; steps: { done: number; max: number }; blockers: Array<{ code: string; text: string }>; nextCheckAt: string | null }>;
+    waited: Array<{ refId: string; label: string; reasons: Array<{ code: string; text: string }>; evaluations: number; nextCheckAt: string | null }>;
+    trades: Array<{ at: string; refId: string; stepIndex: number; side: "buy" | "sell"; inputAssetKey: string; outputAssetKey: string; amountInRaw: string; receivedRaw: string | null; txHash: string | null; state: string; mode: RecapMode }>;
+    remaining: Array<{ refId: string; label: string; stepsLeft: number; deadline: string }>;
+    decisions: Array<{ refId: string; label: string; code: string; text: string; action: string }>;
+  };
+  ledger: Array<{ assetKey: string; spentRaw: string; receivedRaw: string; steps: number }>;
+  timeline: Array<{ at: string; refId: string; type: string; text: string; assetKey?: string; amountRaw?: string; txHash?: string | null }>;
+  milestones: Array<{ id: string; label: { en: string; zh: string }; at: string; evidence: { refId: string; txHash?: string | null } }>;
+  remixable: Array<{ refId: string; refKind: "mandate" | "task"; structure: { side: "buy" | "sell"; inputAssetKey: string; outputAssetKeys: string[]; policyId?: string; steps: number }; remixHref: string }>;
+  share: { public: boolean; hideAssets: boolean; hideAmounts: boolean; shareId: string | null; publicUrl: string | null };
+}
+export interface RecapPendingView {
+  status: "pending";
+  owner: string;
+  date: string;
+  closeAtUtc: string | null;
+  earlyClose: boolean;
+  generateAfterUtc: string | null;
+  tradingDay: boolean;
+  note: string;
+}
+export interface MissionView {
+  id: string;
+  kind: "event" | "replay" | "simulation";
+  mode: "SIMULATION" | "REPLAY";
+  title: { en: string; zh: string };
+  why: { en: string; zh: string };
+  dateLabel: string;
+  eventId: string | null;
+  eventKind: string | null;
+  eventStatus: string | null;
+  assetKey: string | null;
+  underlyingId: string | null;
+  draft: { playbookId: PlaybookId; mode: "SIMULATION" | "REPLAY"; params: Record<string, unknown>; conditions: ConditionSet };
+  href: string;
+}
+
+/** 端点未部署 → 页面显示「该能力尚未就绪」（不是错误，不是数据） */
+export function notReady(r: { status: number; data: unknown }): boolean {
+  if (r.status === 501 || r.status === 503 || r.status === 502) return true;
+  if (r.status !== 404) return false;
+  const err = (r.data as { error?: string } | null)?.error;
+  return err === undefined || err === "not_found" || err === "not_allowed";
+}
+/** {task:{…}} 或平铺 → Task */
+export function normalizeTask(raw: Raw): Raw {
+  const t = isObj(raw["task"]) ? raw["task"] : raw;
+  return { ...raw, task: { ...t, blockers: Array.isArray(t["blockers"]) ? t["blockers"] : [], mandateIds: Array.isArray(t["mandateIds"]) ? t["mandateIds"] : [], executorPresence: t["executorPresence"] ?? "offline", nextCheckAt: t["nextCheckAt"] ?? null }, mandateDraft: raw["mandateDraft"] ?? null, thesisDraft: raw["thesisDraft"] ?? null, budgetAllocation: raw["budgetAllocation"] ?? null };
+}
+function normalizeList<K extends string>(key: K) {
+  return (raw: Raw): Raw => ({ ...raw, [key]: Array.isArray(raw[key]) ? raw[key] : Array.isArray(raw["items"]) ? raw["items"] : [] });
+}
+const q = (o: Record<string, string | number | undefined>) => {
+  const p = Object.entries(o).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
+  return p.length ? `?${p.join("&")}` : "";
+};
+
+export const agentTasks = {
+  create: (body: CreateTaskBody) => mapOk<TaskCreated & { error?: string; message?: string; details?: unknown }>(api("POST", "v1/tasks", body), normalizeTask),
+  get: (id: string) => mapOk<TaskCreated>(api("GET", `v1/tasks/${id}`), normalizeTask),
+  list: (owner: string) => mapOk<{ tasks: Task[] }>(api("GET", `v1/tasks${q({ owner })}`), normalizeList("tasks")),
+  pause: (id: string) => mapOk<TaskStopped>(api("POST", `v1/tasks/${id}/pause`), normalizeTask),
+  resume: (id: string) => mapOk<TaskStopped>(api("POST", `v1/tasks/${id}/resume`), normalizeTask),
+  cancel: (id: string) => mapOk<TaskStopped>(api("POST", `v1/tasks/${id}/cancel`), normalizeTask),
+  authorize: (id: string, body: { typedData: MandateDraftView["typedData"]; signature: `0x${string}`; outputSet: `0x${string}`[]; clientRequestId: string }) => mapOk<TaskCreated & { mandateId?: string }>(api("POST", `v1/tasks/${id}/authorize`, body), normalizeTask),
+  prepareStep: (id: string) => api<PreparedStep & { blockers?: Task["blockers"]; nextCheckAt?: string | null }>("POST", `v1/tasks/${id}/prepare-step`, { refreshKey: `web-${Date.now()}` }),
+  explainWait: (id: string) => api<ExplainWaitView>("GET", `v1/tasks/${id}/explain-wait`),
+  comparePolicies: (id: string, variants: Array<{ label: string; conditions: { version: "conditions/1"; items: Condition[] } }>) => api<PolicyComparison>("POST", `v1/tasks/${id}/compare-policies`, { variants }),
+};
+export const marketContext = {
+  get: (o: { tier?: "agent" | "display"; assetKey?: string; owner?: string; taskId?: string } = {}) => api<MarketContext>("GET", `v1/context${q({ tier: "agent", ...o })}`),
+};
+export const marketEvents = {
+  list: (o: { from?: string; to?: string; underlyingId?: string; kind?: string } = {}) => mapOk<{ events: MarketEvent[] }>(api("GET", `v1/events${q(o)}`), normalizeList("events")),
+  impacts: (owner: string, horizonHours = 48) => mapOk<{ impacts: EventImpact[] }>(api("GET", `v1/event-impacts${q({ owner, horizonHours })}`), normalizeList("impacts")),
+};
+export const replays = {
+  create: (body: { playbookId: PlaybookId; conditions: { version: "conditions/1"; items: Condition[] }; assetKey: string; from: string; to: string }) => api<ReplayRun>("POST", "v1/replays", body),
+};
+export const budgetGroups = {
+  get: (id: string) => mapOk<BudgetGroupView>(api("GET", `v1/budget-groups/${id}`), normalizeList("allocations")),
+  create: (body: Omit<BudgetGroup, "id" | "priorityRule">) => api<BudgetGroupView>("POST", "v1/budget-groups", { ...body, priorityRule: "priority_then_created" }),
+};
+export const portfolio = {
+  get: (owner: string) => mapOk<PortfolioView>(api("GET", `v1/portfolio/${owner}`), normalizeList("holdings")),
+};
+export const recaps = {
+  list: (owner: string, date?: string) => api<RecapView | RecapPendingView>("GET", `v1/recaps${q({ owner, date })}`),
+  get: (id: string) => api<RecapView>("GET", `v1/recaps/${id}`),
+  share: (id: string, body: { public: boolean; hideAssets?: boolean; hideAmounts?: boolean }) => api<{ recapId: string; share: RecapView["share"] }>("POST", `v1/recaps/${id}/share`, body),
+};
+export const missions = {
+  list: (o: { assetKey?: string } = {}) => mapOk<{ generatedAt: string; eventsCoverage: "ok" | "unavailable"; missions: MissionView[] }>(api("GET", `v1/missions${q(o)}`), normalizeList("missions")),
+};
+export function isRecapPending(x: RecapView | RecapPendingView | null | undefined): x is RecapPendingView {
+  return !!x && (x as RecapPendingView).status === "pending";
+}
+/** CV-D13：上下文来源模式；缺省按 live 处理只对签名验过的服务响应成立，页面一律显式显示 */
+export function contextProvenance(ctx: MarketContext | null | undefined): "live" | "backfill" | "sample" | "unknown" {
+  const m = (ctx as { provenance?: { mode?: string } } | null | undefined)?.provenance?.mode;
+  return m === "live" || m === "backfill" || m === "sample" ? m : "unknown";
+}

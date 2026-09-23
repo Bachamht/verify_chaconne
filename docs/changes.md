@@ -175,3 +175,26 @@ A2MCP 平台接入端点在 Lane C（`POST /a2mcp/verify`）；ASP #13803 已创
 | 项 | 位置 | 说明 |
 |---|---|---|
 | `/pub/market/xlayer` 由 2 只扩到 41 只，加 `tier` 字段分执行层 / 展示层 | `apps/verify-service/src/market/xlayer.ts`、新增 `config/xlayer.display.json`、`src/http/app.ts`、`test/marketXlayer.test.ts`（13 例）、契约 `docs/interfaces.md` §10.16 | 运营者反馈主站 X Layer 只有 2 只股票。实测 OKX RWA 名录全量 100 只：49 只可路由、51 只无池（`82000`）；49 只里 41 只美股底层全部接入、8 只港股底层暂不接（参考价管线是美股 + 纽交所日历）。`tier:"execute"`（AAPLx/NVDAx）保持三档 + 冲击 + `verifyUrl`；`tier:"display"`（39 只）只报 100 USDG 档中间价，冲击与 `verifyUrl` 一律 `null`（不在登记表里，深链会失败）。展示名单走**独立文件**不进登记表——登记表哈希在 Guard 白名单里，改它等于动链上配置，本次扩容**零链上交易**。节流 200→350 ms、TTL 30→60 s、`Cache-Control: public, max-age=30, s-maxage=60`；真实上游实测整轮 ≈ 29 s，41/41 有报价、`errors: []`。39 个地址的双源核验（OKX 名录 × 链上 `name()`/`symbol()`/`decimals()`，0 处分歧）登记在 `the address-approval log (internal)` |
+
+## v6：Chaconne Agent（构建期内新增，2026-09-23 起；对照 `devday-baseline` = 31b51bc）
+
+> 冻结 9/25 18:59 布里斯班。接口冻结见 `interfaces.md §11`；决策 D-084～D-088、CV-D11。**每项状态在合并时更新**：✅ 已合并并通过验收 / 🟡 已合并、部分验收 / ⏳ 开发中 / ❌ 关 flag 并从材料移除。数据接入失败的字段显示不可用，不用回放伪装实时。
+
+| 能力 | 用户能交代的事 | 主要交付 | 验收组 | 状态 |
+|---|---|---|---|---|
+| C1 MarketContext | "现在什么时段、接下来有什么事、宏观什么状态" | crowsnest 导出契约（Ed25519 签名、逐字段 status/purposes）、`GET /v1/context` 档位裁剪与按资产/任务过滤 | X（8） | 🟡 |
+| C2 Conditions | "只在这些条件下才买" | 条件 DSL `conditions/1`、三态求值纯函数、`conditionsHash` 进证书与证据包 | K（10） | 🟡 |
+| C3 Playbooks | 五个持续任务模板 | `playbooks.json`、`POST /v1/tasks`、Session DCA 跨交易日、调仓多腿 | Y（8） | 🟡 |
+| C4 Portfolio + Notifications | "我有什么、被叫醒" | 组合与成本覆盖率、资金组占用、webhook（HMAC）+ Telegram、执行器三态 | Q（8） | 🟡 |
+| C5 Crew / Missions / Recap | "我的 Agent 今晚干了什么" | 角色绑定真实动作、事件任务、夜班日志（纽约收盘后 45 分钟） | R（5） | 🟡 |
+| C6 My Event Desk | "今晚哪些事与我有关，该处理什么" | 事件契约、财报层摄入、影响清单与六个动作、修订传播 | E（7） | 🟡 |
+| C7 Thesis Watch | "替我看住买入理由" | 理由卡、机器/研究前提三态、失效三路径 | T（6） | 🟡 |
+| C8 Shared Task Budget | "两个 Agent 共用 500，别打架" | 资金组不变量、预留/占用/释放、冲突等待 | B（7） | 🟡 |
+| C9 Decision Lab | "为什么没买？换规则会怎样？" | 等待诊断（全部阻塞项）、同快照双策略对照、无前视回放（覆盖与缺口） | L（6） | 🟡 |
+| OKX 闭环 | 可购买、可核对 | `GET /v1/context` 免费档、`POST /a2mcp/agent-tasks`（等 #13803 结果后提交）、状态分别记录 | O（5） | 🟡 |
+
+**两条底线**：① 上表为构建期新增清单，旧 Verify 路由与 v5 能力全部保留；② crowsnest 是既有观测基础（事件驱动的宏观/加密哨兵），本轮**新做**的是导出契约、签名、事件层与全部用户功能；它只取数、做确定性算术、按固定格式送信，不下结论、不给建议、不预测。
+
+**🟡 的含义（2026-09-23）**：六个 lane 全部合入 `devday-2026`，全仓 typecheck 9/9、verify-service 232 例全绿；本地 pglite 端到端（`E2E_LOCAL=1 pnpm --filter verify-service exec vitest run test/e2eLocal.test.ts`，生产装配）**10 PASS / 0 FAIL / 1 SKIPPED**——SKIPPED 的是 LIVE 执行一步（需 `--live` 与真 PlanGuard），转 ✅ 以服务器部署后的首轮 LIVE 集成（9/23 23:30 布里斯班开市窗口）为准；`/a2mcp/agent-tasks` 未提交上架（D-085）。
+
+**已知限制（不因 v6 改变）**：链上只约束预算/步序/期限/签名/承诺绑定，市场条件由服务判断、验证器用保存输入复算；服务侧暂停只阻止后续签发，彻底停止以链上撤销确认为准；资金组为服务侧协调，不新增链上全局预算；40 只 X Layer xStocks 全部 rebasing，单笔任务卖出必然 revert，卖出须走 PlanGuard 授权计划。

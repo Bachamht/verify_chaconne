@@ -1,0 +1,490 @@
+{
+ "schemaVersion": "chaconne-context/1",
+ "producer": "crowsnest",
+ "packagedAt": "2026-09-23T10:00:00+00:00",
+ "signatureAlg": "ed25519",
+ "publicKeyId": "crowsnest-ctx-k1",
+ "session": {
+  "label": {
+   "value": "US_PRE",
+   "source": "crowsnest.calendar（NYSE 2026–2027 硬编码表 + ET 钟点切分）",
+   "observedAt": "2026-09-23T10:00:00+00:00",
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "按 ET 钟点切分（亚盘 20:00–04:00 / 欧盘 04:00–08:00 / 盘前 08:00–09:30 / 现货 09:30–16:00 / 盘后 16:00–20:00）；休市日仍按钟点标签，请配合 usTradingDay 判断"
+  },
+  "usTradingDay": {
+   "value": true,
+   "source": "crowsnest.calendar（NYSE 2026–2027 硬编码表 + ET 钟点切分）",
+   "observedAt": "2026-09-23T10:00:00+00:00",
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "etDate 那天 NYSE 是否交易（周末与假日为 false）"
+  },
+  "holiday": {
+   "value": null,
+   "source": "crowsnest.calendar（NYSE 2026–2027 硬编码表 + ET 钟点切分）",
+   "observedAt": "2026-09-23T10:00:00+00:00",
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "etDate 当天的 NYSE 假日名；不是假日 → null"
+  },
+  "earlyClose": {
+   "value": false,
+   "source": "crowsnest.calendar（NYSE 2026–2027 硬编码表 + ET 钟点切分）",
+   "observedAt": "2026-09-23T10:00:00+00:00",
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "etDate 当天是否 13:00 ET 提前收盘"
+  },
+  "hoursToUsOpen": {
+   "value": "3.5",
+   "source": "crowsnest.calendar（NYSE 2026–2027 硬编码表 + ET 钟点切分）",
+   "observedAt": "2026-09-23T10:00:00+00:00",
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "距下一次 09:30 ET 开盘（跳过周末与假日）"
+  },
+  "hoursToUsClose": {
+   "value": "10",
+   "source": "crowsnest.calendar（NYSE 2026–2027 硬编码表 + ET 钟点切分）",
+   "observedAt": "2026-09-23T10:00:00+00:00",
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "距下一次常规收盘（16:00 ET，提前收盘日 13:00）"
+  },
+  "etDate": {
+   "value": "2026-09-23",
+   "source": "crowsnest.calendar（NYSE 2026–2027 硬编码表 + ET 钟点切分）",
+   "observedAt": "2026-09-23T10:00:00+00:00",
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ]
+  }
+ },
+ "events": [
+  {
+   "id": "crowsnest.fred:MACRO_TIER2:2026-09-24:jobless-claims",
+   "kind": "MACRO_TIER2",
+   "name": "初请失业金",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-09-24T12:30:00+00:00",
+   "dateLocal": "2026-09-24",
+   "datePrecision": "estimate",
+   "sessionHint": null,
+   "status": "estimated",
+   "revision": 0,
+   "source": "crowsnest.fred",
+   "sourceFetchedAt": "2026-09-23T08:00:00+00:00",
+   "firstKnownAt": "2026-09-23T10:00:00+00:00",
+   "tz": "America/New_York"
+  },
+  {
+   "id": "crowsnest.fred:MACRO_TIER1:2026-09-25:pce",
+   "kind": "MACRO_TIER1",
+   "name": "PCE物价",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-09-25T12:30:00+00:00",
+   "dateLocal": "2026-09-25",
+   "datePrecision": "estimate",
+   "sessionHint": null,
+   "status": "estimated",
+   "revision": 0,
+   "source": "crowsnest.fred",
+   "sourceFetchedAt": "2026-09-23T08:00:00+00:00",
+   "firstKnownAt": "2026-09-23T10:00:00+00:00",
+   "tz": "America/New_York"
+  },
+  {
+   "id": "crowsnest.umich:MACRO_TIER2:2026-09-25:umich-final",
+   "kind": "MACRO_TIER2",
+   "name": "UMich消费者信心 终值",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-09-25T14:00:00+00:00",
+   "dateLocal": "2026-09-25",
+   "datePrecision": "exact",
+   "sessionHint": null,
+   "status": "confirmed",
+   "revision": 0,
+   "source": "crowsnest.umich",
+   "sourceFetchedAt": "2026-09-23T08:00:00+00:00",
+   "firstKnownAt": "2026-09-23T10:00:00+00:00",
+   "tz": "America/New_York"
+  },
+  {
+   "id": "crowsnest.fedcal:FED_SPEECH:2026-09-29:waller",
+   "kind": "FED_SPEECH",
+   "name": "Waller 讲话（投票·鸽）",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-09-29T16:00:00+00:00",
+   "dateLocal": "2026-09-29",
+   "datePrecision": "exact",
+   "sessionHint": null,
+   "status": "confirmed",
+   "revision": 0,
+   "source": "crowsnest.fedcal",
+   "sourceFetchedAt": "2026-09-23T05:00:00+00:00",
+   "firstKnownAt": "2026-09-23T10:00:00+00:00",
+   "tz": "America/New_York"
+  },
+  {
+   "id": "crowsnest.eia:MACRO_TIER2:2026-09-30:eia-weekly",
+   "kind": "MACRO_TIER2",
+   "name": "EIA原油库存周报",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-09-30T14:30:00+00:00",
+   "dateLocal": "2026-09-30",
+   "datePrecision": "estimate",
+   "sessionHint": null,
+   "status": "estimated",
+   "revision": 0,
+   "source": "crowsnest.eia",
+   "sourceFetchedAt": "2026-09-23T08:00:00+00:00",
+   "firstKnownAt": "2026-09-23T10:00:00+00:00",
+   "tz": "America/New_York"
+  },
+  {
+   "id": "crowsnest.ism:MACRO_TIER2:2026-10-01:ism-mfg",
+   "kind": "MACRO_TIER2",
+   "name": "ISM制造业",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-10-01T14:00:00+00:00",
+   "dateLocal": "2026-10-01",
+   "datePrecision": "estimate",
+   "sessionHint": null,
+   "status": "estimated",
+   "revision": 0,
+   "source": "crowsnest.ism",
+   "sourceFetchedAt": "2026-09-23T08:00:00+00:00",
+   "firstKnownAt": "2026-09-23T10:00:00+00:00",
+   "tz": "America/New_York"
+  },
+  {
+   "id": "crowsnest.fred:MACRO_TIER1:2026-10-02:nfp",
+   "kind": "MACRO_TIER1",
+   "name": "非农就业",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-10-02T12:30:00+00:00",
+   "dateLocal": "2026-10-02",
+   "datePrecision": "estimate",
+   "sessionHint": null,
+   "status": "estimated",
+   "revision": 0,
+   "source": "crowsnest.fred",
+   "sourceFetchedAt": "2026-09-23T08:00:00+00:00",
+   "firstKnownAt": "2026-09-23T10:00:00+00:00",
+   "tz": "America/New_York"
+  },
+  {
+   "id": "crowsnest.yaml:MACRO_TIER1:2026-10-07:fomc-min-sep",
+   "kind": "MACRO_TIER1",
+   "name": "FOMC 9月会议纪要",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-10-07T18:00:00+00:00",
+   "dateLocal": "2026-10-07",
+   "datePrecision": "exact",
+   "sessionHint": null,
+   "status": "confirmed",
+   "revision": 0,
+   "source": "crowsnest.yaml",
+   "sourceFetchedAt": "2026-09-23T10:00:00+00:00",
+   "firstKnownAt": "2026-09-23T10:00:00+00:00",
+   "tz": "America/New_York"
+  }
+ ],
+ "fed": {
+  "blackout": {
+   "value": false,
+   "source": "crowsnest.fedrule（events.yaml monitor.fed.meetings + 官方静默期规则：会前第二个周六 00:00 ET → 会后一天 23:59 ET）",
+   "observedAt": "2026-09-23T10:00:00+00:00",
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ]
+  },
+  "blackoutUntil": {
+   "value": null,
+   "source": "crowsnest.fedrule（events.yaml monitor.fed.meetings + 官方静默期规则：会前第二个周六 00:00 ET → 会后一天 23:59 ET）",
+   "observedAt": "2026-09-23T10:00:00+00:00",
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "不在静默期 → null"
+  },
+  "hikeProb": {
+   "value": "42.5",
+   "source": "polymarket:2252245（pm_fast 分钟级 CLOB 采样）",
+   "observedAt": "2026-09-23T10:00:00+00:00",
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "百分数（0–100）；抓取≈样本时刻（分钟级采样）"
+  },
+  "hikeProbDrift24hPp": {
+   "value": "2.3",
+   "source": "polymarket:2252245（pm_fast 分钟级 CLOB 采样）",
+   "observedAt": "2026-09-23T10:00:00+00:00",
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "24h 净变动（pp），基准 2026-09-22T10:00:00+00:00"
+  }
+ },
+ "rates": {
+  "y2": {
+   "value": "4.32",
+   "source": "official:FRED+财政部（DGS2）",
+   "observedAt": "2026-09-22T20:00:00+00:00",
+   "fetchedAt": "2026-09-23T09:50:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "定盘日 2026-09-22（observedAt 按当日 16:00 ET 记）；日频，下一交易日 18:00 ET 前应更新"
+  },
+  "y10": {
+   "value": "4.96",
+   "source": "official:FRED+财政部（DGS10）",
+   "observedAt": "2026-09-22T20:00:00+00:00",
+   "fetchedAt": "2026-09-23T09:50:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "定盘日 2026-09-22（observedAt 按当日 16:00 ET 记）；日频，下一交易日 18:00 ET 前应更新"
+  },
+  "y30": {
+   "value": "5.29",
+   "source": "official:FRED+财政部（DGS30）",
+   "observedAt": "2026-09-22T20:00:00+00:00",
+   "fetchedAt": "2026-09-23T09:50:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "定盘日 2026-09-22（observedAt 按当日 16:00 ET 记）；日频，下一交易日 18:00 ET 前应更新"
+  },
+  "s2s30Bp": {
+   "value": "97",
+   "source": "official:30Y−2Y（同日官方定盘，FRED ∪ 财政部）",
+   "observedAt": "2026-09-22T20:00:00+00:00",
+   "fetchedAt": "2026-09-23T09:50:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "定盘日 2026-09-22；单位 bp"
+  },
+  "curveShape": {
+   "value": "bear_steepener",
+   "source": "official:30Y−2Y（同日官方定盘，FRED ∪ 财政部）",
+   "observedAt": "2026-09-22T20:00:00+00:00",
+   "fetchedAt": "2026-09-23T09:50:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "5 个共同定盘日的两腿与利差变动 → 熊陡；|Δ利差|<3bp 记 neutral"
+  },
+  "realYield10": {
+   "value": "2.44",
+   "source": "official:FRED+财政部（DFII10）",
+   "observedAt": "2026-09-22T20:00:00+00:00",
+   "fetchedAt": "2026-09-23T09:50:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "定盘日 2026-09-22（observedAt 按当日 16:00 ET 记）；日频，下一交易日 18:00 ET 前应更新"
+  },
+  "move": {
+   "value": null,
+   "source": "yahoo:^MOVE 日线（经 macro_ext 快照）",
+   "observedAt": null,
+   "fetchedAt": "2026-09-23T09:56:00+00:00",
+   "status": "unavailable",
+   "purposes": [
+    "internal",
+    "display"
+   ],
+   "note": "not_in_tier"
+  }
+ },
+ "risk": {
+  "vix": {
+   "value": null,
+   "source": "yahoo:^VIX 1h 序列末值（经 boj 层缓存，延迟约 15 分钟）",
+   "observedAt": null,
+   "fetchedAt": "2026-09-23T09:57:00+00:00",
+   "status": "unavailable",
+   "purposes": [
+    "internal",
+    "display"
+   ],
+   "note": "not_in_tier"
+  },
+  "nqOvernightPct": {
+   "value": null,
+   "source": "yahoo:NQ=F",
+   "observedAt": null,
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "unavailable",
+   "purposes": [
+    "internal",
+    "display"
+   ],
+   "note": "not_in_tier"
+  },
+  "esOvernightPct": {
+   "value": null,
+   "source": "yahoo:ES=F",
+   "observedAt": null,
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "unavailable",
+   "purposes": [
+    "internal",
+    "display"
+   ],
+   "note": "not_in_tier"
+  },
+  "dxy": {
+   "value": null,
+   "source": "yahoo:DX-Y.NYB fast_info（经 tick 宏观块，每 15 分钟；延迟约 15 分钟）",
+   "observedAt": null,
+   "fetchedAt": "2026-09-23T09:56:00+00:00",
+   "status": "unavailable",
+   "purposes": [
+    "internal",
+    "display"
+   ],
+   "note": "not_in_tier"
+  },
+  "dxyPct1d": {
+   "value": null,
+   "source": "yahoo:DX-Y.NYB fast_info（经 tick 宏观块，每 15 分钟；延迟约 15 分钟）",
+   "observedAt": null,
+   "fetchedAt": "2026-09-23T09:56:00+00:00",
+   "status": "unavailable",
+   "purposes": [
+    "internal",
+    "display"
+   ],
+   "note": "not_in_tier"
+  }
+ },
+ "crossAsset": {
+  "lastDataRelease": {
+   "value": null,
+   "source": "crowsnest.crossasset（U27：^TYX 5m + GC=F 5m + NQ=F 5m，T+20m/T+5m 判定）",
+   "observedAt": "2026-09-23T10:00:00+00:00",
+   "fetchedAt": "2026-09-23T10:00:00+00:00",
+   "status": "ok",
+   "purposes": [
+    "internal",
+    "display",
+    "agent",
+    "paid"
+   ],
+   "note": "近 24h 没有已判定的数据发布"
+  }
+ },
+ "driftVerdict": {
+  "value": "加息与黄金都没过漂移线",
+  "source": "crowsnest.drift（U13：加息 pm_fast / 金 油 DXY yfinance 1h / BTC binance 1h，滚动 24h，阈值映射）",
+  "observedAt": "2026-09-23T10:00:00+00:00",
+  "fetchedAt": "2026-09-23T10:00:00+00:00",
+  "status": "ok",
+  "purposes": [
+   "internal",
+   "display",
+   "agent",
+   "paid"
+  ],
+  "note": "确定性映射（按配置门槛比较），不是因果结论；24h 加息 +2.5pp ｜金 -0.4% ｜WTI N/A ｜DXY N/A ｜BTC +0.5%"
+ },
+ "provenance": {
+  "mode": "sample",
+  "generatedAt": "2026-09-23T04:40:55+00:00",
+  "note": "sample：联调样本，数值来自固定桩，不代表实时市场"
+ },
+ "tier": "agent",
+ "signature": "0xe83015cae72e6c7880759827f5fc6a4c9b253c4e632eaa891db0b77342ddf908a66613f9128e6770ad0c7db2024ae600546992107c2f283e800440be37e6b703"
+}

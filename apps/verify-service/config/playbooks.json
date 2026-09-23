@@ -1,0 +1,108 @@
+{
+  "version": "playbooks/1.0.0",
+  "notes": [
+    "模板条件里的 \"$name\" 引用参数；带 \"$if\": \"name\" 的项只在该参数有值时生成。",
+    "not_in_fed_blackout 不进任何模板默认条件（K-07）；用户可显式加入。",
+    "premium_bps_lte 的 official_close / close_last_tick 口径只允许 SIMULATION（Y-05），DSL 校验对 LIVE 任务拒绝。",
+    "portfolio_rebalance 只登记 id，实现归 Lane C（先卖后买、每腿单独授权、买力重算、允许 PARTIAL）。"
+  ],
+  "playbooks": {
+    "session_dca": {
+      "id": "session_dca",
+      "name": { "en": "Session DCA", "zh": "分交易日定投" },
+      "description": { "en": "Buy in N steps, at most one per trading day, only in the sessions you allow; optionally wait out event windows. A missed window is postponed, never merged.", "zh": "分 N 步买入，每个交易日最多一步，只在你允许的时段执行；可选避开事件窗口。错过的窗口只顺延，不合并剩余额度。" },
+      "side": "buy",
+      "implementedBy": "lane_b",
+      "params": {
+        "steps": { "type": "integer", "min": 1, "max": 60, "required": true },
+        "perStepAmountRaw": { "type": "raw_amount", "required": true },
+        "avoidEventKinds": { "type": "event_kinds" },
+        "eventBeforeMin": { "type": "integer", "min": 0, "max": 1440, "default": 30 },
+        "eventAfterMin": { "type": "integer", "min": 0, "max": 1440, "default": 20 },
+        "wholeDayIfDayPrecision": { "type": "boolean", "default": true }
+      },
+      "conditions": [
+        { "type": "session", "allow": ["US_REGULAR"] },
+        { "type": "min_gap_trading_days", "days": 1 },
+        { "$if": "avoidEventKinds", "type": "avoid_event_window", "kinds": "$avoidEventKinds", "beforeMin": "$eventBeforeMin", "afterMin": "$eventAfterMin", "includeEstimated": true, "wholeDayIfDayPrecision": "$wholeDayIfDayPrecision" }
+      ],
+      "requiredConditionTypes": ["session", "min_gap_trading_days"],
+      "simulationAllowed": true
+    },
+    "event_aware_accumulate": {
+      "id": "event_aware_accumulate",
+      "name": { "en": "Event-aware Accumulate", "zh": "避开事件的加仓" },
+      "description": { "en": "Add to a position while avoiding tier-1 macro releases and the company's earnings window; re-evaluate after the event (regular session + live reference required).", "zh": "加仓时避开一级宏观发布与相关公司的财报窗口；事件后重新评估（需新常规时段与有效实时参考价）。静默期条件默认不加。" },
+      "side": "buy",
+      "implementedBy": "lane_b",
+      "params": {
+        "steps": { "type": "integer", "min": 1, "max": 60, "required": true },
+        "perStepAmountRaw": { "type": "raw_amount", "required": true },
+        "eventBeforeMin": { "type": "integer", "min": 0, "max": 1440, "default": 30 },
+        "eventAfterMin": { "type": "integer", "min": 0, "max": 1440, "default": 20 },
+        "wholeDayIfDayPrecision": { "type": "boolean", "default": true },
+        "earningsBeforeTradingDays": { "type": "integer", "min": 0, "max": 30, "default": 1 },
+        "earningsAfterSessions": { "type": "integer", "min": 0, "max": 30, "default": 1 }
+      },
+      "conditions": [
+        { "type": "session", "allow": ["US_REGULAR"] },
+        { "type": "min_gap_trading_days", "days": 1 },
+        { "type": "avoid_event_window", "kinds": ["MACRO_TIER1"], "beforeMin": "$eventBeforeMin", "afterMin": "$eventAfterMin", "includeEstimated": true, "wholeDayIfDayPrecision": "$wholeDayIfDayPrecision" },
+        { "type": "earnings_window", "beforeTradingDays": "$earningsBeforeTradingDays", "afterSessions": "$earningsAfterSessions", "requireRegularSessionAfter": true, "requireLiveReferenceAfter": true }
+      ],
+      "requiredConditionTypes": ["session", "avoid_event_window", "earnings_window"],
+      "simulationAllowed": true
+    },
+    "discount_watch": {
+      "id": "discount_watch",
+      "name": { "en": "Discount Watch", "zh": "折价观察" },
+      "description": { "en": "Buy one step when the on-chain executable price is at or below your premium threshold versus a live reference. Close-based references are observation/simulation only.", "zh": "链上可执行价相对实时参考价的溢价 ≤ 阈值时买一步。收盘口径只做观察/模拟，不包装成实时机会。" },
+      "side": "buy",
+      "implementedBy": "lane_b",
+      "params": {
+        "amountRaw": { "type": "raw_amount", "required": true },
+        "steps": { "type": "integer", "min": 1, "max": 10, "default": 1 },
+        "maxPremiumBps": { "type": "integer", "min": -10000, "max": 10000, "required": true },
+        "referenceKind": { "type": "reference_kind", "default": "live" }
+      },
+      "conditions": [
+        { "type": "session", "allow": ["US_REGULAR"] },
+        { "type": "premium_bps_lte", "value": "$maxPremiumBps", "referenceKind": "$referenceKind", "liveOnlyForExecution": true }
+      ],
+      "requiredConditionTypes": ["premium_bps_lte"],
+      "simulationAllowed": true
+    },
+    "target_sell": {
+      "id": "target_sell",
+      "name": { "en": "Target / Tracked-cost Sell", "zh": "目标价 / 成本止盈卖出" },
+      "description": { "en": "Sell one step when the live reference reaches your target price, or when traceable-cost PnL reaches your threshold. If cost coverage is below 100%, cost-based selling is unavailable (TRACKED_COST_UNKNOWN); the target-price condition still works on its own.", "zh": "实时参考价达到目标价，或可追溯成本的收益率达到阈值时卖一步。成本覆盖率 <100% 时成本止盈不可用（TRACKED_COST_UNKNOWN），目标价条件仍可独立使用。" },
+      "side": "sell",
+      "implementedBy": "lane_b",
+      "params": {
+        "amountRaw": { "type": "raw_amount", "required": true },
+        "steps": { "type": "integer", "min": 1, "max": 10, "default": 1 },
+        "targetPriceUsd": { "type": "decimal" },
+        "trackedCostPnlPctGte": { "type": "number", "min": -100, "max": 10000 }
+      },
+      "requireOneOf": [["targetPriceUsd", "trackedCostPnlPctGte"]],
+      "conditions": [
+        { "type": "session", "allow": ["US_REGULAR"] },
+        { "$if": "targetPriceUsd", "type": "target_price_gte", "underlyingPriceUsd": "$targetPriceUsd", "referenceKind": "live" },
+        { "$if": "trackedCostPnlPctGte", "type": "tracked_cost_pnl_pct_gte", "value": "$trackedCostPnlPctGte" }
+      ],
+      "requiredConditionTypes": ["session"],
+      "simulationAllowed": true
+    },
+    "portfolio_rebalance": {
+      "id": "portfolio_rebalance",
+      "name": { "en": "Portfolio Rebalance", "zh": "组合调仓" },
+      "description": { "en": "Rebalance holdings to target weights with a cash floor: sells first, each leg authorized separately, buying power recomputed after sells, partial completion allowed. Orchestrated by Lane C (/v1/rebalance/*).", "zh": "按目标权重调仓并保留现金下限：先卖后买、每腿单独授权、卖出确认后重算买力、允许部分完成。由 Lane C 编排（/v1/rebalance/*）。" },
+      "side": "buy",
+      "implementedBy": "lane_c",
+      "params": {},
+      "conditions": [],
+      "requiredConditionTypes": [],
+      "simulationAllowed": true
+    }
+  }
+}

@@ -109,6 +109,35 @@
       "url": "https://verify.chaconne.xyz/",
       "port": 3110,
       "status": "live (v5 pages, redeployed 2026-09-21)"
+    },
+    "okxAiListingStatusFields": "listed = platform shows the service as live/approved; applied = a listing request was submitted (platform id recorded); directCallable = the endpoint answers the A2MCP 200/402 contract when called directly; paidSuccess = at least one real x402 settlement succeeded against it (tx recorded). None of these implies another (upstream §6).",
+    "verifyStockProof": {
+      "endpoint": "https://verify.chaconne.xyz/a2mcp/verify",
+      "listed": false,
+      "applied": true,
+      "directCallable": true,
+      "paidSuccess": true,
+      "notes": "applied: ASP #13803 service 40806 resubmitted 2026-09-21T07:04Z (see okxAi.listing); directCallable: reviewerEvidence.after_fix 200 delivered; paidSuccess: x402Evidence.settlements[0] tx 0x9a13…bccf on eip155:1952."
+    },
+    "verifyPlanMonitor": {
+      "endpoints": [
+        "https://verify.chaconne.xyz/a2mcp/plan",
+        "https://verify.chaconne.xyz/a2mcp/monitor"
+      ],
+      "listed": false,
+      "applied": false,
+      "directCallable": true,
+      "paidSuccess": false,
+      "notes": "Submission deferred until #13803 review completes (D-083); endpoints live since v5 deploy 2026-09-21; review-period price 0 so no paid settlement exists."
+    },
+    "verifyAgentTasks": {
+      "endpoint": "https://verify.chaconne.xyz/a2mcp/agent-tasks",
+      "freeContext": "https://verify.chaconne.xyz/v1/context?tier=agent",
+      "listed": false,
+      "applied": false,
+      "directCallable": false,
+      "paidSuccess": false,
+      "notes": "v6 Lane F draft (asp-service-plan.json agentTasksService). Not submitted (wait for #13803, D-085). directCallable becomes true only after the devday-2026 deploy that includes this endpoint; price 0 during review."
     }
   },
   "toolchain": {
@@ -293,5 +322,36 @@
       }
     },
     "note": "AAPLx is share-accounted (rebasing): each transfer delivers 1 wei less than requested. v1 Guard has no inputShortfallTolerance, so a sell through the single-job path reverts InputTransferShortfall (0x03a3f9bc); PlanGuard v2 tolerates 1e6 wei and refunds the unused remainder."
+  },
+  "agentV6": {
+    "contractsFrozen": "interfaces.md §11（2026-09-23）",
+    "migration": "0018_pink_darwin.sql（22 张表）",
+    "context": {
+      "producer": "crowsnest",
+      "schemaVersion": "chaconne-context/1",
+      "signature": "ed25519",
+      "publicKeyId": "crowsnest-ctx-k1",
+      "serverPublicKeyHex": "<服务器生成后回写>",
+      "publicEndpoint": "https://verify.chaconne.xyz/context/latest.json（agent 档，待 nginx）",
+      "internalEndpoint": "http://127.0.0.1:<port>/context/context.json（同机回环，待配置）"
+    },
+    "eventSources": {
+      "macro": "crowsnest events.yaml + FRED/ISM/EIA/拍卖/UMich/联储日程/FOMC 静默期",
+      "earnings": "finnhub /calendar/earnings（35/41 覆盖；6 只 EARNINGS_COVERAGE_UNKNOWN）",
+      "calendar": "packages/core/src/calendar.ts（NYSE 假日/提前收盘）"
+    },
+    "playbooks": "playbooks/1.0.0（session_dca / event_aware_accumulate / discount_watch / target_sell / portfolio_rebalance）",
+    "capabilityFlags": [
+      "AGENT_C1_ENABLED",
+      "AGENT_C2_ENABLED",
+      "AGENT_C3_ENABLED",
+      "AGENT_C4_ENABLED",
+      "AGENT_C5_ENABLED",
+      "AGENT_C6_ENABLED",
+      "AGENT_C7_ENABLED",
+      "AGENT_C8_ENABLED",
+      "AGENT_C9_ENABLED"
+    ],
+    "status": "merged to devday-2026, not yet deployed"
   }
 }

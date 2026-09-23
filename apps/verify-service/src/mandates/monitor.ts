@@ -4,11 +4,17 @@
  */
 import { log } from "../log";
 import type { MandatesService } from "./service";
+/* v6 Lane B：同一 tick 里再跑任务层（条件闸门）；挂在任务上的授权不在这里直接评估 */
+import { taskMonitorOnce } from "../tasks/monitor";
+import type { RevokedLogReader } from "../tasks/revocations";
+import type { Db } from "../db";
+export type RevocationDeps = { db: Db; reader: RevokedLogReader } | null;
+import type { TasksService } from "../tasks/service";
 
-export async function monitorOnce(mandates: MandatesService): Promise<{ checked: number; ready: number; expiredSteps: number; expiredMandates: number }> {
+export async function monitorOnce(mandates: MandatesService, tasks?: TasksService | null, revocations?: RevocationDeps): Promise<{ checked: number; ready: number; expiredSteps: number; expiredMandates: number; tasks?: Awaited<ReturnType<typeof taskMonitorOnce>> }> {
   const expiredSteps = await mandates.expireSteps();
   const expiredMandates = await mandates.expireMandates();
-  const rows = await mandates.activeMandates();
+  const rows = await mandates.activeMandates({ standalone: true });
   let ready = 0;
   for (const row of rows) {
     try {
@@ -19,15 +25,16 @@ export async function monitorOnce(mandates: MandatesService): Promise<{ checked:
     }
   }
   if (rows.length > 0) log.info("monitor 轮次", { checked: rows.length, ready, expiredSteps, expiredMandates });
-  return { checked: rows.length, ready, expiredSteps, expiredMandates };
+  const taskResult = tasks ? await taskMonitorOnce(tasks, revocations ?? null) : undefined;
+  return { checked: rows.length, ready, expiredSteps, expiredMandates, ...(taskResult ? { tasks: taskResult } : {}) };
 }
 
-export function startMonitor(mandates: MandatesService): () => void {
+export function startMonitor(mandates: MandatesService, tasks?: TasksService | null, revocations?: RevocationDeps): () => void {
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
   const tick = () => {
     if (stopped) return;
-    monitorOnce(mandates)
+    monitorOnce(mandates, tasks, revocations)
       .catch((err) => log.error("monitor 失败", { error: err instanceof Error ? err.message : String(err) }))
       .finally(() => {
         if (stopped) return;

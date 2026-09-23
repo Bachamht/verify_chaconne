@@ -23,11 +23,28 @@ const ALLOWED = new RegExp(
       "v1/profiles/me",
       "v1/templates(/[A-Za-z0-9_]+)?",
       "v1/shares",
+      /* v6（interfaces §11.7）：Lane B/C/D/E 端点一次放行，未部署时服务回 404，页面显示「尚未就绪」 */
+      "v1/context",
+      "v1/events(/[A-Za-z0-9_.:-]+/revisions)?",
+      "v1/event-impacts",
+      "v1/tasks(/[A-Za-z0-9_]+(/(pause|resume|cancel|authorize|prepare-step|explain-wait|compare-policies))?)?",
+      "v1/theses(/[A-Za-z0-9_]+(/review-items)?)?",
+      "v1/budget-groups(/[A-Za-z0-9_]+(/allocations)?)?",
+      "v1/portfolio/0x[0-9a-fA-F]{40}(/cost-overrides)?",
+      "v1/notify/(webhooks(/[A-Za-z0-9_]+)?|telegram/link|test)",
+      "v1/replays(/[A-Za-z0-9_]+)?",
+      "v1/rebalance/(preview|plans(/[A-Za-z0-9_]+)?)",
+      "v1/recaps(/[A-Za-z0-9_]+(/share)?)?",
+      "v1/missions",
+      /* Lane D 的动作与覆盖端点、Lane C 的执行器端点（F 的名单漏了这三条） */
+      "v1/event-impacts/actions",
+      "v1/events/earnings/coverage",
+      "v1/mandates/[A-Za-z0-9_]+/executor(/heartbeat)?",
     ].join("|") +
     ")$",
 );
 /** 这些 POST 的 body 带 ownerAddress（或已签 mandate 的 owner）→ 写 owner cookie（按钱包隔离任务） */
-const OWNER_SETTERS = new Set(["v1/jobs", "v1/plans", "v1/simulations", "v1/mandates", "v1/profiles/me"]);
+const OWNER_SETTERS = new Set(["v1/jobs", "v1/plans", "v1/simulations", "v1/mandates", "v1/profiles/me", "v1/tasks", "v1/budget-groups", "v1/theses"]);
 const COOKIE = "verify_owner";
 
 async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
@@ -39,13 +56,18 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
 
   const jar = await cookies();
   let owner = jar.get(COOKIE)?.value ?? "";
+  // v6：只读列表带 ?owner=（任务 / 复盘 / 影响 / 组合）——没有 cookie 时也按该地址当 caller，服务端仍按 owner 鉴权
+  if (!owner) {
+    const qo = url.searchParams.get("owner") ?? /^v1\/portfolio\/(0x[0-9a-fA-F]{40})/.exec(joined)?.[1] ?? "";
+    if (/^0x[0-9a-fA-F]{40}$/.test(qo)) owner = qo.toLowerCase();
+  }
   let bodyText: string | undefined;
   if (req.method === "POST" || req.method === "PUT") {
     bodyText = await req.text();
     if (OWNER_SETTERS.has(joined)) {
       try {
-        const b = JSON.parse(bodyText || "{}") as { ownerAddress?: string; goal?: { ownerAddress?: string }; typedData?: { message?: { owner?: string } } };
-        const cand = b.ownerAddress ?? b.goal?.ownerAddress ?? b.typedData?.message?.owner;
+        const b = JSON.parse(bodyText || "{}") as { ownerAddress?: string; owner?: string; goal?: { ownerAddress?: string }; typedData?: { message?: { owner?: string } } };
+        const cand = b.ownerAddress ?? b.owner ?? b.goal?.ownerAddress ?? b.typedData?.message?.owner;
         if (typeof cand === "string" && /^0x[0-9a-fA-F]{40}$/.test(cand)) owner = cand.toLowerCase();
       } catch {
         /* 交给服务校验 */

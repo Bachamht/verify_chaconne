@@ -7,6 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { VerifyClient } from "./client";
 import { createVerifyMcpServer } from "./server";
 import { AgentWallet, agentWalletConfigFromEnv } from "./wallet";
+import { ExecutorHeartbeat } from "./heartbeat";
 
 const baseUrl = process.env["VERIFY_SERVICE_URL"] ?? "https://verify.chaconne.xyz";
 const apiKey = process.env["VERIFY_API_KEY"] ?? "";
@@ -35,10 +36,14 @@ try {
 }
 const caller = process.env["VERIFY_CALLER"] || wallet?.address.toLowerCase() || undefined;
 
-const server = createVerifyMcpServer({ client: new VerifyClient({ baseUrl, apiKey, caller, payer: wallet?.payer ?? null }), rpcUrl, wallet });
+const client = new VerifyClient({ baseUrl, apiKey, caller, payer: wallet?.payer ?? null });
+// v6：agent-wallet 模式 = 本进程可能是执行器 → 每 60 s 向 /v1/mandates/:id/executor/heartbeat 报在线（只对本进程授权/执行过的 mandate）
+const heartbeat = wallet ? new ExecutorHeartbeat(client, wallet.address) : null;
+heartbeat?.start();
+const server = createVerifyMcpServer({ client, rpcUrl, wallet, heartbeat });
 const transport = new StdioServerTransport();
 server.connect(transport).then(
-  () => console.error(`[chaconne-verify-mcp] ready → ${baseUrl}${wallet ? ` | agent-wallet ${wallet.address} max $${wallet.cfg.maxSpendUsd} chains ${wallet.chainIds.join(",")}` : " | agent-wallet: off"}`),
+  () => console.error(`[chaconne-verify-mcp] ready → ${baseUrl}${wallet ? ` | agent-wallet ${wallet.address} max $${wallet.cfg.maxSpendUsd} chains ${wallet.chainIds.join(",")} | executor heartbeat 60 s` : " | agent-wallet: off"}`),
   (err) => {
     console.error("[chaconne-verify-mcp] failed:", err);
     process.exit(1);

@@ -1,0 +1,45 @@
+{
+ "canonicalVersion": "canon-1",
+ "publicKeyId": "crowsnest-ctx-k1",
+ "publicKeyHex": "31bd65ba3273d04e572b9bc6deaff903b3cbf4d48efc151efd7dc0f1ea0570e4",
+ "input": {
+  "schemaVersion": "chaconne-context/1",
+  "producer": "crowsnest",
+  "packagedAt": "2026-09-23T10:00:00+00:00",
+  "signatureAlg": "ed25519",
+  "publicKeyId": "crowsnest-ctx-k1",
+  "z_last": null,
+  "a_first": true,
+  "m_mid": false,
+  "empty": [],
+  "emptyObj": {},
+  "nested": {
+   "b": [
+    1,
+    "two",
+    null,
+    {
+     "y": "中文/斜杠",
+     "x": "引号\"反斜杠\\换行\n制表\t"
+    }
+   ],
+   "a": 9007199254740991
+  },
+  "unicode": {
+   "é": "e-acute",
+   "ｚ": "fullwidth z",
+   "z": "ascii z",
+   "😀": "emoji as surrogate pair key"
+  },
+  "num": {
+   "int": 0,
+   "neg": -42,
+   "decimalString": "4.96",
+   "exp": "1e-7"
+  }
+ },
+ "canonical": "{\"a_first\":true,\"empty\":[],\"emptyObj\":{},\"m_mid\":false,\"nested\":{\"a\":9007199254740991,\"b\":[1,\"two\",null,{\"x\":\"引号\\\"反斜杠\\\\换行\\n制表\\t\",\"y\":\"中文/斜杠\"}]},\"num\":{\"decimalString\":\"4.96\",\"exp\":\"1e-7\",\"int\":0,\"neg\":-42},\"packagedAt\":\"2026-09-23T10:00:00+00:00\",\"producer\":\"crowsnest\",\"publicKeyId\":\"crowsnest-ctx-k1\",\"schemaVersion\":\"chaconne-context/1\",\"signatureAlg\":\"ed25519\",\"unicode\":{\"z\":\"ascii z\",\"é\":\"e-acute\",\"😀\":\"emoji as surrogate pair key\",\"ｚ\":\"fullwidth z\"},\"z_last\":null}",
+ "canonicalUtf8Sha256": "b1e4235aa3bd427c901155836a5d1fa6335a5cdc57247bac22972dbaaafaa068",
+ "signature": "0xa1ee948adb81fcc5b63ebae2ba74511f0476be10147cfabd2ed1479831b953a1d91e94f1f1dc7b8655f09044e7b3b47aa3dec0856f9723a210c69ed66c8bf00a",
+ "note": "signature = Ed25519(utf8(canonical(input)))；input 不含 signature 键；验签时先用 TS canonicalJson(input) 与 canonical 逐字节比对"
+}

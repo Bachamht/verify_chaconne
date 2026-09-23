@@ -121,3 +121,43 @@ describe("createClient", () => {
     expect(amountUsdEstimate("1234567")).toBe("1.234567");
   });
 });
+
+/* ---------- v6（Lane F）：类型化路径命中 §11.7；未部署 → isNotAvailable ---------- */
+import { isNotAvailable } from "../src/index";
+describe("v6 方法", () => {
+  it("tasks / context / events / recaps / heartbeat 走冻结路径；停止响应带 D-088 说明", async () => {
+    const c = createClient({ baseUrl: free.url, apiKey: "k", caller: OWNER.toLowerCase() });
+    const created = await c.tasks.create({ clientRequestId: "t1", ownerAddress: OWNER, playbookId: "session_dca", params: { steps: 3 }, conditions: { version: "conditions/1", items: [{ type: "session", allow: ["US_REGULAR"] }] }, mode: "SIMULATION" });
+    expect(created.status).toBe(201);
+    expect(created.body.task.id).toBe("tsk_t1");
+    expect(free.seen.at(-1)!.path).toBe("/v1/tasks");
+    expect((await c.tasks.get("tsk_t1")).status).toBe(200);
+    const stop = await c.tasks.cancel("tsk_t1");
+    expect(stop.body.note).toMatch(/revokeMandate/);
+    expect(free.seen.at(-1)!.path).toBe("/v1/tasks/tsk_t1/cancel");
+    await c.context.get({ tier: "agent", owner: OWNER });
+    expect(free.seen.at(-1)!.path).toBe(`/v1/context?tier=agent&owner=${OWNER}`);
+    await c.events.impacts(OWNER, 24);
+    expect(free.seen.at(-1)!.path).toBe(`/v1/event-impacts?owner=${OWNER}&horizonHours=24`);
+    await c.recaps.list(OWNER, "2026-09-17");
+    expect(free.seen.at(-1)!.path).toBe(`/v1/recaps?owner=${OWNER}&date=2026-09-17`);
+    const hb = await c.executor.heartbeat("mnd_1");
+    expect(hb.status).toBe(204);
+    expect(free.heartbeats.map((h) => h.mandateId)).toEqual(["mnd_1"]);
+    expect((await c.notify.deleteWebhook("wh_1")).status).toBe(204);
+    expect((await c.a2mcp.agentTasks({ assets: ["AAPLx"] })).body).toMatchObject({ status: "delivered" });
+    expect(free.seen.at(-1)!.headers["x-api-key"]).toBeUndefined();
+  });
+
+  it("端点未部署（404 not_found）→ isNotAvailable=true；业务 404（task_not_found）→ false", async () => {
+    const old = await startFakeService({ v6: false });
+    const c = createClient({ baseUrl: old.url, apiKey: "k" });
+    const r = await c.tasks.get("tsk_x");
+    expect(r.status).toBe(404);
+    expect(isNotAvailable(r)).toBe(true);
+    expect(isNotAvailable({ status: 404, body: { error: "task_not_found" } })).toBe(false);
+    expect(isNotAvailable({ status: 503, body: { error: "v6_disabled" } })).toBe(true);
+    expect(isNotAvailable({ status: 200, body: {} })).toBe(false);
+    await old.close();
+  });
+});
