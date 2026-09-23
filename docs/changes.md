@@ -182,7 +182,7 @@ A2MCP 平台接入端点在 Lane C（`POST /a2mcp/verify`）；ASP #13803 已创
 
 | 能力 | 用户能交代的事 | 主要交付 | 验收组 | 状态 |
 |---|---|---|---|---|
-| C1 MarketContext | "现在什么时段、接下来有什么事、宏观什么状态" | crowsnest 导出契约（Ed25519 签名、逐字段 status/purposes）、`GET /v1/context` 档位裁剪与按资产/任务过滤 | X（8） | 🟡 |
+| C1 MarketContext | "现在什么时段、接下来有什么事、宏观什么状态" | crowsnest 导出契约（Ed25519 签名、逐字段 status/purposes）、`GET /v1/context` 档位裁剪与按资产/任务过滤 | X（8） | ✅（2026-09-23 线上验签通过、provenance=live，X 阶段对生产 PASS；X-08 日历对拍 7/10 双来源一致，3 项待运营者裁定，见 addresses-pending） |
 | C2 Conditions | "只在这些条件下才买" | 条件 DSL `conditions/1`、三态求值纯函数、`conditionsHash` 进证书与证据包 | K（10） | 🟡 |
 | C3 Playbooks | 五个持续任务模板 | `playbooks.json`、`POST /v1/tasks`、Session DCA 跨交易日、调仓多腿 | Y（8） | 🟡 |
 | C4 Portfolio + Notifications | "我有什么、被叫醒" | 组合与成本覆盖率、资金组占用、webhook（HMAC）+ Telegram、执行器三态 | Q（8） | 🟡 |

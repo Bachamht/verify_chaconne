@@ -159,7 +159,7 @@ describe("K-07 not_in_fed_blackout：默认不在模板，且不影响其它条�
 });
 
 describe("K-08 跨资产确认不接受 undecided", () => {
-  it("K-08 DSL 拒绝 acceptStates 含 undecided / 空集；求值：undecided → UNSATISFIED，relief 在 accept 内 → SATISFIED，value=null → INSUFFICIENT", () => {
+  it("K-08 DSL 拒绝 acceptStates 含 undecided / 空集；求值：undecided → UNSATISFIED，relief 在 accept 内 → SATISFIED；producer 标 ok 的 null（近 24h 无发布）→ SATISFIED，标 unavailable 的 null → INSUFFICIENT（CV-D15）", () => {
     expect(validateConditionSet({ items: [{ type: "require_cross_asset_confirmation", acceptStates: ["relief", "undecided"] }] }, "LIVE").ok).toBe(false);
     expect(validateConditionSet({ items: [{ type: "require_cross_asset_confirmation", acceptStates: [] }] }, "LIVE").ok).toBe(false);
     const cond: Condition = { type: "require_cross_asset_confirmation", acceptStates: ["relief", "transmission"] };
@@ -167,7 +167,13 @@ describe("K-08 跨资产确认不接受 undecided", () => {
     expect(evaluateConditions(set([cond]), und, state(), NOW).perItem[0]).toMatchObject({ outcome: "UNSATISFIED", reasons: [{ code: "CROSS_ASSET_UNCONFIRMED" }] });
     const ok = evidenceAt(NOW, { overrides: { crossAsset: { eventId: "e1", state: "relief", atUtc: NOW } } });
     expect(evaluateConditions(set([cond]), ok, state(), NOW).outcome).toBe("SATISFIED");
-    expect(evaluateConditions(set([cond]), evidenceAt(NOW), state(), NOW).perItem[0]!.outcome).toBe("INSUFFICIENT_EVIDENCE");
+    // CV-D15：fixture 的 lastDataRelease 缺省是 status=ok 的 null（没有需要确认的发布）→ 条件成立
+    expect(evaluateConditions(set([cond]), evidenceAt(NOW), state(), NOW).perItem[0]!.outcome).toBe("SATISFIED");
+    // producer 说不可得（status=unavailable）→ 仍是证据不足
+    const unavail = evidenceAt(NOW);
+    unavail.context!.snapshot.crossAsset.lastDataRelease = { ...unavail.context!.snapshot.crossAsset.lastDataRelease, value: null, status: "unavailable" };
+    unavail.context!.fieldStatus["crossAsset.lastDataRelease"] = "unavailable";
+    expect(evaluateConditions(set([cond]), unavail, state(), NOW).perItem[0]!.outcome).toBe("INSUFFICIENT_EVIDENCE");
   });
 });
 

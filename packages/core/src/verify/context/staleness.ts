@@ -49,7 +49,11 @@ function riskFresh(f: CtxField<unknown>, nowMs: number, cal: MarketCalendar): bo
 }
 
 export function fieldStatusAt(path: string, f: CtxField<unknown>, nowMs: number, cal: MarketCalendar = NYSE_CALENDAR): CtxStatus {
-  if (f.value === null || f.value === undefined) return "unavailable";
+  // CV-D15（2026-09-23，服务器上线观察）：「值为 null」与「不可得」是两回事。producer 标 status=ok 且 value=null 的字段
+  // （不是假日 → holiday=null、不在静默期 → blackoutUntil=null、近 24h 无数据发布 → lastDataRelease=null）按合法空值处理，
+  // 仍照常做新鲜度判定；只有 producer 标 unavailable / 没标 ok 的 null 才是不可得。
+  const isNull = f.value === null || f.value === undefined;
+  if (isNull && f.status !== "ok") return "unavailable";
   if (f.status === "unavailable") return "unavailable";
   if (f.observedAt && Date.parse(f.observedAt) > nowMs) return "unfinished";
   if (f.status === "unfinished") return "unfinished";
@@ -60,6 +64,7 @@ export function fieldStatusAt(path: string, f: CtxField<unknown>, nowMs: number,
   if (path.startsWith("rates.")) return dailyFixingFresh(f.observedAt, nowMs, cal) ? "ok" : "stale";
   if (path.startsWith("risk.")) return riskFresh(f, nowMs, cal) ? "ok" : "stale";
   if (path === "crossAsset.lastDataRelease") {
+    if (isNull) return nowMs - fetchedMs <= 60 * MIN ? "ok" : "stale";
     const v = f.value as { atUtc?: string } | null;
     const at = v?.atUtc ? Date.parse(v.atUtc) : NaN;
     if (Number.isNaN(at)) return "unavailable";

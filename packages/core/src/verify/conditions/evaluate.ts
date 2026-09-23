@@ -33,7 +33,7 @@ function result(item: Condition, outcome: ConditionOutcome, reasons: Reason[], e
 }
 
 /** 取上下文字段：不可达 → CONTEXT_UNAVAILABLE；not_in_tier → CONTEXT_FIELD_NOT_IN_TIER；stale/unfinished/unavailable → CONTEXT_STALE/UNAVAILABLE */
-function ctxField(c: ItemCtx, path: string): { field: CtxField<unknown>; evidenceId: string } | { blocked: Reason } {
+function ctxField(c: ItemCtx, path: string, opts?: { allowNull?: boolean }): { field: CtxField<unknown>; evidenceId: string } | { blocked: Reason } {
   if (!c.ev.context) return { blocked: reason("CONTEXT_UNAVAILABLE", [], { field: path }) };
   const f = contextField(c.ev.context.snapshot, path);
   const status: CtxStatus | undefined = c.ev.context.fieldStatus[path] ?? f?.status;
@@ -41,7 +41,8 @@ function ctxField(c: ItemCtx, path: string): { field: CtxField<unknown>; evidenc
   if (!f) return { blocked: reason("CONTEXT_UNAVAILABLE", [id], { field: path, reason: "missing" }) };
   if (f.note === "not_in_tier") return { blocked: reason("CONTEXT_FIELD_NOT_IN_TIER", [id], { field: path }) };
   if (status === "stale" || status === "unfinished") return { blocked: reason("CONTEXT_STALE", [id], { field: path, status: status ?? null, observedAt: f.observedAt, fetchedAt: f.fetchedAt }) };
-  if (status !== "ok" || f.value === null) return { blocked: reason("CONTEXT_UNAVAILABLE", [id], { field: path, status: status ?? null }) };
+  // CV-D15：producer 标 ok 的 null 是合法空值（fieldStatus 已是 ok）；只有声明 allowNull 的调用方才拿它，其余字段 null 仍算不可得
+  if (status !== "ok" || (f.value === null && !opts?.allowNull)) return { blocked: reason("CONTEXT_UNAVAILABLE", [id], { field: path, status: status ?? null }) };
   return { field: f, evidenceId: id };
 }
 
@@ -189,7 +190,7 @@ function evalFedBlackout(item: Extract<Condition, { type: "not_in_fed_blackout" 
   const f = ctxField(c, "fed.blackout");
   if ("blocked" in f) return result(item, "INSUFFICIENT_EVIDENCE", [f.blocked], f.blocked.evidenceIds, null);
   if (f.field.value !== true) return result(item, "SATISFIED", [], [f.evidenceId], null);
-  const until = ctxField(c, "fed.blackoutUntil");
+  const until = ctxField(c, "fed.blackoutUntil", { allowNull: true });
   const next = "blocked" in until ? null : typeof until.field.value === "string" && !Number.isNaN(Date.parse(until.field.value)) ? until.field.value : null;
   return result(item, "UNSATISFIED", [reason("FED_BLACKOUT", [f.evidenceId], { blackoutUntil: next })], [f.evidenceId], next);
 }
@@ -236,8 +237,10 @@ function evalDailyCap(item: Extract<Condition, { type: "max_steps_per_trading_da
 }
 
 function evalCrossAsset(item: Extract<Condition, { type: "require_cross_asset_confirmation" }>, c: ItemCtx): ConditionItemResult {
-  const f = ctxField(c, "crossAsset.lastDataRelease");
+  const f = ctxField(c, "crossAsset.lastDataRelease", { allowNull: true });
   if ("blocked" in f) return result(item, "INSUFFICIENT_EVIDENCE", [f.blocked], f.blocked.evidenceIds, null);
+  // CV-D15：近 24h 没有已判定的数据发布（合法 null）→ 没有需要等待确认的发布，条件成立
+  if (f.field.value === null) return result(item, "SATISFIED", [], [f.evidenceId], null);
   const v = f.field.value as { eventId: string; state: string; atUtc: string };
   if (v.state === "undecided") return result(item, "UNSATISFIED", [reason("CROSS_ASSET_UNCONFIRMED", [f.evidenceId], { state: v.state, eventId: v.eventId, atUtc: v.atUtc, accept: item.acceptStates.join("|") })], [f.evidenceId], null);
   if ((item.acceptStates as string[]).includes(v.state)) return result(item, "SATISFIED", [], [f.evidenceId], null);

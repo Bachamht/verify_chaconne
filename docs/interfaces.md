@@ -171,6 +171,7 @@ agent-wallet 模式（CV-D08）：`AGENT_WALLET_PRIVATE_KEY` 是用户自己的 
 | CV-D07 | 2026-09-21 | `Eip712Domain.name` 放宽为 `"ChaconneVerifyGuard" \| "ChaconneVerifyPlanGuard"`；v1 编码与哈希不变 |
 | CV-D08 | 2026-09-21 | verify-mcp agent-wallet 模式（见 10.5）；服务端零 relayer（D-081） |
 | CV-D10 | 2026-09-21 | A2MCP 传输约定：缺参数/非法参数回 HTTP 200 + `status:"input_required"`（ASP #13803 首次审核被驳回的根因：OKX 客户端把 400 判为端点不可达）；策略版本缺省改为最新 1.1.0（a2mcp / plans / web / mcp / sdk），v1 Guard 白名单已补 v1.1.0 三策略 + 登记表 v1.1.0 |
+| CV-D15 | 2026-09-23 | 上下文字段的「值为 null」与「不可得」分开：producer 标 `status=ok` 且 `value=null`（不是假日 → `session.holiday`、不在静默期 → `fed.blackoutUntil`、近 24h 无已判定发布 → `crossAsset.lastDataRelease`）是**合法空值**，服务侧判为 `ok` 并照常做新鲜度（过期仍 `stale`）；只有 producer 未标 ok 的 null 才是 `unavailable`。条件求值：`not_in_fed_blackout` 的 `blackoutUntil` 与 `require_cross_asset_confirmation` 的 `lastDataRelease` 接受合法 null（后者 null = 没有需要确认的发布 → SATISFIED）；数值/枚举字段 null 仍算证据不足。来源：服务器上线观察（deployment runbook 2026-09-23）。 |
 | CV-D09 | 2026-09-21 | `CreateVerifyJob.side?` / `NormalizedJob.side?`（缺省 buy；requestHash 仅 sell 时纳入 side，buy 哈希与 v1 一致）；`EvidenceBundle` 增 `job`/`goal?`/`registryVersion`（见 10.9，A2 定稿，I2 批准） |
 
 ### 10.9 A2 定稿（2026-09-21，内核实现细节）

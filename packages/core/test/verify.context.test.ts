@@ -92,11 +92,26 @@ describe("X-02 逐字段 staleness（服务判定，不信 producer 自报）", 
     const noObs = fixtureMarketContext({ at: AT, overrides: { riskObservedAt: null } });
     expect(assessContextStaleness(noObs, "2026-09-19T15:00:00.000Z")["risk.vix"]).toBe("stale");
   });
-  it("X-02 unfinished：observedAt 晚于评估时点的区间不得当已发生观测；value=null 一律 unavailable", () => {
+  it("X-02 unfinished：observedAt 晚于评估时点的区间不得当已发生观测；producer 未标 ok 的 null → unavailable", () => {
     const ctx = fixtureMarketContext({ at: AT, overrides: { ratesObservedAt: "2026-09-18T20:00:00.000Z", vix: null } });
     const s = assessContextStaleness(ctx, "2026-09-18T15:05:00.000Z");
     expect(s["rates.y10"]).toBe("unfinished");
     expect(s["risk.vix"]).toBe("unavailable");
+  });
+
+  it("CV-D15 合法空值：producer 标 ok 的 null（不是假日 / 不在静默期 / 近 24h 无发布）→ ok，且仍按新鲜度判 stale；标 unavailable 的 null 仍 unavailable", () => {
+    const ctx = fixtureMarketContext({ at: AT });
+    const fresh = assessContextStaleness(ctx, "2026-09-18T15:05:00.000Z");
+    expect(fresh["session.holiday"]).toBe("ok");
+    expect(fresh["fed.blackoutUntil"]).toBe("ok");
+    expect(fresh["crossAsset.lastDataRelease"]).toBe("ok");
+    // 同一份两小时后再评：session 类 TTL 已过 → stale（null 不是免死金牌），lastDataRelease 也按 60 min 判
+    const later = assessContextStaleness(ctx, "2026-09-18T17:05:00.000Z");
+    expect(later["session.holiday"]).toBe("stale");
+    expect(later["crossAsset.lastDataRelease"]).toBe("stale");
+    const bad = fixtureMarketContext({ at: AT }) as unknown as { session: { holiday: { status: string } } };
+    bad.session.holiday = { ...bad.session.holiday, status: "unavailable" };
+    expect(assessContextStaleness(bad as never, "2026-09-18T15:05:00.000Z")["session.holiday"]).toBe("unavailable");
   });
 });
 
