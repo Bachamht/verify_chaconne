@@ -16,10 +16,15 @@ import type { Request, Response } from "express";
 import { hashCanonical, LATEST_POLICY_VERSION } from "@chaconne/core/verify";
 import type { VerifyConfig } from "../config";
 import { log } from "../log";
-import { rateLimit } from "./auth";
 import type { Paywall } from "./paywall";
 import { HttpError, type VerifyService } from "../jobs/service";
+import type { ClubService } from "../club/service";
 import { inputRequiredBody, parseFriendlyInput } from "./a2mcpInput";
+import { discoveryLinks } from "./a2mcpAgentTasks";
+import { englishMessage, translateDetails } from "./errors";
+
+/** V-42：同一 (owner, 标的, 金额, 策略) 在 60 s 内复用同一 job（不重复打上游、不重复建库存）；显式 clientRequestId 的幂等语义不变 */
+export const A2MCP_REUSE_WINDOW_MS = 60_000;
 
 export const A2MCP_PATH = "/a2mcp/verify";
 
@@ -41,22 +46,29 @@ export const A2MCP_INPUT_SCHEMA = {
   },
 } as const;
 
+/** 对外绝对地址的根：PUBLIC_BASE_URL（运营者 env），缺省线上域名 */
+export function publicBase(cfg: Pick<VerifyConfig, "PUBLIC_BASE_URL">): string {
+  return (cfg.PUBLIC_BASE_URL || "https://verify.chaconne.xyz").replace(/\/$/, "");
+}
+
 export function a2mcpExample(cfg: VerifyConfig, inputAssetKey: string, outputAssetKey: string) {
-  void cfg;
   return {
     minimal: { ownerAddress: "0x1111111111111111111111111111111111111111", outputAssetKey: "AAPLx", amount: "100" },
     full: { ownerAddress: "0x1111111111111111111111111111111111111111", inputAssetKey, outputAssetKey, amountInRaw: "100000000", policyId: "STRICT_LIVE", maxSlippageBps: 50, maxPriceImpactBps: 100, maxReferenceDeviationBps: 300 },
-    curl: 'curl -X POST https://verify.chaconne.xyz/a2mcp/verify -H "Content-Type: application/json" -d \'{"ownerAddress":"0x1111111111111111111111111111111111111111","outputAssetKey":"AAPLx","amount":"100"}\'',
+    curl: `curl -X POST ${publicBase(cfg)}${A2MCP_PATH} -H "Content-Type: application/json" -d '{"ownerAddress":"0x1111111111111111111111111111111111111111","outputAssetKey":"AAPLx","amount":"100"}'`,
   };
 }
 
-export function createA2mcpHandler(d: { cfg: VerifyConfig; service: VerifyService; paywall: Paywall }) {
+export function createA2mcpHandler(d: { cfg: VerifyConfig; service: VerifyService; paywall: Paywall; club?: ClubService | null; now?: () => Date }) {
+  const base = publicBase(d.cfg);
+  const now = d.now ?? (() => new Date());
+  const recent = new Map<string, { jobId: string; at: number }>();
   const inputRequired = (res: Response, parsed: ReturnType<typeof parseFriendlyInput>, extra?: unknown) => {
     const [stable, stock] = [
       d.service.registry.entries.find((e) => e.role === "stable_input")?.assetKey ?? "eip155:196:0x…",
       d.service.registry.entries.find((e) => e.role === "stock_output")?.assetKey ?? "eip155:196:0x…",
     ];
-    const body = inputRequiredBody({ service: "Chaconne Verify / StockProof", endpoint: "https://verify.chaconne.xyz" + A2MCP_PATH, method: "POST", schema: A2MCP_INPUT_SCHEMA, example: a2mcpExample(d.cfg, stable, stock), missing: parsed.missing, problems: parsed.problems, resolved: parsed.resolved, reg: d.service.registry });
+    const body = inputRequiredBody({ service: "Chaconne Verify / StockProof", endpoint: base + A2MCP_PATH, method: "POST", schema: A2MCP_INPUT_SCHEMA, example: a2mcpExample(d.cfg, stable, stock), missing: parsed.missing, problems: parsed.problems, resolved: parsed.resolved, reg: d.service.registry, discovery: discoveryLinks(d.cfg) });
     // 200 而不是 400：OKX 客户端只接受 200/402
     res.status(200).json(extra === undefined ? body : { ...body, details: extra });
   };
@@ -64,17 +76,12 @@ export function createA2mcpHandler(d: { cfg: VerifyConfig; service: VerifyServic
   return async (req: Request, res: Response): Promise<void> => {
     res.setHeader("Cache-Control", "private, no-store");
     const startedAt = Date.now();
-    const ipKey = `a2mcp:${req.ip ?? "unknown"}`;
     const agentId = req.header("x-okx-agent-id") || req.header("x-agent-id") || "";
     const rawBody = ((req.method === "GET" ? req.query : req.body) ?? {}) as Record<string, unknown>;
     const finish = (status: number, outcome: string, jobId?: string) =>
       log.info("a2mcp 调用", { path: A2MCP_PATH, method: req.method, ip: req.ip, agentId: agentId || null, contentType: req.header("content-type") ?? null, ua: (req.header("user-agent") ?? "").slice(0, 80), fields: Object.keys(rawBody), status, outcome, jobId: jobId ?? null, ms: Date.now() - startedAt });
     res.on("finish", () => finish(res.statusCode, (res.getHeader("x-a2mcp-outcome") as string) ?? "sent"));
-    if (!rateLimit(ipKey, d.cfg.RATE_LIMIT_PER_MIN, 60_000)) {
-      res.setHeader("x-a2mcp-outcome", "rate_limited");
-      res.status(429).json({ ok: false, status: "rate_limited", error: "rate_limited", retryAfterSeconds: 60 });
-      return;
-    }
+    // 限流由 app.ts 的 freeRateLimiter 统一处理（V-42：RateLimit-* 头 + Retry-After）
     const parsed = parseFriendlyInput(req, d.service.registry, d.cfg.EXECUTION_CHAIN_ID);
     if (parsed.missing.length > 0 || parsed.problems.length > 0) {
       res.setHeader("x-a2mcp-outcome", "input_required");
@@ -102,16 +109,30 @@ export function createA2mcpHandler(d: { cfg: VerifyConfig; service: VerifyServic
       const { clientRequestId: _omit, ...rest } = normalized;
       normalized.clientRequestId = `auto-${hashCanonical(rest).slice(2, 34)}`;
     }
-    let created;
-    try {
-      created = await d.service.createJob(callerId, normalized);
-    } catch (err) {
-      if (err instanceof HttpError && err.status === 400) {
-        res.setHeader("x-a2mcp-outcome", "input_invalid");
-        inputRequired(res, parsed, { code: err.code, message: err.message, fields: err.details ?? null });
-        return;
+    // V-42：60 s 内同一 (owner, 标的, 金额, 策略) 复用同一 job（只在调用方没给 clientRequestId 时；给了就按它的幂等语义）
+    const reuseKey = `${callerId}|${owner.toLowerCase()}|${parsed.outputAssetKey}|${parsed.amountInRaw}|${parsed.policyId}`;
+    const nowMs = now().getTime();
+    for (const [k, v] of recent) if (nowMs - v.at > A2MCP_REUSE_WINDOW_MS) recent.delete(k);
+    const hit = !parsed.clientRequestId ? recent.get(reuseKey) : undefined;
+    let created: { body: { jobId: string; evidenceMode: string } };
+    let reused = false;
+    if (hit) {
+      const row = await d.service.requireJob(callerId, hit.jobId);
+      created = { body: { jobId: row.id, evidenceMode: d.service["d"].evidence.mode } };
+      reused = true;
+    } else {
+      try {
+        created = (await d.service.createJob(callerId, normalized)) as { body: { jobId: string; evidenceMode: string } };
+      } catch (err) {
+        if (err instanceof HttpError && err.status === 400) {
+          res.setHeader("x-a2mcp-outcome", "input_invalid");
+          const m = englishMessage(err.code, err.message);
+          inputRequired(res, parsed, { code: err.code, ...m, fields: translateDetails(err.details ?? null) });
+          return;
+        }
+        throw err;
       }
-      throw err;
+      recent.set(reuseKey, { jobId: created.body.jobId, at: nowMs });
     }
     const jobId = created.body.jobId;
     const order = await d.service.requireOrder(jobId);
@@ -119,9 +140,21 @@ export function createA2mcpHandler(d: { cfg: VerifyConfig; service: VerifyServic
     await d.paywall.handleReport(req, res, order, async () => {
       const delivered = await d.service.deliverReport(jobId);
       res.setHeader("x-a2mcp-outcome", `delivered:${delivered.report.verdict}`);
+      // V-39：平台建的 job 调用方没有 key，回查必须免 key —— 交付即自动公开一份只读战报（钱包隐藏、金额区间化；同一 job 幂等）
+      let share: { shareId: string } | null = null;
+      if (d.club) {
+        try {
+          share = await d.club.setShare(callerId, { kind: "job", refId: jobId, public: true, privacy: { amounts: "range" } });
+        } catch (err) {
+          log.warn("a2mcp 自动公开战报失败（响应不带 publicUrl）", { jobId, error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+      const publicUrl = share ? `${base}/pub/reports/${share.shareId}` : null;
       const r = delivered.report;
       const ref = r.reference;
-      const summary = `${r.verdict.toUpperCase()} under ${normalized.policyId}: ${r.executionEligible ? "this purchase is eligible for execution" : "not eligible"} (market ${r.marketSession}${ref ? `, reference ${ref.kind} $${ref.priceUsd}${ref.deviationBps !== null ? `, executable price ${ref.deviationBps > 0 ? "+" : ""}${(ref.deviationBps / 100).toFixed(2)}% vs reference` : ""}` : ""}${r.normalizedQuote?.adverseImpactBps !== null && r.normalizedQuote?.adverseImpactBps !== undefined ? `, price impact ${r.normalizedQuote.adverseImpactBps} bps` : ""}).${r.reasons.length ? " Reasons: " + r.reasons.map((x) => x.code).join(", ") + "." : ""} Report hash ${delivered.reportHash.slice(0, 10)}…; evidence is immutable and re-checkable at ${"https://verify.chaconne.xyz/jobs/" + jobId}.`;
+      // URL 放句尾且后面不接标点（V-39：此前 URL 与句号粘在一起，Agent 会把句号当 URL 的一部分）
+      const recheck = publicUrl ? ` Evidence is immutable and re-checkable without a key at ${publicUrl}` : ` Evidence is immutable; status (API key required): ${base}/v1/jobs/${jobId}`;
+      const summary = `${r.verdict.toUpperCase()} under ${normalized.policyId}: ${r.executionEligible ? "this purchase is eligible for execution" : "not eligible"} (market ${r.marketSession}${ref ? `, reference ${ref.kind} $${ref.priceUsd}${ref.deviationBps !== null ? `, executable price ${ref.deviationBps > 0 ? "+" : ""}${(ref.deviationBps / 100).toFixed(2)}% vs reference` : ""}` : ""}${r.normalizedQuote?.adverseImpactBps !== null && r.normalizedQuote?.adverseImpactBps !== undefined ? `, price impact ${r.normalizedQuote.adverseImpactBps} bps` : ""}).${r.reasons.length ? " Reasons: " + r.reasons.map((x) => x.code).join(", ") + "." : ""} Report hash ${delivered.reportHash.slice(0, 10)}….${recheck}`;
       return {
         ok: true,
         status: "delivered",
@@ -129,7 +162,13 @@ export function createA2mcpHandler(d: { cfg: VerifyConfig; service: VerifyServic
         resolvedInput: parsed.resolved,
         service: "Chaconne Verify / StockProof",
         jobId,
-        statusUrl: `/v1/jobs/${jobId}`,
+        statusUrl: `${base}/v1/jobs/${jobId}`,
+        statusUrlAuth: "x-api-key (owner-scoped); use publicUrl for key-less re-checks",
+        publicUrl,
+        publicBundleUrl: share ? `${base}/pub/reports/${share.shareId}/bundle` : null,
+        publicPageUrl: share ? `${base}/r/${share.shareId}` : null,
+        shareId: share?.shareId ?? null,
+        discovery: discoveryLinks(d.cfg),
         verdict: delivered.report.verdict,
         executionEligible: delivered.report.executionEligible,
         comparisonStatus: delivered.report.comparisonStatus,
@@ -138,6 +177,8 @@ export function createA2mcpHandler(d: { cfg: VerifyConfig; service: VerifyServic
         reference: delivered.report.reference,
         normalizedQuote: delivered.report.normalizedQuote,
         evidenceMode: created.body.evidenceMode,
+        reused,
+        reuseNote: reused ? `Same owner, asset, amount and policy as a job created less than ${A2MCP_REUSE_WINDOW_MS / 1000} s ago: that job's latest report is returned instead of a new verification (pass clientRequestId to control idempotency yourself).` : null,
         report: delivered.report,
         reportHash: delivered.reportHash,
         disclaimer: "Verification of data comparability and execution constraints only. Not investment advice; no guarantee of fill or profit.",

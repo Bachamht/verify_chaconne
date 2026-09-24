@@ -24,9 +24,8 @@ export interface LineTemplate {
 export const LINES: LineTemplate[] = [
   { role: "scout", id: "session", en: "Session is {context.session.label.value} ({context.session.label.status}), packaged {context.packagedAt}.", zh: "时段 {context.session.label.value}（{context.session.label.status}），打包于 {context.packagedAt}。" },
   { role: "scout", id: "provenance", en: "Context provenance: {context.provenance.mode}.", zh: "上下文来源模式：{context.provenance.mode}。" },
-  { role: "scout", id: "events", en: "{context.events.length} scheduled event(s) in the calendar window.", zh: "日历窗口内有 {context.events.length} 个已排期事件。" },
-  { role: "scout", id: "next_event", en: "Next: {nextEvent.name} on {nextEvent.dateLocal} ({nextEvent.status}, {nextEvent.datePrecision} precision).", zh: "最近一个：{nextEvent.name}，{nextEvent.dateLocal}（{nextEvent.status}，精度 {nextEvent.datePrecision}）。" },
-  { role: "scout", id: "impacts", en: "{impacts.length} event(s) touch your holdings or tasks.", zh: "有 {impacts.length} 个事件与你的持仓或任务有关。" },
+  { role: "scout", id: "events", en: "{events.length} scheduled event(s) on supported assets in the next 48 h; {impacts.length} of them touch your holdings or tasks.", zh: "未来 48 小时内已支持资产上有 {events.length} 个已排期事件，其中 {impacts.length} 个与你的持仓或任务有关。" },
+  { role: "scout", id: "next_event", en: "Next upcoming: {nextEvent.name} on {nextEvent.dateLocal} ({nextEvent.status}, {nextEvent.datePrecision} precision).", zh: "接下来最近的一个：{nextEvent.name}，{nextEvent.dateLocal}（{nextEvent.status}，精度 {nextEvent.datePrecision}）。" },
   { role: "planner", id: "task", en: "Task {task.id} ({task.playbookId}) is {task.status} with {task.blockers.length} blocker(s); next check {task.nextCheckAt}.", zh: "任务 {task.id}（{task.playbookId}）状态 {task.status}，{task.blockers.length} 个阻塞项；下次检查 {task.nextCheckAt}。" },
   { role: "planner", id: "conditions", en: "{task.conditions.items.length} condition(s) gate every certificate.", zh: "每张证书都要过 {task.conditions.items.length} 项条件。" },
   { role: "planner", id: "comparison", en: "Compared {comparison.variants.length} variants on snapshot {comparison.evidenceSnapshotId} ({comparison.mode}).", zh: "在快照 {comparison.evidenceSnapshotId} 上对照了 {comparison.variants.length} 个变体（{comparison.mode}）。" },

@@ -10,7 +10,8 @@
  *   prepare_guard_trade       POST /v1/jobs/:id/prepare-execution （返回 typed data / 证书 / Guard 调用参数，不签名）
  *   get_execution_status      GET  /v1/jobs/:id + 链上回执核实（可选 RPC）
  * 返回内容一律 structuredContent + 文本摘要；上游错误 isError=true 并保留状态码，不吞错。
- * v2 工具见 toolsV2.ts（13 个），v6 工具见 toolsV6.ts（23 个，interfaces §11.8）；共 43 个。
+ * v2 工具见 toolsV2.ts（13 个），v6 工具见 toolsV6.ts（23 个，interfaces §11.8），免 key 工具见 toolsFree.ts（3 个，V-40）；共 46 个。
+ * 无 VERIFY_API_KEY：照常启动；免费端点的工具正常工作，需 key 的工具回 { status: "not_available", reason: "api_key_required" }（不是错误、不伪装）。
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -19,6 +20,7 @@ import { VerifyClient } from "./client";
 import { GUARD_ABI } from "./guardAbi";
 import { registerV2Tools, TOOL_NAMES_V2 } from "./toolsV2";
 import { registerV6Tools, TOOL_NAMES_V6 } from "./toolsV6";
+import { registerFreeTools, TOOL_NAMES_FREE } from "./toolsFree";
 import type { ExecutorHeartbeat } from "./heartbeat";
 import type { AgentWallet } from "./wallet";
 
@@ -42,7 +44,11 @@ export const TOOL_NAMES = [
   "get_execution_status",
   ...TOOL_NAMES_V2,
   ...TOOL_NAMES_V6,
+  ...TOOL_NAMES_FREE,
 ] as const;
+
+/** 不需要 VERIFY_API_KEY 的工具（只打免费端点）；其余在无 key 时回 not_available(api_key_required) */
+export const FREE_TOOL_NAMES = ["list_supported_assets", "get_verification_policy", "get_products", "get_market_context", "get_events", ...TOOL_NAMES_FREE] as const;
 
 export { ADDR, ASSET_KEY, fromHttp, ok, type ToolResult } from "./toolUtil";
 import { ADDR, ASSET_KEY, fromHttp, ok } from "./toolUtil";
@@ -198,5 +204,6 @@ export function createVerifyMcpServer(deps: ServerDeps): McpServer {
 
   registerV2Tools(server, { client: c, wallet: deps.wallet ?? null, rpcUrl: deps.rpcUrl, chainId: deps.chainId ?? 196, heartbeat: deps.heartbeat ?? null });
   registerV6Tools(server, { client: c, wallet: deps.wallet ?? null, heartbeat: deps.heartbeat ?? null });
+  registerFreeTools(server, { client: c });
   return server;
 }

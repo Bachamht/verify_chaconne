@@ -5,7 +5,8 @@ import { applyFieldStatus, assessContextStaleness } from "../src/verify/context"
 import { fixtureMarketContext } from "../src/verify/context/fixture";
 import type { ThesisCard } from "../src/verify/contracts";
 import { canTransition, runningStatusAfterEvaluation, STOP_SEMANTICS_NOTE, TASK_TRANSITIONS } from "../src/verify/tasks";
-import { checkThesis, machinePremisesFromConditions, thesisStatusOf, validateReviewItem, validateThesisInput } from "../src/verify/thesis";
+import { checkThesis, machinePremisesFromConditions, premiseKindForCondition, thesisStatusOf, validateReviewItem, validateThesisInput } from "../src/verify/thesis";
+import { evaluateConditions, makeConditionSet } from "../src/verify/conditions";
 
 const NOW = "2026-09-18T15:00:00.000Z";
 const st: TaskConditionState = { underlyingIds: ["us-equity:FAKE"], outputAssetKeys: ["eip155:196:0x2222222222222222222222222222222222222222"], mode: "LIVE", lastConfirmedStepAt: null, stepsConfirmedToday: 0, stepsConfirmedTodayInBudgetGroup: null, nextStepAmountRaw: "1" };
@@ -49,6 +50,38 @@ describe("T-01 前提三态", () => {
     expect(r.newlyExpired).toBe(true);
     expect(checkThesis(r.card, ctxEvidence("17.85"), st, NOW).newlyExpired).toBe(false);
     expect(thesisStatusOf(r.card.premises, "2026-12-01T00:00:00.000Z", NOW)).toBe("holds");
+  });
+});
+
+describe("V-27 时间门不是论点前提", () => {
+  it("session / min_gap 之类生成 kind=timing：休市时 status=invalidated 但卡片仍 holds、不进 newlyInvalidated；显式写 machine 也归为 timing", () => {
+    const premises = [...machinePremisesFromConditions([{ type: "session", allow: ["US_REGULAR"] }, { type: "min_gap_trading_days", days: 1 }, { type: "max_vix", value: 30 }], "ths_2")];
+    expect(premises.map((p) => p.kind)).toEqual(["timing", "timing", "machine"]);
+    const c: ThesisCard = { ...card(), premises };
+    const closed = "2026-09-18T22:00:00.000Z"; // 18:00 ET，休市
+    const r = checkThesis(c, ctxEvidence("17.85"), st, closed);
+    expect(r.card.premises[0]!.status).toBe("invalidated"); // 展示如实：此刻不在常规时段
+    expect(r.card.premises[0]!.kind).toBe("timing");
+    expect(r.card.status).toBe("holds"); // 但论点没有被推翻
+    expect(r.newlyInvalidated).toEqual([]);
+    // 旧卡里存成 machine 的 session 前提也不推翻论点
+    const legacy: ThesisCard = { ...card(), premises: [{ ...premises[0]!, kind: "machine" }] };
+    const lr = checkThesis(legacy, ctxEvidence("17.85"), st, closed);
+    expect(lr.card.status).toBe("holds");
+    expect(lr.card.premises[0]!.kind).toBe("timing");
+    expect(premiseKindForCondition({ type: "avoid_event_window", kinds: ["MACRO_TIER1"], beforeMin: 30, afterMin: 20, includeEstimated: true, wholeDayIfDayPrecision: true })).toBe("timing");
+    expect(premiseKindForCondition({ type: "thesis_holds", thesisId: "x" })).toBe("machine");
+    const v = validateThesisInput({ goal: "g", validUntil: "2026-10-01T00:00:00.000Z", onInvalidation: "notify", premises: [{ kind: "machine", text: "regular hours", condition: { type: "session", allow: ["US_REGULAR"] } }] }, "LIVE", NOW);
+    expect(v.ok && v.input.premises[0]!.kind).toBe("timing");
+  });
+  it("thesis_holds：invalidated / unknown 时 nextCheckAt 取证据里的下次复评时刻（已知就不为 null）", () => {
+    const set = makeConditionSet([{ type: "thesis_holds", thesisId: "ths_1" }]);
+    const ev = { ...emptyConditionEvidence(), theses: { ths_1: { status: "invalidated" as const, evidenceIds: [], nextCheckAt: "2026-09-18T15:00:30.000Z" } } };
+    const r = evaluateConditions(set, ev, st, NOW);
+    expect(r.perItem[0]).toMatchObject({ outcome: "UNSATISFIED", reasons: [{ code: "THESIS_INVALIDATED" }], nextCheckAt: "2026-09-18T15:00:30.000Z" });
+    expect(r.nextCheckAt).toBe("2026-09-18T15:00:30.000Z");
+    const none = evaluateConditions(set, { ...ev, theses: { ths_1: { status: "invalidated", evidenceIds: [] } } }, st, NOW);
+    expect(none.perItem[0]!.nextCheckAt).toBeNull();
   });
 });
 

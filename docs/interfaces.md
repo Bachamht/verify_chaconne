@@ -385,6 +385,12 @@ agent-wallet 模式（CV-D08）：`AGENT_WALLET_PRIVATE_KEY` 是用户自己的 
 | `POST /v1/recaps/:id/share`、`GET /pub/recaps/:shareId` | F | R-04 默认私密、公开可隐藏资产与金额；公开读走 `/pub/` 与既有战报一致 |
 | `GET /v1/missions` | F | Missions 从事件日历与资产覆盖生成，无事件时用标注日期的回放任务 |
 | `GET /a2mcp/agent-tasks`（与 POST 同体） | F | 沿用 a2mcp GET↔POST 回退约定 |
+| `GET /pub/reports/:shareId/bundle` | S（V-39，2026-09-24） | A2MCP 建的 job 交付时自动发布只读战报，响应带绝对 `publicUrl` / `publicBundleUrl` / `publicPageUrl` / `shareId`；免 key 可回查（付费报告未付则 402） |
+| `GET /pub/openapi.json`、`GET /pub/llms.txt`、`GET /pub/agent-card.json`（服务别名 `/openapi.json`、`/llms.txt`、`/.well-known/agent-card.json`、`/.well-known/agent.json`；web 域同名路径由 verify-web 代理） | S（V-40） | Agent 可发现性：OpenAPI 3.1（免费端点）、llms.txt、agent card；A2MCP `howToCall` 带链接 |
+| `GET /healthz?deep=1`（需 API key） | S（V-43） | 公开 `/healthz` 不再含内网 URL（`contextConfigured` 布尔）与密钥环；treeHash、合约地址与能力开关保留 |
+| 免 key 端点限流：`/v1/{assets,policies,products,playbooks,context,events}`、`/a2mcp/*`、`/pub/*`、`/healthz` 按 IP `FREE_RATE_LIMIT_PER_MIN`（默认 30）；头 `RateLimit-Limit/Remaining/Reset`、429 带 `Retry-After`；带合法 key 的请求不计 | S（V-42） | `/a2mcp/verify` 同 (caller, owner, 资产, 金额, 策略) 60 s 内复用 job（`reused`/`reuseNote`），`clientRequestId` 幂等不变 |
+| 错误方法 → 405 + `Allow`；`/a2mcp/*` 响应头 `X-A2MCP-Status: input_required|delivered|rate_limited|payment_required`（正文与 200-only 传输不变，CV-D10）；错误体 `{error, message(英文), messageZh?, details?}` | S（V-28 / V-41） | 机器可读；中文文案保留在 `messageZh` |
+| 契约增补：`PremiseKind` 加 `timing`（时段/间隔/事件窗口/财报窗口/静默期这类时间门不参与理由卡失效判定）；`ConditionEvidence.theses[].nextCheckAt`；`Mission.draft` = 可直接 `POST /v1/tasks` 的 SIMULATION 任务体，`Mission.replay` 单列 | S（V-25 / V-27） | 休市建任务不再误报 THESIS_INVALIDATED；A2MCP 草案必能 201（有测试） |
 前端代理 `apps/verify-web/app/api/verify/[...path]/route.ts` 的放行名单为以上全部 + §11.7 的并集（合并时已对齐）。
 
 **CV-D14**：任务证据包 `TaskEvidenceBundle` = `EvidenceBundle` + 附加段（理由卡、条件集与求值输入），`bundleHash` 覆盖附加段；旧 job/mandate 包不变。**迁移 0018 定稿**：`packages/db/migrations/0018_pink_darwin.sql`，22 张表（§11.9 的 20 张 + Lane D 的 `verify_earnings_ingests` / `verify_earnings_periods`）+ `verify_mandates` 增 `task_id`、`conditions_hash`；各 lane 的临时 0018/0019 已作废。

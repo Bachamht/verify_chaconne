@@ -51,19 +51,27 @@ Prints a JSON checklist (same checks as the `/verify-bundle` web page: `@chaconn
 
 ## Run
 
+This package is **not published on npm** (`npx -y @chaconne/verify-mcp` does not work). It runs from the public repository; the bin entry executes the TypeScript source through `tsx`, so no build step is needed:
+
 ```bash
-VERIFY_SERVICE_URL=https://verify.chaconne.xyz VERIFY_API_KEY=<key> pnpm --filter @chaconne/verify-mcp start
+git clone https://github.com/Bachamht/verify_chaconne && cd verify_chaconne
+pnpm install
+VERIFY_SERVICE_URL=https://verify.chaconne.xyz node packages/verify-mcp/bin/chaconne-verify-mcp.mjs
 ```
 
-### MCP client config (Claude Desktop, Cursor, any stdio MCP client)
+`VERIFY_API_KEY` is optional. Without it the server starts in **free read-only mode**: `list_supported_assets`, `get_verification_policy`, `get_products`, `get_market_context`, `get_events` and the three A2MCP tools `verify_once_free` / `plan_free` / `agent_tasks_free` work against the free endpoints; every tool that needs a key answers `{ status: "not_available", reason: "api_key_required" }` (`isError=false`) instead of failing. With a key (operator-issued; wallet-scoped keys also need `VERIFY_CALLER`) all 46 tools are live.
+
+Machine-readable entry points on the service: `GET /pub/openapi.json`, `GET /pub/llms.txt`, `GET /pub/agent-card.json` (also `/openapi.json`, `/llms.txt`, `/.well-known/agent-card.json` on the web domain).
+
+### MCP client config (any stdio MCP client)
 
 ```json
 {
   "mcpServers": {
     "chaconne-verify": {
       "command": "node",
-      "args": ["/path/to/chaconne/packages/verify-mcp/bin/chaconne-verify-mcp.mjs"],
-      "env": { "VERIFY_SERVICE_URL": "https://verify.chaconne.xyz", "VERIFY_API_KEY": "<key>", "VERIFY_CALLER": "0x<your wallet>" }
+      "args": ["<path to the clone>/packages/verify-mcp/bin/chaconne-verify-mcp.mjs"],
+      "env": { "VERIFY_SERVICE_URL": "https://verify.chaconne.xyz", "VERIFY_API_KEY": "<key, optional>", "VERIFY_CALLER": "0x<your wallet, with a wallet-scoped key>" }
     }
   }
 }
@@ -75,7 +83,17 @@ The process refuses to start if any `*PRIVATE_KEY*` / `MNEMONIC` variable is pre
 
 `pnpm --filter @chaconne/verify-mcp test` — official SDK `Client` over `InMemoryTransport` (initialize, capability negotiation, tool discovery, calls, 402 challenge, error mapping) and over a real `StdioClientTransport` (spawned process).
 
-## v6 · Chaconne Agent 工具（interfaces §11.8，23 个；合计 43 个）
+## Free tools (no key; A2MCP endpoints)
+
+| Tool | Backs onto | Notes |
+|---|---|---|
+| `verify_once_free` | `POST /a2mcp/verify` | one-shot verification; symbols / 0x / eip155 keys, human `amount`; result carries `publicUrl` + `publicBundleUrl` for key-less re-checks |
+| `plan_free` | `POST /a2mcp/plan` | candidates, never executes |
+| `agent_tasks_free` | `POST /a2mcp/agent-tasks` | event impacts + `taskDrafts[].draft` = ready `POST /v1/tasks` body |
+
+A2MCP transport: the service answers HTTP 200 for both `delivered` and `input_required` (missing parameters are described in the body, header `X-A2MCP-Status` mirrors it); paid tiers answer 402.
+
+## v6 · Chaconne Agent 工具（interfaces §11.8，23 个；合计 46 个）
 
 `get_market_context` · `get_events` · `create_task` · `get_task` · `pause_task` / `resume_task` / `cancel_task` · `authorize_task` · `get_my_event_impacts` · `watch_thesis` · `add_thesis_review_item` · `explain_task_wait` · `compare_task_policies` · `replay_policy` · `preview_rebalance` · `create_rebalance_plan` · `get_budget_group` · `create_budget_group` · `get_portfolio` · `report_cost_override` · `register_webhook` · `link_telegram` · `executor_heartbeat`。
 

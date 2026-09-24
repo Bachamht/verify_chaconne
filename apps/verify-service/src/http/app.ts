@@ -4,7 +4,8 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { POLICIES, policyDefinitionHash, registryHash } from "@chaconne/core/verify";
 import type { VerifyConfig } from "../config";
-import { apiKeyAuth, callerOf } from "./auth";
+import { apiKeyAuth, callerOf, freeRateLimiter } from "./auth";
+import { errorBody } from "./errors";
 import type { Paywall } from "./paywall";
 import { HttpError, type VerifyService } from "../jobs/service";
 import { UpstreamEvidenceError } from "../evidence/live";
@@ -29,7 +30,6 @@ import type { TasksService } from "../tasks/service";
 import type { ThesesService } from "../theses/service";
 import { buildTaskBundle } from "../tasks/bundle";
 import { playbookCatalogView } from "../tasks/playbooks";
-import { rateLimit } from "./auth";
 import type { LaneDHandles } from "../events/earnings/wire";
 import { IMPACT_ACTIONS } from "@chaconne/core/verify";
 import type { BudgetService } from "../budget/service";
@@ -39,8 +39,9 @@ import type { NotifyService } from "../notify/service";
 import type { LabService } from "../lab/service";
 /* v6 Lane F */
 import type { RecapsService } from "../recaps/service";
-import { buildMissions } from "../missions/build";
+import { buildMissions, defaultDraftFunding } from "../missions/build";
 import { A2MCP_AGENT_TASKS_PATH, createA2mcpAgentTasksHandler, type AgentTasksDeps } from "./a2mcpAgentTasks";
+import { buildAgentCard, buildLlmsTxt, buildOpenApi, DISCOVERY_PATHS, type DiscoveryDeps } from "./discovery";
 
 export interface AppDeps {
   cfg: VerifyConfig;
@@ -82,10 +83,84 @@ export function createApp(d: AppDeps) {
   app.set("trust proxy", true);
   app.use(express.json({ limit: "64kb" }));
 
-  app.get("/healthz", (_req, res) => {
-    res.setHeader("Cache-Control", "no-store");
-    res.json({ ok: true, ...d.health() });
+  const now = d.now ?? (() => new Date());
+  const validKeys = new Set(d.cfg.apiKeys.map((e) => e.key));
+
+  /* ---------- V-42：免 key 端点按 IP 限流（带合法 API key 的请求走各自的调用方限频，不计 IP 桶） ---------- */
+  app.use(["/v1/assets", "/v1/policies", "/v1/products", "/v1/playbooks", "/v1/context", "/v1/events", "/a2mcp", "/pub", "/healthz", "/openapi.json", "/llms.txt", "/.well-known"], freeRateLimiter({ perMin: d.cfg.FREE_RATE_LIMIT_PER_MIN, validKeys, now: () => now().getTime() }));
+
+  /* ---------- V-41：/a2mcp/* 响应头 X-A2MCP-Status 镜像正文 status（正文不变，仍是 200-only 传输；OKX 客户端只认 200/402） ---------- */
+  app.use("/a2mcp", (_req, res, next) => {
+    const orig = res.json.bind(res);
+    res.json = ((body: unknown) => {
+      if (!res.headersSent && !res.getHeader("X-A2MCP-Status")) {
+        const st = body && typeof body === "object" && typeof (body as { status?: unknown }).status === "string" ? (body as { status: string }).status : res.statusCode === 402 ? "payment_required" : res.statusCode < 300 ? "delivered" : "error";
+        res.setHeader("X-A2MCP-Status", st);
+      }
+      return orig(body);
+    }) as typeof res.json;
+    next();
   });
+
+  /* ---------- V-43：公开 /healthz 不暴露内网地址与内部清单；细节走 /healthz?deep=1 + API key ---------- */
+  const publicHealth = (full: Record<string, unknown>): Record<string, unknown> => {
+    const { startedAt: _startedAt, ...rest } = full;
+    void _startedAt;
+    const agentB = rest["agentB"];
+    if (agentB && typeof agentB === "object") {
+      const { contextUrl, crowsnestKeys: _keys, ...b } = agentB as Record<string, unknown>;
+      void _keys;
+      rest["agentB"] = { ...b, contextConfigured: typeof contextUrl === "string" && contextUrl.length > 0 };
+    }
+    return rest;
+  };
+  app.get("/healthz", (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const full = d.health();
+    if (req.query["deep"] === "1") {
+      const key = (req.header("x-api-key") || req.header("authorization")?.replace(/^Bearer\s+/i, "") || "").trim();
+      if (!key) {
+        res.status(401).json({ error: "missing_api_key", message: "GET /healthz?deep=1 requires an API key; the public view is GET /healthz" });
+        return;
+      }
+      if (!validKeys.has(key)) {
+        res.status(403).json({ error: "invalid_api_key" });
+        return;
+      }
+      res.json({ ok: true, deep: true, time: now().toISOString(), ...full });
+      return;
+    }
+    res.json({ ok: true, time: now().toISOString(), ...publicHealth(full) });
+  });
+
+  /* ---------- 机器可读发现文件（V-40；免 key）。/pub/* 由 nginx 分流到本服务；主站另有 /openapi.json、/llms.txt、/.well-known/agent-card.json 薄代理到这里 ---------- */
+  {
+    const discovery: DiscoveryDeps = {
+      cfg: d.cfg,
+      registry: d.service.registry,
+      mounted: { plans: !!d.plans, mandates: !!d.mandates, club: !!d.club, market: !!d.market, context: !!d.context && d.cfg.agentC1, events: !!d.events && d.cfg.agentC1, tasks: !!d.tasks && d.cfg.agentC3, theses: !!d.theses && d.cfg.agentC7, laneD: !!d.laneD, lab: !!d.lab && d.cfg.agentC9Enabled, recaps: !!d.recaps && d.cfg.AGENT_C5_ENABLED === "true" },
+    };
+    let openapiCache: string | null = null;
+    for (const p of [DISCOVERY_PATHS.openapi, "/openapi.json"]) {
+      app.get(p, (_req, res) => {
+        openapiCache ??= JSON.stringify(buildOpenApi(discovery));
+        res.setHeader("Cache-Control", "public, max-age=300");
+        res.type("application/json").send(openapiCache);
+      });
+    }
+    for (const p of [DISCOVERY_PATHS.llmsTxt, "/llms.txt"]) {
+      app.get(p, (_req, res) => {
+        res.setHeader("Cache-Control", "public, max-age=300");
+        res.type("text/plain; charset=utf-8").send(buildLlmsTxt(discovery));
+      });
+    }
+    for (const p of [DISCOVERY_PATHS.agentCard, "/.well-known/agent-card.json", "/.well-known/agent.json"]) {
+      app.get(p, (_req, res) => {
+        res.setHeader("Cache-Control", "public, max-age=300");
+        res.json(buildAgentCard(discovery));
+      });
+    }
+  }
 
   /* ---------- 公开只读 ---------- */
   app.get("/v1/assets", (_req, res) => {
@@ -351,6 +426,20 @@ export function createApp(d: AppDeps) {
     // Genesis Live 公开板：只列自愿公开的战报（E2 的 /live 依赖；I2 2026-09-21 补）
     app.get("/pub/reports", (req, res, next) => { club.liveBoard(Number(req.query["limit"] ?? 50) || 50).then((items) => { res.setHeader("Cache-Control", "public, max-age=30"); res.json({ items }); }).catch(next); });
     app.get("/pub/reports/:shareId", (req, res, next) => { club.publicReport(String(req.params["shareId"])).then((r) => { res.setHeader("Cache-Control", "public, max-age=30"); res.json(r); }).catch(next); });
+    // 公开证据包（V-39）：已公开的 job / mandate 战报，其证据包免 key 可取（bundleHash + 证明签名，第三方离线复核）
+    app.get(
+      "/pub/reports/:shareId/bundle",
+      wrap(async (req, res) => {
+        const share = await club.publicShareRow(String(req.params["shareId"]));
+        if (share.kind !== "job" && share.kind !== "mandate") throw new HttpError(404, "bundle_not_available", "Only job and mandate shares have an evidence bundle");
+        if (share.kind === "job") {
+          const order = await d.service.requireOrder(share.refId);
+          if (order.priceUsd !== "0" && !d.service["d"].orders.isDeliverable(order)) throw new HttpError(402, "payment_required", "Report not paid yet");
+        }
+        res.setHeader("Cache-Control", "public, max-age=30");
+        res.json(share.kind === "job" ? await buildJobBundle(bundleDeps(), share.callerId, share.refId) : await buildMandateBundle(bundleDeps(), share.callerId, share.refId));
+      }),
+    );
     app.get("/pub/live", (req, res, next) => { club.liveBoard(Number(req.query["limit"] ?? 50) || 50).then((items) => { res.setHeader("Cache-Control", "public, max-age=30"); res.json({ items }); }).catch(next); });
   }
 
@@ -407,11 +496,8 @@ export function createApp(d: AppDeps) {
         auth(req, res, next);
         return;
       }
+      // 匿名限流由 freeRateLimiter（按 IP，带 RateLimit-* 头）统一处理（V-42）
       res.setHeader("Cache-Control", "public, max-age=30");
-      if (!rateLimit(`anon:${req.ip ?? "?"}`, d.cfg.RATE_LIMIT_PER_MIN, 60_000)) {
-        res.status(429).json({ error: "rate_limited", retryAfterSeconds: 60 });
-        return;
-      }
       res.locals["callerId"] = "";
       next();
     };
@@ -796,7 +882,10 @@ export function createApp(d: AppDeps) {
         const events = d.agentHooks?.events ? await d.agentHooks.events(new Date(now.getTime() - 6 * 3600_000), new Date(now.getTime() + horizonDays * 86_400_000)) : null;
         const focus = typeof req.query["assetKey"] === "string" ? [req.query["assetKey"]] : [];
         const assets = d.service.registry.entries.filter((e) => e.role === "stock_output").map((e) => ({ assetKey: e.assetKey, displaySymbol: e.displaySymbol, underlyingId: e.underlyingId, executionAllowed: e.executionAllowed }));
-        res.json({ generatedAt: now.toISOString(), eventsCoverage: events ? "ok" : "unavailable", missions: buildMissions({ now, events, assets, focus, horizonDays }) });
+        const funding = defaultDraftFunding(d.service.registry);
+        if (!funding) throw new HttpError(503, "registry_no_stable_input");
+        const owner = typeof req.query["owner"] === "string" && /^0x[0-9a-fA-F]{40}$/.test(req.query["owner"]) ? req.query["owner"].toLowerCase() : callerOf(res).match(/(0x[0-9a-f]{40})$/)?.[1] ?? null;
+        res.json({ generatedAt: now.toISOString(), eventsCoverage: events ? "ok" : "unavailable", missions: buildMissions({ now, events, assets, focus, horizonDays, funding, owner }) });
       }),
     );
   }
@@ -807,7 +896,7 @@ export function createApp(d: AppDeps) {
   }
 
   /* ---------- OKX AI A2MCP 单端点（平台调用，不带本服务 API key） ---------- */
-  const a2mcp = createA2mcpHandler({ cfg: d.cfg, service: d.service, paywall: d.paywall });
+  const a2mcp = createA2mcpHandler({ cfg: d.cfg, service: d.service, paywall: d.paywall, club: d.club ?? null, now });
   app.post(A2MCP_PATH, wrap(a2mcp));
   app.get(A2MCP_PATH, wrap(a2mcp));
 
@@ -818,8 +907,28 @@ export function createApp(d: AppDeps) {
     res.status(204).end();
   });
 
+  /* ---------- V-28：已知路径上的错误方法 → 405 + Allow（此前落到 404 not_found，调用方以为资源不存在） ---------- */
+  app.use((req, res, next) => {
+    if (req.method === "OPTIONS") return next();
+    type Layer = { route?: { path: string; methods: Record<string, boolean> }; match?: (path: string) => boolean };
+    const stack = ((app as unknown as { router: { stack: Layer[] } }).router?.stack ?? []) as Layer[];
+    const allow = new Set<string>();
+    let known = false;
+    for (const l of stack) {
+      if (!l.route || typeof l.match !== "function" || !l.match(req.path)) continue;
+      known = true;
+      for (const [m, on] of Object.entries(l.route.methods)) if (on) allow.add(m.toUpperCase());
+    }
+    if (!known || allow.has(req.method)) return next();
+    if (allow.has("GET")) allow.add("HEAD");
+    allow.add("OPTIONS");
+    const list = [...allow].sort();
+    res.setHeader("Allow", list.join(", "));
+    res.status(405).json({ error: "method_not_allowed", message: `${req.method} is not allowed on ${req.path}; allowed: ${list.join(", ")}`, allow: list });
+  });
+
   app.use((_req, res) => {
-    res.status(404).json({ error: "not_found" });
+    res.status(404).json({ error: "not_found", message: "No such endpoint. Discovery: GET /pub/openapi.json, /pub/llms.txt, /pub/agent-card.json" });
   });
 
   app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
@@ -829,11 +938,14 @@ export function createApp(d: AppDeps) {
     // 非 a2mcp 路径（v1 API 面向我们自己的客户端）保持标准 HTTP 语义。
     const isA2mcp = req.path.startsWith("/a2mcp/");
     if (err instanceof HttpError) {
+      // 对外正文英文优先（V-41）：message 英文，原中文放 messageZh；code / details 不变
+      const body = errorBody(err);
       if (isA2mcp && err.status >= 400 && err.status < 500 && err.status !== 402) {
-        res.status(200).json({ ok: false, status: "input_required", error: err.code, message: err.message, details: err.details ?? undefined });
+        res.setHeader("X-A2MCP-Status", "input_required");
+        res.status(200).json({ ok: false, status: "input_required", ...body });
         return;
       }
-      res.status(err.status).json({ error: err.code, message: err.message, details: err.details ?? undefined });
+      res.status(err.status).json(body);
       return;
     }
     // 上游报价拿不到 / 方向写拧了：不是服务端内部故障，别兜底成 500（V-24）。
@@ -842,6 +954,7 @@ export function createApp(d: AppDeps) {
     if (err instanceof UpstreamEvidenceError) {
       const status = err.code === "mixed_sides" ? 400 : err.code === "upstream_unavailable" ? 503 : 422;
       const body = { error: err.code, message: err.message, details: err.detail ?? undefined };
+      if (isA2mcp && status !== 503) res.setHeader("X-A2MCP-Status", "input_required");
       res.status(isA2mcp && status !== 503 ? 200 : status).json(isA2mcp && status !== 503 ? { ok: false, status: "input_required", ...body } : body);
       return;
     }
@@ -855,6 +968,8 @@ export function createApp(d: AppDeps) {
       const parseFailed = bodyErr?.type === "entity.parse.failed";
       const code = parseFailed ? "invalid_json" : (bodyErr?.type?.replace(/\./g, "_") ?? bodyErr?.code ?? "bad_request");
       if (isA2mcp) {
+        // body-parser 在 /a2mcp 的 res.json 包装中间件之前抛错，这里显式补头
+        res.setHeader("X-A2MCP-Status", "input_required");
         res.status(200).json({
           ok: false,
           status: "input_required",

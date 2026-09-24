@@ -13,8 +13,10 @@ import { Card, Pill } from "@/components/ui";
 import { connect } from "@/lib/wallet";
 import { headline } from "@/lib/report-copy";
 import { apiError } from "@/lib/errors";
+import { walletErrorText } from "@/lib/i18n.execute";
 import { remember } from "@/lib/history";
-import { addressProblem } from "@/lib/format";
+import { addressProblem, nextStepText } from "@/lib/format";
+import { tx } from "@/lib/i18n.execute";
 
 const PRESETS: Array<{ id: string; title: { en: string; zh: string }; side: "buy" | "sell"; symbols: string[]; policy: PlanGoal["policyId"]; budget: string; impact: number }> = [
   { id: "aapl-strict", title: { en: "Buy $20 of AAPLx right now under STRICT_LIVE", zh: "现在用 STRICT_LIVE 买 20 美元 AAPLx" }, side: "buy", symbols: ["AAPLx"], policy: "STRICT_LIVE", budget: "20000000", impact: 100 },
@@ -97,13 +99,13 @@ export function PlayClient() {
       persona: { personaId: persona, name: name || (zh ? PERSONAS[persona].name.zh : PERSONAS[persona].name.en), tone: PERSONAS[persona].tone },
       headline: { en: headline("simulation", persona, "en"), zh: headline("simulation", persona, "zh") },
       goal: { side: sim.goal.side, outputSymbols: sim.goal.legs.map((l) => sym(l.outputAssetKey)), inputSymbol: sym(sim.goal.budget.inputAssetKeys[0]!), policyId: sim.goal.policyId, amountDisplay: null },
-      result: { verdict: rec?.chosenPolicyVerdict ?? sim.verdict, completionBps: rec?.completionBps ?? null, spentDisplay: null, receivedDisplay: null, feesDisplay: null, reasons: (rec?.reasons ?? rep?.candidates[0]?.reasons ?? []).filter((r) => r.severity !== "info").map((r) => ({ code: r.code, severity: r.severity })), waitingOn: rec ? null : rep?.candidates.map((c) => c.nextStep).join(", ") ?? null },
+      result: { verdict: rec?.chosenPolicyVerdict ?? sim.verdict, completionBps: rec?.completionBps ?? null, spentDisplay: null, receivedDisplay: null, feesDisplay: null, reasons: (rec?.reasons ?? rep?.candidates[0]?.reasons ?? []).filter((r) => r.severity !== "info").map((r) => ({ code: r.code, severity: r.severity })), waitingOn: rec ? null : rep ? [...new Set(rep.candidates.map((c) => c.nextStep))].map((s) => nextStepText(s, locale)).join(" ") || null : null },
       evidence: { evidenceHash: rep?.evidenceHash ?? null, reportHash: rep?.planHash ?? null, bundleUrl: null, txHashes: [] },
       templateId: null,
       evidenceMode: "SIMULATION",
       createdAt: sim.createdAt,
     };
-  }, [sim, persona, name, zh, assets]);
+  }, [sim, persona, name, zh, locale, assets]);
 
   return (
     <div className="space-y-5">
@@ -120,13 +122,14 @@ export function PlayClient() {
               </button>
             ))}
           </div>
+          <p className="mt-3 text-sm text-fg-2" aria-live="polite">{tx(locale, "play_persona_chosen", { persona: name.trim() ? `${name.trim()}（${zh ? PERSONAS[persona].name.zh : PERSONAS[persona].name.en}）` : zh ? PERSONAS[persona].name.zh : PERSONAS[persona].name.en })}</p>
           <div className="mt-3 flex flex-wrap gap-2 text-sm">
             <input className="field max-w-xs" placeholder={zh ? "给它起个名（可选）" : "Name it (optional)"} value={name} onChange={(e) => setName(e.target.value)} />
             <input className={`field mono max-w-xs ${addressProblem(owner, null, locale) ? "border-bad" : ""}`} placeholder={zh ? "钱包（可选，只用于保存角色）" : "Wallet (optional, only to save persona)"} value={owner} onChange={(e) => setOwner(e.target.value)} />
             {account && owner.trim().toLowerCase() === account.toLowerCase() ? (
               <span className="inline-flex h-10 items-center whitespace-nowrap rounded-md bg-ok/12 px-3 text-xs text-ok">{t("wallet_using")}</span>
             ) : (
-              <button className="btn-ghost" type="button" onClick={() => connect().then(setOwner).catch(() => setErr(t("no_wallet")))}>{t("connect")}</button>
+              <button className="btn-ghost" type="button" onClick={() => connect().then(setOwner).catch((e: unknown) => setErr(walletErrorText(e, locale)))}>{t("connect")}</button>
             )}
           </div>
           {addressProblem(owner, null, locale) && <p className="mt-1 text-xs text-bad">{addressProblem(owner, null, locale)}</p>}
@@ -139,7 +142,7 @@ export function PlayClient() {
               </button>
             ))}
           </div>
-          <button className="btn mt-4 w-full" disabled={!goal || busy} onClick={run}>{busy ? t("running") : t("play_run")}</button>
+          <button className="btn mt-4 w-full" disabled={!goal || busy} onClick={run} aria-busy={busy}>{busy ? t("running") : t("play_run")}</button>
           {err && <p className="mt-2 text-sm text-bad">{err}</p>}
         </Card>
       </div>

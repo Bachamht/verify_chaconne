@@ -20,6 +20,7 @@ import {
   makePlanGuardDomain,
   mergeConditions,
   nextRegularOpenMs,
+  sessionLabelAtMs,
   normalizeAddress,
   nyDateAt,
   outputSetHash,
@@ -584,7 +585,9 @@ export class TasksService {
       }
       if (action) await this.d.theses.recordAction(updatedThesis.id, action);
       thesisInfo = { id: updatedThesis.id, status: updatedThesis.status, evidenceIds: result.evidenceIds, action: action ?? thesisInfo?.action ?? null };
-      evidence.theses = { [updatedThesis.id]: { status: updatedThesis.status as ConditionEvidence["theses"][string]["status"], evidenceIds: result.evidenceIds } };
+      // 下次复评 = 下一个 monitor tick（常规时段 / 休市周期不同）；THESIS_INVALIDATED / THESIS_UNKNOWN 的 nextCheckAt 据此不为 null（V-27）
+      const tick = sessionLabelAtMs(nowDate.getTime()) === "US_REGULAR" ? this.d.cfg.MONITOR_INTERVAL_REGULAR_MS : this.d.cfg.MONITOR_INTERVAL_CLOSED_MS;
+      evidence.theses = { [updatedThesis.id]: { status: updatedThesis.status as ConditionEvidence["theses"][string]["status"], evidenceIds: result.evidenceIds, nextCheckAt: new Date(nowDate.getTime() + tick).toISOString() } };
     };
     await runThesis(base.evidence);
     // pause_issuance 可能已把任务改成 PAUSED：重读

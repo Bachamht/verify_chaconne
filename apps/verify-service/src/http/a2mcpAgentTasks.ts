@@ -7,11 +7,21 @@
 import type { Request, Response } from "express";
 import type { AssetRegistry, EventImpact, MarketEvent } from "@chaconne/core/verify";
 import type { VerifyConfig } from "../config";
-import { rateLimit } from "./auth";
 import { resolveAsset } from "./a2mcpInput";
-import { buildMissions, type Mission } from "../missions/build";
+import { buildMissions, defaultDraftFunding, type Mission } from "../missions/build";
 
 export const A2MCP_AGENT_TASKS_PATH = "/a2mcp/agent-tasks";
+
+/** 机器可读的发现文件（V-40）：OpenAPI / llms.txt / agent card / MCP 仓库路径；在 howToCall 里给出 */
+export function discoveryLinks(cfg: Pick<VerifyConfig, "PUBLIC_BASE_URL">) {
+  const base = cfg.PUBLIC_BASE_URL || "https://verify.chaconne.xyz";
+  return {
+    openapi: `${base}/pub/openapi.json`,
+    llmsTxt: `${base}/pub/llms.txt`,
+    agentCard: `${base}/pub/agent-card.json`,
+    mcp: "git clone https://github.com/Bachamht/verify_chaconne && cd verify_chaconne && pnpm install && VERIFY_SERVICE_URL=<base url> node packages/verify-mcp/bin/chaconne-verify-mcp.mjs (not on npm; no build step; free read-only tools need no VERIFY_API_KEY)",
+  };
+}
 
 export const A2MCP_AGENT_TASKS_INPUT_SCHEMA = {
   type: "object",
@@ -27,7 +37,7 @@ export interface AgentTasksDeps {
   cfg: VerifyConfig;
   registry: AssetRegistry;
   now?: () => Date;
-  /** Lane D：owner 的事件影响；未接上返回 null */
+  /** Lane D：owner 的事件影响（与 /v1/event-impacts 同一实现）；未接上返回 null */
   impacts?: (owner: string, horizonHours: number) => Promise<EventImpact[] | null>;
   /** Lane D：事件列表；未接上返回 null */
   events?: (fromUtc: Date, toUtc: Date) => Promise<MarketEvent[] | null>;
@@ -50,10 +60,7 @@ export function createA2mcpAgentTasksHandler(d: AgentTasksDeps) {
   const example = { owner: "0x1111111111111111111111111111111111111111", assets: ["AAPLx", "NVDAx"], horizonHours: 48 };
   return async (req: Request, res: Response): Promise<void> => {
     res.setHeader("Cache-Control", "private, no-store");
-    if (!rateLimit(`a2mcp-agent-tasks:${req.ip ?? "unknown"}`, d.cfg.RATE_LIMIT_PER_MIN, 60_000)) {
-      res.status(429).json({ ok: false, status: "rate_limited", error: "rate_limited", retryAfterSeconds: 60 });
-      return;
-    }
+    // 限流由 app.ts 的 freeRateLimiter 统一处理（V-42）
     const body = ((req.method === "GET" ? req.query : req.body) ?? {}) as Record<string, unknown>;
     const stocks = d.registry.entries.filter((e) => e.role === "stock_output" && e.executionAllowed);
     const inputRequired = (missing: string[], problems: Array<{ field: string; value: string; hint: string }>) =>
@@ -62,13 +69,13 @@ export function createA2mcpAgentTasksHandler(d: AgentTasksDeps) {
         status: "input_required",
         error: "input_required",
         service: "Chaconne Agent / Agent Tasks",
-        summary: `${missing.length ? `Missing: ${missing.join(" or ")}. ` : ""}${problems.length ? `Invalid: ${problems.map((p) => `${p.field}="${p.value}" (${p.hint})`).join("; ")}. ` : ""}Call ${req.method} ${A2MCP_AGENT_TASKS_PATH} with owner (EVM address) and/or assets (${stocks.slice(0, 6).map((e) => e.displaySymbol).join(" / ")}${stocks.length > 6 ? " / …" : ""}). Returns event impacts and task drafts (SIMULATION or dated REPLAY); nothing is executed and nothing is charged during the listing review.`.trim(),
+        summary: `${missing.length ? `Missing: ${missing.join(" or ")}. ` : ""}${problems.length ? `Invalid: ${problems.map((p) => `${p.field}="${p.value}" (${p.hint})`).join("; ")}. ` : ""}Call ${req.method} ${A2MCP_AGENT_TASKS_PATH} with owner (EVM address) and/or assets (${stocks.slice(0, 6).map((e) => e.displaySymbol).join(" / ")}${stocks.length > 6 ? " / …" : ""}). Returns event impacts and task drafts (each draft is a ready-to-submit SIMULATION body for POST /v1/tasks; a dated replay suggestion is attached separately when no event is in range); nothing is executed and nothing is charged during the listing review.`.trim(),
         missingParams: missing,
         problems,
         schema: A2MCP_AGENT_TASKS_INPUT_SCHEMA,
         example,
         supportedAssets: { stocks: stocks.map((e) => `${e.displaySymbol} (${e.underlyingId.split(":")[1]})`) },
-        howToCall: { method: req.method, endpoint: A2MCP_AGENT_TASKS_PATH, contentType: "application/json (POST body) or query string (GET)" },
+        howToCall: { method: req.method, endpoint: A2MCP_AGENT_TASKS_PATH, contentType: "application/json (POST body) or query string (GET)", ...discoveryLinks(d.cfg) },
       });
     if (Object.keys(body).length === 0) {
       inputRequired(["owner", "assets"], []);
@@ -101,7 +108,9 @@ export function createA2mcpAgentTasksHandler(d: AgentTasksDeps) {
     const impacts = owner && d.impacts ? await d.impacts(owner, horizon) : null;
     const events = d.events ? await d.events(new Date(t0.getTime() - 6 * 3600_000), to) : null;
     const assetsForMissions = resolved.length ? resolved : stocks.map((e) => ({ input: e.displaySymbol, assetKey: e.assetKey, displaySymbol: e.displaySymbol, underlyingId: e.underlyingId }));
-    const missions: Mission[] = buildMissions({ now: t0, events, assets: assetsForMissions.map((a) => ({ assetKey: a.assetKey, displaySymbol: a.displaySymbol, underlyingId: a.underlyingId, executionAllowed: true })), focus: resolved.map((a) => a.assetKey), horizonDays: Math.ceil(horizon / 24) });
+    const funding = defaultDraftFunding(d.registry);
+    if (!funding) throw new Error("registry has no stable_input entry");
+    const missions: Mission[] = buildMissions({ now: t0, events, assets: assetsForMissions.map((a) => ({ assetKey: a.assetKey, displaySymbol: a.displaySymbol, underlyingId: a.underlyingId, executionAllowed: true })), focus: resolved.map((a) => a.assetKey), horizonDays: Math.ceil(horizon / 24), funding, owner: owner || null });
     res.status(200).json({
       ok: true,
       status: "delivered",
@@ -113,7 +122,10 @@ export function createA2mcpAgentTasksHandler(d: AgentTasksDeps) {
       horizonHours: horizon,
       eventImpacts: owner ? (impacts ? { status: "ok", items: impacts } : { status: "unavailable", items: [], note: "event impacts (C6) not available on this deployment yet" }) : { status: "not_requested", items: [], note: "give `owner` to get impacts against holdings and tasks" },
       events: events ? { status: "ok", count: events.length, items: events.slice(0, 50) } : { status: "unavailable", count: 0, items: [], note: "event calendar (C6) not available on this deployment yet; drafts fall back to a dated replay" },
-      taskDrafts: missions.map((m) => ({ ...m, createUrl: "/v1/tasks", createBody: { playbookId: m.draft.playbookId, params: m.draft.params, conditions: m.draft.conditions, mode: m.draft.mode === "REPLAY" ? "SIMULATION" : m.draft.mode, ownerAddress: owner || "<owner>" } })),
+      // V-25：`draft` 就是 POST /v1/tasks 原样可接受的请求体（服务端单测逐条 201）；`createBody` 与其相同，保留旧字段名。
+      // 没给 owner 时草案不含 ownerAddress，调用方补上再提交（missingForCreate 明说）。
+      taskDrafts: missions.map((m) => ({ ...m, createUrl: "/v1/tasks", createMethod: "POST", createAuth: "x-api-key (owner-scoped)", missingForCreate: owner ? [] : ["ownerAddress"], createBody: m.draft })),
+      draftNote: `Each draft is a complete SIMULATION body for POST /v1/tasks (params: inputAssetKey=${funding.displaySymbol} default, perStepAmountRaw=1 ${funding.displaySymbol} per step; adjust before submitting). Replay suggestions live in \`replay\`, not in the task body.`,
       disclaimer: "Drafts describe conditions and templates only; they are not investment advice and carry no prediction of price direction. A draft becomes a live task only after the owner signs a TradeMandate.",
     });
   };

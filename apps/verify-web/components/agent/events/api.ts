@@ -1,6 +1,8 @@
 "use client";
-/** 事件台接口（Lane D）：GET /v1/event-impacts、POST /v1/event-impacts/actions。字段以 verify-service impacts/service.ts 为准。 */
+/** 事件台接口（Lane D）：GET /v1/event-impacts、POST /v1/event-impacts/actions。字段以 verify-service impacts/service.ts 为准。
+ *  V-29：走全站唯一的 api() 助手（/api/verify 绝对路径、30 s 超时），不再有事件台专用代理。 */
 import type { Blocker, Condition, EventImpact, EvidenceRecord, ImpactAction, MarketEvent } from "@chaconne/core/verify";
+import { api } from "@/lib/api";
 
 export type Relevance = "holding_and_task" | "holding" | "task" | "universe";
 export interface RuleView {
@@ -61,21 +63,11 @@ export interface ActionResult {
 }
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<{ status: number; data: T | null; error: string | null }> {
-  let res: Response;
-  try {
-    res = await fetch(`/agent/events/api/${path}`, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), cache: "no-store" });
-  } catch {
-    return { status: 0, data: null, error: "network" };
-  }
-  const text = await res.text();
-  let data: unknown = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = null;
-  }
+  const r = await api<T>(method, path, body);
+  const data = r.data as unknown;
   const err = data && typeof data === "object" && "error" in data ? String((data as { error: unknown }).error) : null;
-  return { status: res.status, data: data as T, error: res.ok ? null : (err ?? `http_${res.status}`) };
+  const ok = r.status >= 200 && r.status < 300;
+  return { status: r.status, data: ok ? r.data : (data as T | null), error: ok ? null : (err ?? `http_${r.status}`) };
 }
 
 export const eventDesk = {

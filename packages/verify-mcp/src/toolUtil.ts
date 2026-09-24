@@ -1,6 +1,6 @@
 /** MCP 工具共用：结果形状、HTTP → 工具结果映射（402 非错误）、参数 schema 片段 */
 import { z } from "zod";
-import type { HttpResult } from "./client";
+import { API_KEY_REQUIRED, type HttpResult } from "./client";
 
 export type ToolResult = { content: Array<{ type: "text"; text: string }>; structuredContent?: Record<string, unknown>; isError?: boolean };
 
@@ -21,6 +21,10 @@ export function fromHttp(r: HttpResult, summaryOk: (b: Record<string, unknown>) 
       structuredContent: { status: 402, paymentRequired: r.paymentRequired, body },
       isError: false,
     };
+  }
+  if (r.status === 401 && body["error"] === API_KEY_REQUIRED) {
+    // 免 key 模式下的需 key 工具：不是错误，也不是数据（V-40）
+    return { content: [{ type: "text", text: `not_available: ${String(body["message"])}` }], structuredContent: { status: "not_available", reason: API_KEY_REQUIRED, message: body["message"] }, isError: false };
   }
   if (r.status >= 200 && r.status < 300) {
     const data: Record<string, unknown> = { status: r.status, ...body };

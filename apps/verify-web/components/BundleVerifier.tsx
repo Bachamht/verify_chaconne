@@ -15,6 +15,8 @@ import { useI18n } from "@/lib/i18n";
 import { Card, Pill } from "@/components/ui";
 import { RPC_URL } from "@/lib/wallet";
 import { api } from "@/lib/api";
+import { apiError } from "@/lib/errors";
+import { tx } from "@/lib/i18n.execute";
 
 interface OnlineCheck { id: string; ok: boolean; detail: string }
 
@@ -60,18 +62,23 @@ export function BundleVerifier() {
   const load = useCallback(
     async (ref: { job?: string; mandate?: string }) => {
       setBusy(true);
+      setParseErr(null);
       try {
         const r = ref.job ? await jobsV2.bundle(ref.job) : await mandates.bundle(ref.mandate!);
-        if (r.status === 200) {
+        if (r.status === 200 && r.data && typeof r.data === "object") {
           const s = JSON.stringify(r.data, null, 2);
           setText(s);
           await run(s, true);
-        } else setParseErr(`load failed: ${r.status}`);
+        } else if (r.status === 404) setParseErr(tx(locale, "bundle_not_yours"));
+        else if (r.status === 401 || r.status === 403) setParseErr(tx(locale, "bundle_unauthorized"));
+        else setParseErr(tx(locale, "bundle_load_failed", { detail: apiError(r, locale) }));
+      } catch (e) {
+        setParseErr(tx(locale, "bundle_load_failed", { detail: e instanceof Error ? e.message : String(e) }));
       } finally {
         setBusy(false);
       }
     },
-    [run],
+    [run, locale],
   );
 
   // 由 ?job= / ?mandate= 显式加载（用户可见的动作等价物：URL 带参数）
@@ -150,7 +157,7 @@ export function BundleVerifier() {
             <LoadBox busy={busy} onLoad={load} />
           </div>
           <textarea className="field mono h-[28rem] w-full text-xs" value={text} onChange={(e) => onEdit(e.target.value)} placeholder='{"schemaVersion":"1","kind":"job",…}' spellCheck={false} />
-          {parseErr && <p className="mt-2 text-xs text-bad">{parseErr}</p>}
+          {parseErr && <p className="mt-2 text-xs text-bad" role="alert">{parseErr}</p>}
           <button className="btn mt-2" onClick={() => run(text, true)} disabled={!text}>{t("vb_run")}</button>
         </Card>
         <Card title={zh ? "检查清单" : "Checklist"} right={checks ? failed === 0 ? <Pill tone="ok">{t("vb_all_ok")}</Pill> : <Pill tone="bad">{failed} {t("vb_failed")}</Pill> : null}>
@@ -193,12 +200,12 @@ export function BundleVerifier() {
 }
 
 function LoadBox({ busy, onLoad }: { busy: boolean; onLoad: (ref: { job?: string; mandate?: string }) => Promise<void> }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [v, setV] = useState("");
   return (
     <span className="flex gap-2">
       <input className="field mono max-w-xs" placeholder="job_… / man_…" value={v} onChange={(e) => setV(e.target.value)} />
-      <button className="btn-ghost" disabled={busy || !v} onClick={() => onLoad(v.startsWith("job_") ? { job: v } : { mandate: v })}>{t("vb_load")}</button>
+      <button className="btn-ghost" disabled={busy || !v.trim()} aria-busy={busy} onClick={() => { const id = v.trim(); void onLoad(id.startsWith("job_") ? { job: id } : { mandate: id }); }}>{busy ? tx(locale, "bundle_loading") : t("vb_load")}</button>
     </span>
   );
 }

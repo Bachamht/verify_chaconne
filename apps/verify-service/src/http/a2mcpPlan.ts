@@ -7,9 +7,9 @@
 import type { Request, Response } from "express";
 import { hashCanonical } from "@chaconne/core/verify";
 import type { VerifyConfig } from "../config";
-import { rateLimit } from "./auth";
 import type { Paywall } from "./paywall";
 import { HttpError } from "../jobs/service";
+import { englishMessage, translateDetails } from "./errors";
 import type { PlansService } from "../plans/service";
 import type { MandatesService } from "../mandates/service";
 
@@ -40,10 +40,7 @@ export const A2MCP_PLAN_INPUT_SCHEMA = {
 export function createA2mcpPlanHandler(d: { cfg: VerifyConfig; plans: PlansService; paywall: Paywall }) {
   return async (req: Request, res: Response): Promise<void> => {
     res.setHeader("Cache-Control", "private, no-store");
-    if (!rateLimit(`a2mcp-plan:${req.ip ?? "unknown"}`, d.cfg.RATE_LIMIT_PER_MIN, 60_000)) {
-      res.status(429).json({ ok: false, status: "rate_limited", error: "rate_limited", retryAfterSeconds: 60 });
-      return;
-    }
+    // 限流由 app.ts 的 freeRateLimiter 统一处理（V-42）
     // GET 探活/带 query 也接受（第三方与目录爬虫会用 GET；OKX 客户端只认 200/402）
     const body = ((req.method === "GET" ? req.query : req.body) ?? {}) as Record<string, unknown>;
     const inputRequired = (details: unknown) =>
@@ -82,7 +79,7 @@ export function createA2mcpPlanHandler(d: { cfg: VerifyConfig; plans: PlansServi
       created = await d.plans.create(callerId, goal);
     } catch (err) {
       if (err instanceof HttpError && err.status === 400) {
-        inputRequired({ code: err.code, message: err.message, fields: err.details ?? null });
+        inputRequired({ code: err.code, ...englishMessage(err.code, err.message), fields: translateDetails(err.details ?? null) });
         return;
       }
       throw err;
@@ -101,10 +98,7 @@ export function createA2mcpPlanHandler(d: { cfg: VerifyConfig; plans: PlansServi
 export function createA2mcpMonitorHandler(d: { cfg: VerifyConfig; mandates: MandatesService; paywall: Paywall }) {
   const register = async (req: Request, res: Response): Promise<void> => {
     res.setHeader("Cache-Control", "private, no-store");
-    if (!rateLimit(`a2mcp-monitor:${req.ip ?? "unknown"}`, d.cfg.RATE_LIMIT_PER_MIN, 60_000)) {
-      res.status(429).json({ ok: false, status: "rate_limited", error: "rate_limited", retryAfterSeconds: 60 });
-      return;
-    }
+    // 限流由 app.ts 的 freeRateLimiter 统一处理（V-42）
     // GET 探活/带 query 也接受（第三方与目录爬虫会用 GET；OKX 客户端只认 200/402）
     const body = ((req.method === "GET" ? req.query : req.body) ?? {}) as Record<string, unknown>;
     if (Object.keys(body).length === 0) {

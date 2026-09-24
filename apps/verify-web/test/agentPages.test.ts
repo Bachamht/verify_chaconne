@@ -18,7 +18,14 @@ describe("O-01 · 开发者页文档", () => {
     expect(src).toContain("not_in_tier");
     expect(src).toContain("provenance.mode");
     expect(src).toContain("/a2mcp/agent-tasks");
-    expect(src).toMatch(/verify-mcp，43 个|verify-mcp, 43/);
+    expect(src).toMatch(/verify-mcp，46 个|verify-mcp, 46/);
+    expect(src).toContain("verify_once_free");
+    expect(src).not.toContain("npx -y @chaconne/verify-mcp");
+    expect(src).toContain("packages/verify-mcp/bin/chaconne-verify-mcp.mjs");
+    for (const f of ["/openapi.json", "/llms.txt", "/.well-known/agent-card.json"]) expect(src).toContain(f);
+    // 免 key 端点的 curl 示例不带 x-api-key
+    const freeBlock = src.slice(src.indexOf('id="free"'), src.indexOf('id="a2mcp"'));
+    expect(freeBlock).not.toContain("x-api-key:");
   });
 });
 
@@ -28,6 +35,18 @@ describe("导航与路由", () => {
     for (const h of ["/agent", "/agent/tasks", "/agent/events", "/agent/journal", "/agent/funds", "/agent/lab", "/new", "/plan", "/play", "/me", "/live", "/developers", "/verify-bundle"]) expect(src).toContain(`href: "${h}"`);
     expect(src).toContain("verify-switch");
     expect(src).toContain("行情比价");
+  });
+  it("V-47：只有一套导航——页头 5 主项 + 工具下拉 + 开发者；子导航 pill 删除；投屏模式在页脚且带说明；/me 改名", () => {
+    const header = read("components/Header.tsx");
+    expect(header).toMatch(/NAV_MAIN[\s\S]*"\/agent\/journal"/);
+    expect(header).toMatch(/NAV_TOOLS[\s\S]*"\/me"/);
+    expect(header).not.toContain("demo_mode");
+    expect(read("components/agent/shared.tsx")).not.toContain("ag-subnav");
+    const footer = read("components/Footer.tsx");
+    expect(footer).toContain("demo_mode_hint");
+    const i18n = read("lib/i18n.tsx");
+    expect(i18n).toMatch(/nav_me: \{ en: "Local verification records", zh: "本机核验记录" \}/);
+    expect(read("app/globals.css")).toMatch(/\.verify-menu-toggle \{ display: none; \}/);
   });
   it("代理放行 §11.7 全部 v6 路径", () => {
     const src = read("app/api/verify/[...path]/route.ts");

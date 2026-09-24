@@ -8,6 +8,7 @@ import { verifyTheses, verifyThesisChecks } from "@chaconne/db";
 import {
   checkThesis,
   machinePremisesFromConditions,
+  premiseKindForCondition,
   thesisStatusOf,
   validateReviewItem,
   validateThesisInput,
@@ -44,7 +45,8 @@ export class ThesesService {
     const v = validateThesisInput(merged, a.mode, nowIso);
     if (!v.ok) throw new HttpError(400, "invalid_request", "理由卡校验失败", v.errors);
     const id = a.id ?? newId("ths");
-    const explicit: Premise[] = v.input.premises.map((p, i) => (p.kind === "machine" ? { id: `${id}_p${i}`, kind: "machine", text: p.text, condition: p.condition as Condition, status: "unknown", lastCheckedAt: null, evidenceIds: [] } : { id: `${id}_p${i}`, kind: "research", text: p.text, status: "unknown", lastCheckedAt: null, evidenceIds: [], reviewItems: [] }));
+    // 时间门条件（session / min_gap…）标 kind=timing：展示、求值，但不推翻论点（V-27）
+    const explicit: Premise[] = v.input.premises.map((p, i) => (p.kind !== "research" ? { id: `${id}_p${i}`, kind: premiseKindForCondition(p.condition as Condition), text: p.text, condition: p.condition as Condition, status: "unknown", lastCheckedAt: null, evidenceIds: [] } : { id: `${id}_p${i}`, kind: "research", text: p.text, status: "unknown", lastCheckedAt: null, evidenceIds: [], reviewItems: [] }));
     const auto = a.conditionsForMachinePremises ? machinePremisesFromConditions(a.conditionsForMachinePremises, id) : [];
     const premises = [...auto, ...explicit];
     const now = this.now();
@@ -83,7 +85,7 @@ export class ThesesService {
       lastCheckedAt: row.lastCheckedAt?.toISOString() ?? null,
       researchPending: card.premises.filter((p) => p.kind === "research" && p.status === "unknown").length,
       checks: checks.map((c) => ({ checkedAt: c.checkedAt.toISOString(), status: c.status, actionTaken: c.actionTaken, evidenceIds: c.evidenceIds })),
-      note: "Machine premises are re-checked by the monitor against signed context; research premises stay 'unknown' until the owner marks them. Adding review items never triggers execution.",
+      note: "Machine premises are re-checked by the monitor against signed context and decide the card status; timing premises (session, step gap, event windows) are shown for transparency but never invalidate the thesis; research premises stay 'unknown' until the owner marks them. Adding review items never triggers execution.",
     };
   }
 
@@ -97,7 +99,7 @@ export class ThesesService {
     const premises = (row.premisesJson as Premise[]).map((p) => ({ ...p }));
     const target = premiseId ? premises.find((p) => p.id === premiseId) : premises.find((p) => p.kind === "research");
     if (!target) throw new HttpError(404, "premise_not_found", "没有可挂复核项的 research 前提");
-    if (target.kind !== "research") throw new HttpError(409, "premise_not_research", "复核项只能挂在 research 前提上（机器前提由条件求值决定）");
+    if (target.kind !== "research") throw new HttpError(409, "premise_not_research", "复核项只能挂在 research 前提上（机器/时间门前提由条件求值决定）");
     target.reviewItems = [...(target.reviewItems ?? []), v.item].slice(-50);
     const [updated] = await this.d.db.update(verifyTheses).set({ premisesJson: premises, updatedAt: this.now() }).where(eq(verifyTheses.id, id)).returning();
     return updated!;

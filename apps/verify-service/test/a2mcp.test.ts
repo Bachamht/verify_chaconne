@@ -158,6 +158,41 @@ describe("POST /a2mcp/verify", () => {
   });
 });
 
+describe("V-39 A2MCP 建的 job 调用方免 key 可回查", () => {
+  it("delivered 带绝对 statusUrl / publicUrl / publicBundleUrl；summary 的 URL 在句尾不粘标点；/pub/reports/:shareId 与 /bundle 无 key 200；同 job 同 shareId", async () => {
+    env = await createTestEnv({ env: { PUBLIC_BASE_URL: "http://test" } });
+    const r = await call(env, params);
+    expect(r.json["status"]).toBe("delivered");
+    const jobId = r.json["jobId"] as string;
+    expect(r.json["statusUrl"]).toBe(`http://test/v1/jobs/${jobId}`);
+    expect(String(r.json["publicUrl"])).toMatch(/^http:\/\/test\/pub\/reports\/shr_[0-9a-f]+$/);
+    expect(r.json["publicBundleUrl"]).toBe(`${r.json["publicUrl"]}/bundle`);
+    expect(String(r.json["summary"])).toMatch(/re-checkable without a key at http:\/\/test\/pub\/reports\/shr_[0-9a-f]+$/);
+    expect((r.json["discovery"] as { openapi: string }).openapi).toBe("http://test/pub/openapi.json");
+    // 无 key：/v1/jobs/:id 仍 401（owner 私有），公开战报与证据包 200
+    expect((await fetch(`${env.url}/v1/jobs/${jobId}`)).status).toBe(401);
+    const pub = await fetch(env.url + new URL(String(r.json["publicUrl"])).pathname);
+    expect(pub.status).toBe(200);
+    const card = (await pub.json()) as { kind: string; result: { reportHash: string }; verifier: { publicBundleUrl: string }; goal: { amount: string } };
+    expect(card.kind).toBe("job");
+    expect(card.result.reportHash).toBe(r.json["reportHash"]);
+    expect(card.goal.amount).toMatch(/^(< 10|10–100|100–1k|1k–10k|> 10k)$/); // 金额区间化，钱包隐藏
+    expect(JSON.stringify(card)).not.toContain(params.ownerAddress.slice(2));
+    const bundle = await fetch(env.url + card.verifier.publicBundleUrl);
+    expect(bundle.status).toBe(200);
+    const b = (await bundle.json()) as { kind: string; id: string; bundleHash: string; bundleSignature: string };
+    expect(b.kind).toBe("job");
+    expect(b.id).toBe(jobId);
+    expect(b.bundleHash).toMatch(/^0x/);
+    expect(b.bundleSignature).toMatch(/^0x/);
+    // 同参再调 → 同 job、同 shareId（幂等，不重复建分享）
+    const again = await call(env, params);
+    expect(again.json["shareId"]).toBe(r.json["shareId"]);
+    // 不存在 / 未公开的分享 → 404
+    expect((await fetch(`${env.url}/pub/reports/shr_nope/bundle`)).status).toBe(404);
+  });
+});
+
 describe("A2MCP 付款凭证不能跨任务复用", () => {
   it("用任务 A 的凭证调不同参数（任务 B）→ 402 payment_proof_reused", async () => {
     env = await createTestEnv({ priceUsd: "0.01" });

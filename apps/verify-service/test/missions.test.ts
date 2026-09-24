@@ -19,10 +19,11 @@ const ASSETS = [
 const earnings: MarketEvent = { id: "finnhub:EARNINGS:2026-09-24:nvda", kind: "EARNINGS", name: "NVDA earnings", underlyingIds: ["us-stock:NVDA"], scheduledAtUtc: null, dateLocal: "2026-09-24", datePrecision: "day", sessionHint: "amc", status: "estimated", revision: 1, source: "finnhub", sourceFetchedAt: "2026-09-18T00:00:00Z", firstKnownAt: "2026-09-10T00:00:00Z", tz: "America/New_York" };
 const cpi: MarketEvent = { id: "crowsnest:MACRO_TIER1:2026-09-22:cpi", kind: "MACRO_TIER1", name: "CPI", underlyingIds: [], scheduledAtUtc: "2026-09-22T12:30:00Z", dateLocal: "2026-09-22", datePrecision: "exact", sessionHint: null, status: "confirmed", revision: 1, source: "crowsnest", sourceFetchedAt: "2026-09-18T00:00:00Z", firstKnownAt: "2026-09-01T00:00:00Z", tz: "America/New_York" };
 const nke: MarketEvent = { ...earnings, id: "finnhub:EARNINGS:2026-09-25:nke", underlyingIds: ["us-stock:NKE"], dateLocal: "2026-09-25" };
+const FUNDING = { inputAssetKey: "eip155:196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8", perStepAmountRaw: "1000000", displaySymbol: "USDG" };
 
 describe("buildMissions", () => {
   it("财报事件命中可执行资产 → event_aware_accumulate 草案（earnings_window + avoid_event_window）；未放行资产不出任务；宏观 → 对照任务", () => {
-    const out = buildMissions({ now: NOW, events: [earnings, cpi, nke], assets: ASSETS });
+    const out = buildMissions({ now: NOW, events: [earnings, cpi, nke], assets: ASSETS, funding: FUNDING });
     const e = out.find((m) => m.eventId === earnings.id)!;
     expect(e).toBeTruthy();
     expect(e.assetKey).toBe(ASSETS[1]!.assetKey);
@@ -36,21 +37,30 @@ describe("buildMissions", () => {
     const c = out.find((m) => m.eventId === cpi.id)!;
     expect(c.title.zh).toContain("模拟");
     expect(c.draft.mode).toBe("SIMULATION");
+    // V-25：草案 = 可直接提交的任务体（资金侧缺省、clientRequestId、无 from/to）
+    expect(e.draft.params).toEqual({ inputAssetKey: FUNDING.inputAssetKey, outputAssetKey: ASSETS[1]!.assetKey, steps: 3, perStepAmountRaw: "1000000" });
+    expect(e.draft.clientRequestId).toMatch(/^draft-msn_/);
+    expect(e.replay).toBeNull();
     expect(JSON.stringify(out)).not.toMatch(/will rise|will fall|涨|跌/);
   });
 
   it("无事件 / 事件源未接上 → 标注日期的回放任务（上一交易日），标 REPLAY，文案说明缺口如实", () => {
-    const none = buildMissions({ now: NOW, events: [], assets: ASSETS });
+    const none = buildMissions({ now: NOW, events: [], assets: ASSETS, funding: FUNDING, owner: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
     expect(none).toHaveLength(1);
     expect(none[0]!.kind).toBe("replay");
     expect(none[0]!.mode).toBe("REPLAY");
+    // 回放区间在 replay 字段；草案本身是 SIMULATION，params 不含 from/to（V-25）
+    expect(none[0]!.draft.mode).toBe("SIMULATION");
+    expect(none[0]!.draft.ownerAddress).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    expect(Object.keys(none[0]!.draft.params).sort()).toEqual(["inputAssetKey", "outputAssetKey", "perStepAmountRaw", "steps"]);
+    expect(none[0]!.replay).toEqual({ assetKey: ASSETS[0]!.assetKey, from: "2026-09-17T00:00:00Z", to: "2026-09-17T23:59:59Z", url: none[0]!.href });
     expect(none[0]!.dateLabel).toBe("2026-09-17");
     expect(none[0]!.title.en).toContain("2026-09-17");
-    const unavailable = buildMissions({ now: NOW, events: null, assets: ASSETS, focus: [ASSETS[1]!.assetKey] });
+    const unavailable = buildMissions({ now: NOW, events: null, assets: ASSETS, focus: [ASSETS[1]!.assetKey], funding: FUNDING });
     expect(unavailable[0]!.why.zh).toContain("暂不可用");
     expect(unavailable[0]!.assetKey).toBe(ASSETS[1]!.assetKey);
     // 跨周末：周一看周五
-    expect(buildMissions({ now: new Date("2026-09-21T10:00:00Z"), events: [], assets: ASSETS })[0]!.dateLabel).toBe("2026-09-18");
+    expect(buildMissions({ now: new Date("2026-09-21T10:00:00Z"), events: [], assets: ASSETS, funding: FUNDING })[0]!.dateLabel).toBe("2026-09-18");
   });
 });
 

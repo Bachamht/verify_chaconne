@@ -12,7 +12,7 @@ export function LabClient() {
   const { locale } = useI18n();
   const zh = locale === "zh";
   const sp = useSearchParams();
-  const initial = sp.get("taskId") ?? "";
+  const initial = sp.get("taskId") ?? sp.get("task") ?? "";
   const [taskId, setTaskId] = useState(initial);
   return (
     <div className="space-y-5">
@@ -20,6 +20,11 @@ export function LabClient() {
         <h1 className="text-2xl font-bold">{zh ? "决策实验" : "Decision Lab"}</h1>
         <ModeBadge />
       </div>
+      <nav className="flex flex-wrap gap-2 text-xs" aria-label={zh ? "实验页分区" : "Lab sections"}>
+        <a className="btn-ghost h-8 px-3" href="#wait">{zh ? "等待诊断" : "Wait diagnosis"}</a>
+        <a className="btn-ghost h-8 px-3" href="#compare">{zh ? "双策略对照" : "Two-policy comparison"}</a>
+        <a className="btn-ghost h-8 px-3" href="#replay">{zh ? "决策回放" : "Decision replay"}</a>
+      </nav>
       <p className="max-w-3xl text-sm text-fg-2">
         {zh
           ? "为什么没买？换一种规则会怎样？三块都建立在同一套证据与条件求值之上：诊断解释全部阻塞项，对照在同一快照上并排试算两套规则，回放只用各时点当时已知的数据。没有任何一块输出收益。"
@@ -27,7 +32,7 @@ export function LabClient() {
       </p>
       <WaitDiagnosis initialTaskId={initial} onTaskId={setTaskId} />
       <PolicyCompare taskId={taskId} />
-      <ReplayTimeline />
+      <ReplayTimeline initialAsset={sp.get("asset")} initialDate={sp.get("date")} />
     </div>
   );
 }

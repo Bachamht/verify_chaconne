@@ -28,8 +28,37 @@ const R: Record<string, { en: string; zh: string }> = {
   UNIT_CHANGED: { en: "The token's unit multiplier changed during the monitoring window; the plan must be recomputed.", zh: "监测窗口内代币单位乘数发生变化，需要重新规划。" },
   CLOSE_UNCONFIRMED: { en: "Close taken from the 16:00 ET last trade; not yet confirmed by the next session's previous close.", zh: "收盘价取自 16:00 ET 最后一笔成交，尚未经次日前收确认。" },
   STEP_AWAITING_CONFIRMATION: { en: "This step is already submitted; the next step waits for its on-chain confirmation.", zh: "本步已提交，下一步要等它链上确认后才发出。" },
+  /* ---- v6 条件层阻塞码（V-32：阻塞项用短句，不露原始码） ---- */
+  CONTEXT_UNAVAILABLE: { en: "Market context is unavailable right now; waiting for it to come back.", zh: "市场上下文暂时不可用，等它恢复。" },
+  CONTEXT_STALE: { en: "Market context is older than allowed; waiting for a fresh package.", zh: "市场上下文比允许的更旧，等新的一包。" },
+  CONTEXT_FIELD_NOT_IN_TIER: { en: "A field this rule needs is not in the free context tier.", zh: "这条规则需要的字段不在免费档上下文里。" },
+  EVENT_WINDOW_ACTIVE: { en: "Inside your event window: nothing is issued until the window closes.", zh: "处于你设定的事件窗口内：窗口结束前不签发。" },
+  EVENT_DATE_UNCERTAIN: { en: "This event has a date but no time; choose whole-day wait or ignore it.", zh: "该事件只有日期、没有具体时刻：需要你选择整日等待或忽略。" },
+  EARNINGS_WINDOW_ACTIVE: { en: "Inside your earnings window: issuance pauses around the report.", zh: "处于你设定的财报窗口内：财报前后暂停签发。" },
+  EARNINGS_COVERAGE_UNKNOWN: { en: "The earnings calendar does not cover this asset; treated as unknown, not as no earnings.", zh: "财报日历未覆盖该资产：按未知处理，不当作没有财报。" },
+  FED_BLACKOUT: { en: "Inside the Fed blackout period you chose to avoid.", zh: "处于你选择避开的联储静默期。" },
+  VOL_REGIME_EXCEEDED: { en: "Volatility is above the limit you set.", zh: "波动率高于你设的上限。" },
+  SESSION_RULE_BLOCK: { en: "The US market is outside the session you allowed (regular hours only).", zh: "现在不在你允许的美股时段（只在常规时段买）。" },
+  CROSS_ASSET_UNCONFIRMED: { en: "Cross-asset confirmation is not available yet.", zh: "跨资产确认还没有出现。" },
+  STEP_GAP_NOT_ELAPSED: { en: "The minimum gap since the last confirmed step has not elapsed.", zh: "距离上一步确认还没过最小间隔。" },
+  DAILY_STEP_CAP_REACHED: { en: "Today's step cap is reached; the next step waits for the next trading day.", zh: "今天的步数上限已到，下一步等下一个交易日。" },
+  PREMIUM_CONDITION_NOT_MET: { en: "The on-chain premium is above your threshold.", zh: "链上溢价高于你设的阈值。" },
+  TARGET_NOT_REACHED: { en: "The target price has not been reached.", zh: "还没到你设的目标价。" },
+  TRACKED_COST_UNKNOWN: { en: "Part of the position has no traced cost, so the P&L rule cannot be evaluated.", zh: "部分持仓没有可追溯成本，盈亏规则无法判定。" },
+  CASH_FLOOR_BLOCK: { en: "This step would go below your cash floor.", zh: "这一步会跌破你的现金下限。" },
+  BUDGET_GROUP_CONFLICT: { en: "Another task in the same budget group has priority right now.", zh: "同一资金组里另一个任务现在优先。" },
+  BUDGET_GROUP_EXHAUSTED: { en: "The budget group's cap for this period is used up.", zh: "资金组本期上限已用完。" },
+  BUDGET_PENDING_OCCUPIED: { en: "The budget is occupied by a step still awaiting confirmation.", zh: "预算被一笔尚未确认的步骤占着。" },
+  THESIS_INVALIDATED: { en: "A checked premise of the thesis no longer holds; the task needs your decision.", zh: "理由卡里一条机器核对的前提不再成立，需要你决定。" },
+  THESIS_UNKNOWN: { en: "A thesis premise cannot be checked yet.", zh: "理由卡里有前提暂时无法核对。" },
+  THESIS_EXPIRED: { en: "The thesis has expired; renew it or stop the task.", zh: "理由卡已到期，续一张或停止任务。" },
+  EXECUTOR_OFFLINE: { en: "No executor is online; certificates are still issued, nobody executes them.", zh: "没有执行器在线：证书仍会签发，但没有人来执行。" },
+  AWAITING_USER_SIGNATURE: { en: "Waiting for your wallet signature.", zh: "等待你的钱包签名。" },
 };
 
 export function reasonText(code: string, locale: Locale): string {
   return R[code]?.[locale] ?? code;
+}
+export function hasReasonText(code: string): boolean {
+  return code in R;
 }

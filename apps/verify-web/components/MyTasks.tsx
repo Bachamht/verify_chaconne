@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { tx } from "@/lib/i18n.execute";
 import { clearHistory, forget, history, hrefFor, type HistoryItem } from "@/lib/history";
 import { fmtLocal } from "@/lib/format";
 import { X } from "lucide-react";
@@ -21,8 +22,8 @@ export function MyTasks() {
   }, []);
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold">{t("me_h")}</h1>
-      <p className="text-sm text-fg-2">{t("me_p")}</p>
+      <h1 className="text-2xl font-bold">{tx(locale, "me_title")}</h1>
+      <p className="text-sm text-fg-2">{t("me_p")} {tx(locale, "me_note")}</p>
       <Card>
         {items.length === 0 ? (
           <EmptyState compact title={t("me_empty_h")} description={t("me_empty")} primary={{ href: "/new", label: t("nav_new") }} secondary={{ href: "/play", label: t("nav_play") }} />

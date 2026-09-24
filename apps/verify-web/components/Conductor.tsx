@@ -70,7 +70,7 @@ export function Conductor({
       <button
         className="conductor__puppet"
         type="button"
-        aria-label={zh ? "让差价君挥一次指挥棒" : "Let the conductor strike a beat"}
+        aria-label={zh ? "运行核验" : "Run verification"}
         title={zh ? "点一下，起拍" : "Tap to strike a beat"}
         onPointerMove={tilt}
         onPointerLeave={resetTilt}

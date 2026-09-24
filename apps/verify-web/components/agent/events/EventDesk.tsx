@@ -5,7 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
 import { useAccount } from "@/lib/useAccount";
 import { fmtLocal, tzLabel } from "@/lib/format";
+import { loadAssets, type AssetEntry } from "@/lib/assets";
 import { Card, EmptyState, Pill } from "@/components/ui";
+import { LoadingState, Skeleton } from "../shared";
 import { copy, reasonText6, type CopyKey } from "./copy";
 import { eventDesk, type ImpactsResponse } from "./api";
 import { EventCard } from "./EventCard";
@@ -22,6 +24,8 @@ export function EventDesk() {
   const [horizon, setHorizon] = useState(Number(sp.get("horizonHours") ?? 48) || 48);
   const [state, setState] = useState<{ phase: "idle" | "loading" | "ok" | "unreachable" | "disabled" | "error"; data: ImpactsResponse | null; error?: string }>({ phase: "idle", data: null });
   const highlight = sp.get("event");
+  const [assets, setAssets] = useState<AssetEntry[]>([]);
+  useEffect(() => { void loadAssets().then((r) => setAssets(r.assets)); }, []);
   useEffect(() => {
     if (account && !owner) setOwner(account);
   }, [account, owner]);
@@ -32,7 +36,7 @@ export function EventDesk() {
     const r = await eventDesk.impacts(owner.toLowerCase(), horizon);
     if (r.status === 200 && r.data) setState({ phase: "ok", data: r.data });
     else if (r.status === 404) setState({ phase: "disabled", data: null });
-    else if (r.status === 0 || r.status === 502 || r.status === 503) setState({ phase: "unreachable", data: null });
+    else if (r.status === 0 || r.status === 502 || r.status === 503) setState({ phase: "unreachable", data: null, error: r.error ?? undefined });
     else setState({ phase: "error", data: null, error: r.error ?? `HTTP ${r.status}` });
   }, [owner, horizon]);
   useEffect(() => {
@@ -78,20 +82,27 @@ export function EventDesk() {
       </Card>
 
       {!isAddr(owner) && <EmptyState compact title={c("need_owner")} />}
-      {state.phase === "unreachable" && <EmptyState compact title={c("unreachable")} />}
+      {state.phase === "loading" && !d && (
+        <section className="space-y-3" aria-busy="true">
+          <LoadingState onRetry={() => void load()} label={c("loading")} />
+          <div className="card"><Skeleton lines={4} /></div>
+          <div className="card"><Skeleton lines={3} /></div>
+        </section>
+      )}
+      {state.phase === "unreachable" && <EmptyState compact title={state.error === "timeout" ? c("timeout") : c("unreachable")} primary={{ label: c("retry"), onClick: () => void load() }} />}
       {state.phase === "disabled" && <EmptyState compact title={c("disabled")} />}
-      {state.phase === "error" && <EmptyState compact title={state.error ?? "error"} />}
+      {state.phase === "error" && <EmptyState compact title={state.error ?? "error"} primary={{ label: c("retry"), onClick: () => void load() }} />}
 
       {d && (
         <>
           <section className="space-y-3">
             <h2 className="text-lg font-semibold">{c("related")} <span className="mono text-sm text-fg-3">{related.length}</span></h2>
-            {related.length === 0 ? <EmptyState compact title={c("empty")} /> : related.map((it) => <EventCard key={it.event.id} item={it} owner={owner.toLowerCase()} highlighted={highlight === it.event.id} tasksReady={tasksReady} />)}
+            {related.length === 0 ? <EmptyState compact title={c("empty")} /> : related.map((it) => <EventCard key={it.event.id} item={it} owner={owner.toLowerCase()} highlighted={highlight === it.event.id} tasksReady={tasksReady} assets={assets} />)}
           </section>
           {universe.length > 0 && (
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">{c("universe")} <span className="mono text-sm text-fg-3">{universe.length}</span></h2>
-              {universe.map((it) => <EventCard key={it.event.id} item={it} owner={owner.toLowerCase()} highlighted={highlight === it.event.id} tasksReady={tasksReady} />)}
+              {universe.map((it) => <EventCard key={it.event.id} item={it} owner={owner.toLowerCase()} highlighted={highlight === it.event.id} tasksReady={tasksReady} assets={assets} />)}
             </section>
           )}
           <Card title={c("coverage_h")}>
@@ -101,7 +112,7 @@ export function EventDesk() {
                 <li key={a.assetKey} className="flex flex-wrap items-center gap-2 border-b border-line py-1">
                   <span className="mono w-16">{a.displaySymbol}</span>
                   <Pill tone={a.coverage === "covered" ? "ok" : a.coverage === "unknown" ? "warn" : "neutral"}>{c(`cov_${a.coverage}` as CopyKey)}</Pill>
-                  {a.code && <span className="text-fg-3" title={reasonText6(a.code, locale)}>{a.code}</span>}
+                  {a.code && <span className="text-fg-3 text-[11px]">{reasonText6(a.code, locale)}</span>}
                   {a.lastProbedAt && <span className="ml-auto text-fg-3">{c("last_probed")} {fmtLocal(a.lastProbedAt, locale)}</span>}
                 </li>
               ))}

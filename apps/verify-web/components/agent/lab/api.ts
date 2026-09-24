@@ -19,6 +19,9 @@ export interface ExplainWaitView {
   nextCheckAt: string | null;
   nextCheckNote: { en: string; zh: string };
   userActionRequired: Blocker[];
+  /** 服务端可能给一个整体证据时刻；单项 evidenceAt 为空时退回它 */
+  evidenceAt?: string | null;
+  contextProvenance?: string | null;
 }
 
 export interface CompareView {

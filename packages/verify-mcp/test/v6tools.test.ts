@@ -51,11 +51,11 @@ const text = (r: Awaited<ReturnType<Client["callTool"]>>) => (r.content as Array
 const taskArgs = { clientRequestId: "t6", ownerAddress: OWNER, playbookId: "session_dca", params: { steps: 3, perStepAmountRaw: "5000000" }, conditions: { version: "conditions/1", items: [{ type: "session", allow: ["US_REGULAR"] }, { type: "min_gap_trading_days", days: 1 }] }, mode: "LIVE" };
 
 describe("注册", () => {
-  it("43 个工具全部发现：v1 7 + v2 13 + v6 23，旧工具一个不少", async () => {
+  it("46 个工具全部发现：v1 7 + v2 13 + v6 23 + 免 key 3，旧工具一个不少", async () => {
     const { client, close } = await connect(svc.url, null);
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
-    expect(names.length).toBe(43);
+    expect(names.length).toBe(46);
     expect(TOOL_NAMES_V6.length).toBe(23);
     for (const n of ["plan_trade", "prepare_mandate", "execute_next_step", "get_evidence_bundle", "verify_evidence_bundle", "list_supported_assets"]) expect(names).toContain(n);
     await close();

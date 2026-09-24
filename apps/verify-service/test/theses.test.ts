@@ -65,11 +65,39 @@ describe("T-01 / T-06 前提三态与 thesis_holds 联动", () => {
     expect((chk.json["thesis"] as { status: string }).status).toBe("invalidated");
     expect((chk.json["task"] as { status: string; blockers: Array<{ code: string }> }).status).toBe("WAITING");
     expect((chk.json["task"] as { blockers: Array<{ code: string }> }).blockers.map((b) => b.code)).toContain("THESIS_INVALIDATED");
+    // V-27：论点被推翻时给出下次复评时刻（monitor 周期），不是「下次检查点未知」
+    const inv = (chk.json["task"] as { blockers: Array<{ code: string; nextCheckAt: string | null }> }).blockers.find((b) => b.code === "THESIS_INVALIDATED")!;
+    expect(inv.nextCheckAt).not.toBeNull();
+    expect(Date.parse(inv.nextCheckAt!)).toBeGreaterThan(Date.parse(env.cfgNow()));
     // 上下文缺失 → unknown → THESIS_UNKNOWN（证据不足，不放行）
     env.setNow("2026-09-18T16:30:00.000Z"); // 快照的 risk.vix 已过 20 分钟 → stale → 机器前提 unknown
     const chk2 = await api(env, "POST", `/v1/theses/${thesis.id}/check`, {});
     expect((chk2.json["thesis"] as { status: string }).status).toBe("unknown");
     expect((chk2.json["task"] as { blockers: Array<{ code: string }> }).blockers.map((b) => b.code)).toContain("THESIS_UNKNOWN");
+  });
+});
+
+describe("V-27 休市建任务：时间门不是论点前提", () => {
+  it("18:00 ET 建 session_dca：premises 里 session/min_gap 标 kind=timing，卡片 holds；任务 WAITING(SESSION_RULE_BLOCK) 且没有 THESIS_INVALIDATED；nextCheckAt = 下一常规时段开盘", async () => {
+    const { e } = await setup();
+    env = e;
+    env.setNow("2026-09-18T22:00:00.000Z");
+    const r = await api(env, "POST", "/v1/tasks", body("pause_issuance"));
+    expect(r.status, JSON.stringify(r.json)).toBe(201);
+    const thesis = r.json["thesis"] as { status: string; premises: Array<{ kind: string; status: string; text: string }> };
+    expect(thesis.status).toBe("holds");
+    const session = thesis.premises.find((p) => p.text.startsWith("Session is one of"))!;
+    expect(session.kind).toBe("timing");
+    expect(session.status).toBe("invalidated"); // 如实：此刻休市
+    expect(thesis.premises.find((p) => p.text.startsWith("At least 1 trading day"))!.kind).toBe("timing");
+    expect(thesis.premises.find((p) => p.text === "VIX ≤ 30")!.kind).toBe("machine");
+    const task = r.json["task"] as { status: string; blockers: Array<{ code: string; nextCheckAt: string | null }> };
+    expect(task.status).toBe("WAITING"); // pause_issuance 没有被触发（不是 PAUSED）
+    const codes = task.blockers.map((b) => b.code);
+    expect(codes).toContain("SESSION_RULE_BLOCK");
+    expect(codes).not.toContain("THESIS_INVALIDATED");
+    expect(task.blockers.find((b) => b.code === "SESSION_RULE_BLOCK")!.nextCheckAt).toBe("2026-09-21T13:30:00.000Z");
+    expect(env.notifier.emitted.some((n) => n.type === "thesis.invalidated")).toBe(false);
   });
 });
 

@@ -42,6 +42,8 @@ const Env = z.object({
   /** 逗号分隔 "key:callerId" */
   VERIFY_API_KEYS: z.string().optional().default(""),
   RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).optional().default(60),
+  /** 免 key 端点（/v1/assets|policies|products|playbooks|context|events、/a2mcp/*、/pub/*、/healthz）按 IP 限流（V-42）；带合法 API key 的请求不计 */
+  FREE_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).optional().default(30),
 
   ENTITLEMENT_MAX_REFRESHES: z.coerce.number().int().min(0).optional().default(2),
   ENTITLEMENT_WINDOW_SECONDS: z.coerce.number().int().min(10).optional().default(300),

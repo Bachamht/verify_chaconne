@@ -64,7 +64,8 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
   let bodyText: string | undefined;
   if (req.method === "POST" || req.method === "PUT") {
     bodyText = await req.text();
-    if (OWNER_SETTERS.has(joined)) {
+    // 建任务等路径：body 的 owner 覆盖 cookie 并回写；其它 POST（如事件台动作）只在没有 cookie 时把 body.owner 当调用方，不写 cookie
+    if (OWNER_SETTERS.has(joined) || !owner) {
       try {
         const b = JSON.parse(bodyText || "{}") as { ownerAddress?: string; owner?: string; goal?: { ownerAddress?: string }; typedData?: { message?: { owner?: string } } };
         const cand = b.ownerAddress ?? b.owner ?? b.goal?.ownerAddress ?? b.typedData?.message?.owner;

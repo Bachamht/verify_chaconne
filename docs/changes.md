@@ -115,7 +115,7 @@ gas：`execute` 全额成交约 26 万 gas（mock 路由）。编译：solc 0.8.
 | I-03：官方 `Client` 经 InMemoryTransport 与真实 StdioClientTransport（spawn 进程）完成 initialize / 能力协商 / listTools(7) / callTool / 错误映射 | `test/*.test.ts` | 6 例 |
 | README（MCP 客户端配置片段：Claude Desktop / Cursor / 通用 stdio） | `README.md` | — |
 
-A2MCP 平台接入端点在 Lane C（`POST /a2mcp/verify`）；ASP #13803 已创建，上架审核待端点部署。
+A2MCP 平台接入端点在 Lane C（`POST /a2mcp/verify`）；ASP #13803 已创建，**2026-09-24 上架通过（Listed — eligible for task recommendations）**。
 
 
 ## Lane G · 运维、验收与提交材料（`docs/`）— 2026-09-20
@@ -191,7 +191,7 @@ A2MCP 平台接入端点在 Lane C（`POST /a2mcp/verify`）；ASP #13803 已创
 | C7 Thesis Watch | "替我看住买入理由" | 理由卡、机器/研究前提三态、失效三路径 | T（6） | 🟡 |
 | C8 Shared Task Budget | "两个 Agent 共用 500，别打架" | 资金组不变量、预留/占用/释放、冲突等待 | B（7） | 🟡 |
 | C9 Decision Lab | "为什么没买？换规则会怎样？" | 等待诊断（全部阻塞项）、同快照双策略对照、无前视回放（覆盖与缺口） | L（6） | 🟡 |
-| OKX 闭环 | 可购买、可核对 | `GET /v1/context` 免费档、`POST /a2mcp/agent-tasks`（等 #13803 结果后提交）、状态分别记录 | O（5） | 🟡 |
+| OKX 闭环 | 可购买、可核对 | `GET /v1/context` 免费档、`POST /a2mcp/agent-tasks`（已实现，未作为第二个服务提交——见 deployments.json）、状态分别记录；**ASP #13803 于 2026-09-24 上架通过** | O（5） | 🟡 |
 
 **两条底线**：① 上表为构建期新增清单，旧 Verify 路由与 v5 能力全部保留；② crowsnest 是既有观测基础（事件驱动的宏观/加密哨兵），本轮**新做**的是导出契约、签名、事件层与全部用户功能；它只取数、做确定性算术、按固定格式送信，不下结论、不给建议、不预测。
 

@@ -944,7 +944,13 @@ export interface Task {
   updatedAt: IsoUtc;
 }
 
-export type PremiseKind = "machine" | "research";
+/**
+ * machine = 由 Condition 求值的研究/风险前提（VIX、溢价、目标价、跨资产…），失效 → 论点被推翻；
+ * research = 只收复核项，用户手动标记；
+ * timing = 纯时间/时段门（session、min_gap_trading_days、事件窗口…；V-27 增补）：同样按 Condition 三态求值并展示，
+ *          但**不参与**卡片状态，也不触发 onInvalidation——休市不是论点被推翻，只是等待。
+ */
+export type PremiseKind = "machine" | "research" | "timing";
 export type PremiseStatus = "holds" | "invalidated" | "unknown";
 export interface PremiseReviewItem { side: "support" | "counter"; text: string; sourceUrl: string; addedBy: "agent" | "user"; at: IsoUtc }
 export interface Premise {

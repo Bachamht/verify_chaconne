@@ -27,12 +27,12 @@ const GAP_LABEL: Record<string, { en: string; zh: string }> = {
   REFERENCE_PURGED: { en: "reference purged (feed outage)", zh: "参考价断供清空" },
 };
 
-export function ReplayTimeline() {
+export function ReplayTimeline({ initialAsset, initialDate }: { initialAsset?: string | null; initialDate?: string | null } = {}) {
   const { locale } = useI18n();
   const zh = locale === "zh";
   const mounted = useMounted();
   const [assets, setAssets] = useState<AssetsResponse | null>(null);
-  const [assetKey, setAssetKey] = useState("");
+  const [assetKey, setAssetKey] = useState(initialAsset ?? "");
   const [playbookId, setPlaybookId] = useState("session_dca");
   const [afterMin, setAfterMin] = useState(20);
   const [from, setFrom] = useState("");
@@ -54,11 +54,16 @@ export function ReplayTimeline() {
   // 水合安全：默认区间挂载后再填（最近 3 天，到当前时刻为止）。datetime-local 取本地时间，不能塞 UTC 串
   useEffect(() => {
     if (!from && !to) {
+      if (initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate)) {
+        setFrom(`${initialDate}T00:00`);
+        setTo(`${initialDate}T23:59`);
+        return;
+      }
       const now = Date.now();
       setTo(toLocalInput(now - 60_000));
       setFrom(toLocalInput(now - 3 * 86_400_000));
     }
-  }, [from, to]);
+  }, [from, to, initialDate]);
 
   const items = useMemo<Condition[]>(
     () => (playbookId === "discount_watch"
@@ -87,7 +92,7 @@ export function ReplayTimeline() {
   const counts = run_ ? run_.points.reduce<Record<string, number>>((m, p) => ({ ...m, [p.outcome]: (m[p.outcome] ?? 0) + 1 }), {}) : {};
 
   return (
-    <Card title={zh ? "决策回放 · 当时已知的数据会让哪条规则放行？" : "Decision replay · Which rule would have passed on what was known then?"} right={<Pill tone="warn">REPLAY</Pill>}>
+    <Card className="scroll-mt-24" title={<span id="replay">{zh ? "决策回放 · 当时已知的数据会让哪条规则放行？" : "Decision replay · Which rule would have passed on what was known then?"}</span>} right={<Pill tone="warn">REPLAY</Pill>}>
       <p className="mb-3 text-sm text-fg-2">{zh ? "每个评估点只用当时已可知的证据、上下文与事件版本（后来的修订不用）。没有档案的区间显示为灰带，不补值；这不是收益回测，也不显示收益。" : "Each point uses only evidence, context and event versions known at that time (later revisions are not used). Intervals without an archive appear as grey bands and are never filled in. This is not a backtest and reports no returns."}</p>
       <div className="grid gap-2 md:grid-cols-3">
         <label className="text-xs text-fg-2">
@@ -196,9 +201,10 @@ export function ReplayTimeline() {
               )}
             </div>
           </div>
-          <p className="mono text-xs text-fg-3">
-            {zh ? "数据源条数" : "Source counts"}: verify_evidence {d.sources.verify_evidence} · verify_context_snapshots {d.sources.verify_context_snapshots} · premium_1h {d.sources.premium_1h}（{zh ? "只作背景" : "background only"}） · events {d.sources.events} · {zh ? "求值器" : "evaluator"} {d.evaluatorId}
+          <p className="text-xs text-fg-3">
+            {zh ? `用到的数据：证据 ${d.sources?.verify_evidence ?? 0} 条 · 上下文快照 ${d.sources?.verify_context_snapshots ?? 0} 份 · 溢价小时线 ${d.sources?.premium_1h ?? 0} 条（只作背景）· 事件 ${d.sources?.events ?? 0} 个` : `Data used: ${d.sources?.verify_evidence ?? 0} evidence record(s) · ${d.sources?.verify_context_snapshots ?? 0} context snapshot(s) · ${d.sources?.premium_1h ?? 0} hourly premium point(s) (background only) · ${d.sources?.events ?? 0} event(s)`}
           </p>
+          <details><summary className="cursor-pointer text-xs text-fg-3">{zh ? "开发者视图" : "Developer view"}</summary><p className="mono mt-1 text-xs text-fg-3">{zh ? "求值器" : "evaluator"} {d.evaluatorId} · replay {d.replayId}</p></details>
           <p className="text-xs text-fg-3">{zh ? d.note.zh : d.note.en}</p>
         </div>
       )}

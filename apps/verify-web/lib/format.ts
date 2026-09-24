@@ -44,6 +44,21 @@ export function humanToRaw(human: string, decimals: number): string | null {
   return raw === "0" ? null : raw;
 }
 
+/** 金额统一出口（V-32 / 4.6-4）：raw + 精度 + 符号 → "2 USDG"；raw 缺失 → "—"（未知不算零） */
+export function formatAmount(raw: string | bigint | null | undefined, decimals: number, symbol?: string, maxFrac = 6): string {
+  if (raw === null || raw === undefined || raw === "") return "—";
+  let human: string;
+  try {
+    human = fmtUnits(raw, decimals, maxFrac);
+  } catch {
+    return "—";
+  }
+  return symbol ? `${human} ${symbol}` : human;
+}
+
+/** 时间统一出口（4.6-3）：本地时间；ISO 只出现在开发者视图 */
+export const formatTime = fmtLocal;
+
 export function rawToHuman(raw: string | bigint | null | undefined, decimals: number, maxFrac = 6): string {
   if (raw === null || raw === undefined || raw === "") return "—";
   try {

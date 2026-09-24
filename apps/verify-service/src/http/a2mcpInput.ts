@@ -190,7 +190,7 @@ export function parseFriendlyInput(req: Request, reg: AssetRegistry, chainId: nu
 }
 
 /** A2MCP 缺参数/参数错误的统一 200 正文（不能用 4xx：OKX 客户端会判 endpoint_unreachable） */
-export function inputRequiredBody(args: { service: string; endpoint: string; method: "POST" | "GET"; schema: unknown; example: unknown; missing: string[]; problems: FriendlyInput["problems"]; resolved: Record<string, string>; reg: AssetRegistry }) {
+export function inputRequiredBody(args: { service: string; endpoint: string; method: "POST" | "GET"; schema: unknown; example: unknown; missing: string[]; problems: FriendlyInput["problems"]; resolved: Record<string, string>; reg: AssetRegistry; discovery?: Record<string, string> }) {
   const stables = args.reg.entries.filter((e) => e.role === "stable_input").map((e) => e.displaySymbol);
   const stocks = args.reg.entries.filter((e) => e.role === "stock_output" && e.executionAllowed).map((e) => `${e.displaySymbol} (${e.underlyingId.split(":")[1]})`);
   const need = args.missing.length ? `Missing: ${args.missing.join(", ")}. ` : "";
@@ -207,6 +207,6 @@ export function inputRequiredBody(args: { service: string; endpoint: string; met
     schema: args.schema,
     example: args.example,
     supportedAssets: { stablecoins: stables, stocks },
-    howToCall: { method: args.method, endpoint: args.endpoint, contentType: "application/json (POST body) or query string (GET)" },
+    howToCall: { method: args.method, endpoint: args.endpoint, contentType: "application/json (POST body) or query string (GET)", ...(args.discovery ?? {}) },
   };
 }

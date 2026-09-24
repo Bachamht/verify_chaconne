@@ -27,7 +27,12 @@ export function ReportCard({ r, compact = false }: { r: PublicReport; compact?: 
             <Pill tone={r.evidenceMode === "LIVE" ? "ok" : r.evidenceMode === "SIMULATION" ? "brand" : "warn"}>{r.evidenceMode}</Pill>
           </div>
           <h2 className="cvf-public-title">{title}</h2>
-          {r.persona && <p className="text-xs text-fg-2">{r.persona.name} · {zh ? PERSONAS[r.persona.personaId].name.zh : PERSONAS[r.persona.personaId].name.en}</p>}
+          {r.persona && (() => {
+            const kind = zh ? PERSONAS[r.persona.personaId].name.zh : PERSONAS[r.persona.personaId].name.en;
+            const custom = r.persona.name?.trim();
+            // 角色卡不重复：「节拍龟 · 节拍龟」→「节拍龟」；起了名才显示「小龟 · 节拍龟」
+            return <p className="text-xs text-fg-2">{custom && custom !== kind && custom !== PERSONAS[r.persona.personaId].name.zh && custom !== PERSONAS[r.persona.personaId].name.en ? `${custom} · ${kind}` : kind}</p>;
+          })()}
           {!compact && <p className="cvf-public-record-note">{r.status === "simulation" || r.evidenceMode === "SIMULATION" ? (zh ? "模拟核验记录 · 不代表已执行交易" : "Simulation record · no executed trade is implied") : (zh ? "任务结果记录 · 以报告与链上回执为准" : "Task result record · refer to the report and on-chain receipts")}</p>}
         </div>
       </div>

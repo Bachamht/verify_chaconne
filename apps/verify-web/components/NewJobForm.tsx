@@ -10,6 +10,7 @@ import { connect } from "@/lib/wallet";
 import { templates, type TemplateView } from "@/lib/api-v2";
 import { addressProblem, isAddress } from "@/lib/format";
 import { apiError } from "@/lib/errors";
+import { walletErrorText } from "@/lib/i18n.execute";
 import { remember } from "@/lib/history";
 import "./verification-workspace.css";
 
@@ -243,7 +244,7 @@ export function NewJobForm() {
                 {account && owner.trim().toLowerCase() === account.toLowerCase() ? (
                   <span className="cvf-wallet-connected">{t("wallet_using")}</span>
                 ) : (
-                  <button className="btn-ghost shrink-0" onClick={() => connect().then((a) => { setOwner(a); setConnected(a); }).catch(() => setErr(t("no_wallet")))} type="button">{t("connect")}</button>
+                  <button className="btn-ghost shrink-0" onClick={() => connect().then((a) => { setOwner(a); setConnected(a); }).catch((e: unknown) => setErr(walletErrorText(e, locale)))} type="button">{t("connect")}</button>
                 )}
               </div>
               {ownerProblem && <span id="verify-owner-error" className="mt-2 block text-xs text-bad">{ownerProblem}</span>}
@@ -288,7 +289,7 @@ export function NewJobForm() {
 
         <section className="cvf-submit-panel" aria-label={zh ? "费用与提交" : "Fee & submission"} aria-busy={busy}>
           <Row k={t("price_line")} v={!policies ? (zh ? "费用待确认" : "Fee awaiting confirmation") : price === "0" ? t("free") : `$${price} (${policies.pricing.network})`} />
-          {policies && <Row k={t("refreshes_left")} v={`${policies.entitlement.maxRefreshes} / ${policies.entitlement.windowSeconds}s`} />}
+          {policies && <Row k={t("refreshes_left")} v={zh ? `${policies.entitlement.maxRefreshes} 次 · ${Math.round(policies.entitlement.windowSeconds / 60)} 分钟内` : `${policies.entitlement.maxRefreshes} within ${Math.round(policies.entitlement.windowSeconds / 60)} min`} />}
           {err && <p className="cvf-inline-error" role="alert">{err}</p>}
           <button className="btn cvf-submit-button" disabled={busy || !!disabledWhy} onClick={submit} aria-describedby={disabledWhy ? "verify-submit-reason" : "verify-submit-note"}>
             <span>{busy ? t("running") : t("submit")}</span><span aria-hidden>{busy ? "…" : "↗"}</span>

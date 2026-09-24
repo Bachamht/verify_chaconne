@@ -13,15 +13,16 @@ export interface SamplePlaybook {
   playbookId: PlaybookId;
   title: { en: string; zh: string };
   what: { en: string; zh: string };
-  params: (asset: string) => Record<string, unknown>;
+  /** 默认步数 */
+  steps: number;
   conditions: Condition[];
   /** 用哪一类事件解释这个模板 */
   eventKinds: string[];
 }
 export const SAMPLES: SamplePlaybook[] = [
-  { playbookId: "session_dca", title: { en: "Session DCA", zh: "分段定投" }, what: { en: "N steps, one per US regular session, at least one trading day apart; a missed window is deferred, never merged.", zh: "N 步，每步只在美股常规时段，至少隔一个交易日；错过的窗口只顺延，不合并。" }, params: (asset) => ({ outputAssetKey: asset, steps: 3 }), conditions: [{ type: "session", allow: ["US_REGULAR"] }, { type: "min_gap_trading_days", days: 1 }, { type: "avoid_event_window", kinds: ["MACRO_TIER1"], beforeMin: 30, afterMin: 20, includeEstimated: true, wholeDayIfDayPrecision: true }], eventKinds: ["MACRO_TIER1"] },
-  { playbookId: "event_aware_accumulate", title: { en: "Event-aware accumulate", zh: "避开事件的加仓" }, what: { en: "Waits around tier-1 macro releases and the earnings window (1 trading day before, 1 regular session after), then re-checks the live reference.", zh: "在一级宏观数据与财报窗口（前 1 个交易日、后 1 个常规时段）等待，之后重新核对实时参考价。" }, params: (asset) => ({ outputAssetKey: asset, steps: 3 }), conditions: [{ type: "session", allow: ["US_REGULAR"] }, { type: "avoid_event_window", kinds: ["MACRO_TIER1"], beforeMin: 30, afterMin: 20, includeEstimated: true, wholeDayIfDayPrecision: true }, { type: "earnings_window", beforeTradingDays: 1, afterSessions: 1, requireRegularSessionAfter: true, requireLiveReferenceAfter: true }], eventKinds: ["EARNINGS", "MACRO_TIER1"] },
-  { playbookId: "discount_watch", title: { en: "Discount watch", zh: "折价观察" }, what: { en: "Buys only when the on-chain price sits at or below a premium threshold versus the LIVE reference; close-based references are simulation-only.", zh: "只在链上价相对**实时**参考价的溢价不高于阈值时买；收盘口径只能用于模拟。" }, params: (asset) => ({ outputAssetKey: asset, steps: 2 }), conditions: [{ type: "session", allow: ["US_REGULAR"] }, { type: "premium_bps_lte", value: 30, referenceKind: "live", liveOnlyForExecution: true }], eventKinds: [] },
+  { playbookId: "session_dca", title: { en: "Session DCA", zh: "分段定投" }, what: { en: "N steps, one per US regular session, at least one trading day apart; a missed window is deferred, never merged.", zh: "N 步，每步只在美股常规时段，至少隔一个交易日；错过的窗口只顺延，不合并。" }, steps: 3, conditions: [{ type: "session", allow: ["US_REGULAR"] }, { type: "min_gap_trading_days", days: 1 }, { type: "avoid_event_window", kinds: ["MACRO_TIER1"], beforeMin: 30, afterMin: 20, includeEstimated: true, wholeDayIfDayPrecision: true }], eventKinds: ["MACRO_TIER1"] },
+  { playbookId: "event_aware_accumulate", title: { en: "Event-aware accumulate", zh: "避开事件的加仓" }, what: { en: "Waits around tier-1 macro releases and the earnings window (1 trading day before, 1 regular session after), then re-checks the live reference.", zh: "在一级宏观数据与财报窗口（前 1 个交易日、后 1 个常规时段）等待，之后重新核对实时参考价。" }, steps: 3, conditions: [{ type: "session", allow: ["US_REGULAR"] }, { type: "avoid_event_window", kinds: ["MACRO_TIER1"], beforeMin: 30, afterMin: 20, includeEstimated: true, wholeDayIfDayPrecision: true }, { type: "earnings_window", beforeTradingDays: 1, afterSessions: 1, requireRegularSessionAfter: true, requireLiveReferenceAfter: true }], eventKinds: ["EARNINGS", "MACRO_TIER1"] },
+  { playbookId: "discount_watch", title: { en: "Discount watch", zh: "折价观察" }, what: { en: "Buys only when the on-chain price sits at or below a premium threshold versus the LIVE reference; close-based references are simulation-only.", zh: "只在链上价相对**实时**参考价的溢价不高于阈值时买；收盘口径只能用于模拟。" }, steps: 2, conditions: [{ type: "session", allow: ["US_REGULAR"] }, { type: "premium_bps_lte", value: 30, referenceKind: "live", liveOnlyForExecution: true }], eventKinds: [] },
 ];
 
 export interface CompareVariant {

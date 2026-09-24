@@ -8,11 +8,14 @@ import Link from "next/link";
 import type { Condition } from "@chaconne/core/verify";
 import { useI18n } from "@/lib/i18n";
 import { fmtLocal } from "@/lib/format";
+import { conditionText } from "@/lib/conditions";
 import { apiError } from "@/lib/errors";
 import { remember } from "@/lib/history";
-import { Card, Pill, Row } from "@/components/ui";
+import { Card, Json, Pill, Row } from "@/components/ui";
+import { blockerSentence } from "../tasks/taskTitle";
 import { lab, type CompareView } from "./api";
 import { outcomeLabel } from "./WaitDiagnosis";
+import { bothWaitingForOpen } from "./compareHints";
 
 interface VariantForm { label: string; afterMin: number; beforeMin: number; wholeDay: boolean; maxVix: string }
 const DEFAULT_A: VariantForm = { label: "wait20", afterMin: 20, beforeMin: 30, wholeDay: true, maxVix: "" };
@@ -51,19 +54,19 @@ export function PolicyCompare({ taskId }: { taskId: string }) {
       { label: b.label || "B", conditions: { items: toItems(b) } },
     ]);
     setBusy(false);
-    if (r.status === 201) setD(r.data);
+    if ((r.status === 201 || r.status === 200) && r.data && typeof r.data === "object") setD(r.data);
     else {
       setD(null);
       setErr(apiError(r, locale));
     }
   }
   async function remix() {
-    if (!d?.remix.simulationBody) return;
+    if (!d?.remix?.simulationBody) return;
     setSimErr(null);
     const r = await lab.simulate(d.remix.simulationBody);
     if (r.status === 201) {
       setSimId(r.data.simulationId);
-      remember({ kind: "simulation", id: r.data.simulationId, title: `${zh ? "翻创自对照" : "Remixed from comparison"} ${d.comparisonId}` });
+      remember({ kind: "simulation", id: r.data.simulationId, title: `${zh ? "由对照建的模拟" : "Simulation from comparison"} ${d.comparisonId}` });
     } else setSimErr(apiError(r, locale));
   }
 
@@ -93,7 +96,7 @@ export function PolicyCompare({ taskId }: { taskId: string }) {
   );
 
   return (
-    <Card title={zh ? "双策略对照 · 换一种规则会怎样？" : "Two-policy comparison · What if the rule were different?"} right={<Pill tone="warn">SIMULATION</Pill>}>
+    <Card className="scroll-mt-24" title={<span id="compare">{zh ? "双策略对照 · 换一种规则会怎样？" : "Two-policy comparison · What if the rule were different?"}</span>} right={<Pill tone="warn">SIMULATION</Pill>}>
       <p className="mb-3 text-sm text-fg-2">{zh ? "两套规则看同一份证据快照（同资产、同资金基准、同费用假设、同事件版本），并排给出放行/等待与逐项差异。不改你的授权、不改真实任务。" : "Both rule sets see one fixed evidence snapshot (same asset, budget basis, fee assumptions and event versions) and are shown side by side with their differences. Your authorization and the real task are untouched."}</p>
       {!taskId && <p className="text-xs text-fg-3">{zh ? "先在上方诊断一个任务，对照会固定它最近一次评估的证据快照。" : "Diagnose a task above first; the comparison pins its latest evaluation snapshot."}</p>}
       <div className="grid gap-3 md:grid-cols-2">
@@ -107,24 +110,24 @@ export function PolicyCompare({ taskId }: { taskId: string }) {
       {err && <p className="mt-3 text-sm text-warn">{zh ? "不可用：" : "Unavailable: "}{err}</p>}
       {d && (
         <div className="mt-4 space-y-4">
+          {bothWaitingForOpen(d.outcomeDiff) && <p className="ag-warn">{zh ? "现在两套方案都在等开盘（美股不在常规时段）；开盘后再对照，差异才有意义。" : "Both policies are waiting for the open right now (US market outside regular hours); the difference only means something once it opens."}</p>}
           <div className="grid gap-x-6 md:grid-cols-2">
-            <Row k={zh ? "证据快照" : "Evidence snapshot"} v={d.snapshot.id} mono />
-            <Row k={zh ? "快照时刻" : "Snapshot at"} v={fmtLocal(d.snapshot.takenAt, locale)} mono />
-            <Row k={zh ? "证据条数 / 事件版本" : "Evidence / event versions"} v={`${d.snapshot.evidenceIds.length} / ${d.snapshot.eventVersions.map((e) => `${e.id}#${e.revision}`).join(", ") || "—"}`} mono />
-            <Row k={zh ? "真实任务" : "Real task"} v={`${d.task.status} · ${zh ? "条件哈希未变" : "conditions hash unchanged"} ${d.task.conditionsHash.slice(0, 10)}…`} mono />
+            <Row k={zh ? "证据快照" : "Evidence snapshot"} v={<details className="inline-block text-left"><summary className="cursor-pointer">{zh ? `${d.snapshot?.id ? d.snapshot.id.slice(0, 14) + "…" : "—"} · ${(d.snapshot?.eventVersions ?? []).length} 个事件版本 · ${d.snapshot?.evidenceIds?.length ?? 0} 条证据` : `${d.snapshot?.id ? d.snapshot.id.slice(0, 14) + "…" : "—"} · ${(d.snapshot?.eventVersions ?? []).length} event version(s) · ${d.snapshot?.evidenceIds?.length ?? 0} evidence record(s)`}</summary><div className="mono mt-1 max-h-40 overflow-auto text-xs text-fg-3">{d.snapshot?.id}{(d.snapshot?.eventVersions ?? []).map((e) => <div key={e.id}>{e.id}#{e.revision}</div>)}</div></details>} />
+            <Row k={zh ? "快照时刻" : "Snapshot at"} v={d.snapshot?.takenAt ? fmtLocal(d.snapshot.takenAt, locale) : "—"} />
+            <Row k={zh ? "真实任务" : "Real task"} v={d.task ? `${d.task.status} · ${zh ? "条件未改动、未写任何授权" : "conditions untouched, no authorization written"}` : "—"} />
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            {d.outcomeDiff.map((o, i) => (
+            {(d.outcomeDiff ?? []).map((o, i) => (
               <div key={o.label} className="rounded-md border border-line p-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-semibold">{o.label}</span>
                   <Pill tone={TONE[o.outcome] ?? "neutral"}>{outcomeLabel(o.outcome, zh)}</Pill>
                 </div>
-                <div className="mono mt-2 text-xs text-fg-2">
-                  <div>{zh ? "阻塞码" : "Blocking"}: {o.blockingCodes.join(", ") || "—"}</div>
-                  <div>{zh ? "下次检查" : "Next check"}: {o.nextCheckAt ? fmtLocal(o.nextCheckAt, locale) : zh ? "未知" : "unknown"}</div>
-                  {d.planner[i]?.summary ? (
-                    <div>{zh ? "规划器（同 quote）" : "Planner (same quote)"}: {d.planner[i]!.summary!.candidateCount} {zh ? "候选" : "candidates"} · {d.planner[i]!.summary!.verdict ?? (zh ? "无推荐" : "no recommendation")}</div>
+                <div className="mt-2 text-xs text-fg-2">
+                  {(o.blockingCodes ?? []).length === 0 ? <div>{zh ? "没有阻塞项" : "No blockers"}</div> : <ul className="space-y-0.5">{(o.blockingCodes ?? []).map((c) => <li key={c}>· {blockerSentence({ code: c }, locale)}</li>)}</ul>}
+                  <div className="mt-1">{zh ? "下次检查" : "Next check"}: {o.nextCheckAt ? fmtLocal(o.nextCheckAt, locale) : zh ? "未知" : "unknown"}</div>
+                  {d.planner?.[i]?.summary ? (
+                    <div>{zh ? "规划器（同一报价）" : "Planner (same quote)"}: {d.planner[i]!.summary!.candidateCount} {zh ? "个候选" : "candidate(s)"} · {d.planner[i]!.summary!.verdict ?? (zh ? "暂无推荐" : "no recommendation yet")}</div>
                   ) : (
                     <div>{zh ? "规划器：不可用" : "Planner: unavailable"}</div>
                   )}
@@ -134,26 +137,35 @@ export function PolicyCompare({ taskId }: { taskId: string }) {
           </div>
           <div>
             <h3 className="text-sm font-semibold">{zh ? "逐项差异" : "Item-by-item diff"}</h3>
-            {d.comparison.diff.length === 0 ? (
+            {(d.comparison?.diff ?? []).length === 0 ? (
               <p className="text-xs text-fg-3">{zh ? "两套条件没有差异。" : "No differences between the two sets."}</p>
             ) : (
-              <ul className="mt-1 space-y-1 text-xs">
-                {d.comparison.diff.map((x) => (
-                  <li key={x.itemType} className="mono rounded-sm border-l-2 border-l-warn bg-warn/8 px-2 py-1">
-                    <span className="font-semibold">{x.itemType}</span> · A {JSON.stringify(x.a)} · B {JSON.stringify(x.b)}
-                  </li>
-                ))}
-              </ul>
+              <div className="mt-1 overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead><tr className="text-fg-3"><th className="py-1 pr-3 font-medium">{zh ? "字段" : "Field"}</th><th className="py-1 pr-3 font-medium">A · {a.label || "A"}</th><th className="py-1 font-medium">B · {b.label || "B"}</th></tr></thead>
+                  <tbody>{(d.comparison?.diff ?? []).map((x) => <tr key={x.itemType} className="border-t border-line align-top"><td className="py-1 pr-3 font-semibold">{x.itemType}</td><td className="py-1 pr-3">{sideText(x.a, locale)}</td><td className="py-1">{sideText(x.b, locale)}</td></tr>)}</tbody>
+                </table>
+              </div>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button className="btn-ghost" type="button" disabled={!d.remix.simulationBody} onClick={() => void remix()}>{zh ? `翻创为模拟任务（${d.remix.variantLabel}）` : `Remix as a simulation (${d.remix.variantLabel})`}</button>
+            <button className="btn-ghost" type="button" disabled={!d.remix?.simulationBody} onClick={() => void remix()}>{zh ? `用 ${d.remix?.variantLabel ?? "A"} 建一个模拟` : `Create a simulation from ${d.remix?.variantLabel ?? "A"}`}</button>
             {simId && <Link href={`/play?simulation=${simId}`} className="text-sm underline">{zh ? "查看模拟" : "View simulation"} {simId}</Link>}
             {simErr && <span className="text-sm text-warn">{simErr}</span>}
           </div>
-          <p className="text-xs text-fg-3">{zh ? d.note.zh : d.note.en}</p>
+          {d.note && <p className="text-xs text-fg-3">{zh ? d.note.zh : d.note.en}</p>}
+          <details><summary className="cursor-pointer text-xs text-fg-3">{zh ? "开发者视图（原始响应）" : "Developer view (raw response)"}</summary><Json value={d} /></details>
         </div>
       )}
     </Card>
   );
+}
+
+/** diff 的一侧：条件项 → 句子；缺失 → 「无此项」；其它值原样 */
+function sideText(v: unknown, locale: "en" | "zh"): string {
+  if (v === null || v === undefined) return locale === "zh" ? "无此项" : "not set";
+  if (typeof v === "object" && v !== null && "type" in v) {
+    try { return conditionText(v as Condition, locale); } catch { /* fallthrough */ }
+  }
+  return typeof v === "string" ? v : JSON.stringify(v);
 }

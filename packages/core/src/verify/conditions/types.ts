@@ -37,7 +37,8 @@ export interface ConditionEvidence {
   /** 成本覆盖（Lane C）；缺键 = 未知 → TRACKED_COST_UNKNOWN */
   trackedCost: Record<string, { coverageBps: number; avgCostUsdPerShare: DecimalString | null; evidenceId: string }>;
   /** 理由卡状态；缺键 = 未知 */
-  theses: Record<string, { status: ThesisStatus; evidenceIds: string[] }>;
+  /** nextCheckAt：理由卡下次复评时刻（服务按 monitor 周期给；未知 = 缺省/null）——THESIS_* 阻塞项据此给 nextCheckAt（V-27） */
+  theses: Record<string, { status: ThesisStatus; evidenceIds: string[]; nextCheckAt?: IsoUtc | null }>;
 }
 
 export interface TaskConditionState {

@@ -120,6 +120,8 @@ export interface TestEnvOptions {
   /* v6 Lane F：Lane B/D 钩子（默认不接 → coverage unavailable / 回放任务） */
   recapHooks?: Pick<RecapSources, "tasksForOwner" | "eventsBetween">;
   agentHooks?: Pick<AgentTasksDeps, "impacts" | "events">;
+  /** /healthz 的完整对象（index.ts 形态）；缺省 {} */
+  health?: () => Record<string, unknown>;
 }
 
 export interface TestEnv {
@@ -184,6 +186,7 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
     ENTITLEMENT_MAX_REFRESHES: String(opts.maxRefreshes ?? 2),
     ENTITLEMENT_WINDOW_SECONDS: "300",
     RATE_LIMIT_PER_MIN: "1000",
+    FREE_RATE_LIMIT_PER_MIN: "1000",
     SETTLE_POLL_DEADLINE_MS: "300",
     ...(opts.env ?? {}),
   });
@@ -243,7 +246,7 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
     ? new LabService({ db, cfg, registry, evaluator: laneBConditionEvaluator(), taskReader: taskReaderForLaneE(tasks), archive: new DbReplayArchive(db), now })
     : new LabService({ db, cfg, registry, evaluator: opts.labEvaluator ?? createReferenceEvaluator(), taskReader: labTasks, archive: labArchive, now });
   const recaps = new RecapsService({ sources: dbRecapSources(db, () => "FIXTURE", opts.recapHooks ?? {}), store: new MemoryRecapStore(), now });
-  const app = createApp({ cfg, service, paywall, plans, mandates, club, signer, market: opts.market ?? null, context, crowsnest, events, tasks, theses, playbooks, laneD, budget, portfolio, rebalance, notify, lab, recaps, agentHooks: opts.agentHooks, now, health: () => ({}) });
+  const app = createApp({ cfg, service, paywall, plans, mandates, club, signer, market: opts.market ?? null, context, crowsnest, events, tasks, theses, playbooks, laneD, budget, portfolio, rebalance, notify, lab, recaps, agentHooks: opts.agentHooks, now, health: opts.health ?? (() => ({})) });
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((r) => server.once("listening", () => r()));
   const { port } = server.address() as AddressInfo;

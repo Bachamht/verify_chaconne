@@ -1,12 +1,14 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, type AssetsResponse } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { reasonText } from "@/lib/reasons";
 import { Card, Json, Pill, Row, EmptyState } from "@/components/ui";
 import { Conductor, type ConductorState } from "@/components/Conductor";
 import { fmtLocal } from "@/lib/format";
+import { assetMeta, fmtAmount, fmtClock, fmtPrice } from "@/lib/format.execute";
+import { tx } from "@/lib/i18n.execute";
 import { EXPLORER, short } from "@/lib/wallet";
 import { MAIN_SITE_URL } from "@/lib/productSwitch";
 import { jobsV2 } from "@/lib/api-v2";
@@ -88,6 +90,11 @@ export function JobClient({ jobId }: { jobId: string }) {
   const [bill, setBill] = useState<Bill | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  /** 资产登记表：只为把原始单位换成「5 USDG / ≈0.01488 AAPLx」（V-37） */
+  const [assets, setAssets] = useState<AssetsResponse["assets"] | null>(null);
+  useEffect(() => {
+    api<AssetsResponse>("GET", "v1/assets").then((r) => r.status === 200 && Array.isArray(r.data?.assets) && setAssets(r.data.assets)).catch(() => undefined);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -131,6 +138,10 @@ export function JobClient({ jobId }: { jobId: string }) {
     </section>
   );
   const report = rep?.report ?? null;
+  const inMeta = assetMeta(assets, job.job.inputAssetKey, "stable_input");
+  const outMeta = assetMeta(assets, job.job.outputAssetKey, "stock_output");
+  const inAmt = (raw: string | null | undefined, approx = false) => fmtAmount(raw, inMeta.decimals, inMeta.symbol, { approx });
+  const outAmt = (raw: string | null | undefined, approx = false) => fmtAmount(raw, outMeta.decimals, outMeta.symbol, { approx });
   const modeTone = job.evidenceMode === "LIVE" ? "ok" : "warn";
   // The character reflects the saved report, never a claim that an old quote is executable now.
   const reportState: ConductorState = !report ? "idle"
@@ -170,9 +181,9 @@ export function JobClient({ jobId }: { jobId: string }) {
             <Conductor state={reportState} variant="compact" locale={locale} className="cvf-verdict-conductor" />
           </section>
           <dl className="cvf-report-metrics">
-            <div><dt>{zh ? "报告中的报价单价" : "Quoted price in this report"}</dt><dd className="mono">{report.normalizedQuote?.executableUsdPerShare ? `$${report.normalizedQuote.executableUsdPerShare}` : "—"}<span>{zh ? "USD / 股" : "USD / share"}</span></dd></div>
+            <div><dt>{zh ? "报告中的报价单价" : "Quoted price in this report"}</dt><dd className="mono" title={report.normalizedQuote?.executableUsdPerShare ?? undefined}>{fmtPrice(report.normalizedQuote?.executableUsdPerShare)}<span>{tx(locale, "usd_per_share")}</span></dd></div>
             <div><dt>{zh ? "价格冲击" : "Price impact"}</dt><dd className="mono">{report.normalizedQuote?.adverseImpactBps === null || report.normalizedQuote?.adverseImpactBps === undefined ? "—" : report.normalizedQuote.adverseImpactBps}<span>{report.normalizedQuote?.adverseImpactBps === null || report.normalizedQuote?.adverseImpactBps === undefined ? (zh ? "未知" : "unknown") : "bps"}</span></dd></div>
-            <div><dt>{zh ? "股票参考价" : "Stock reference"}</dt><dd className="mono">{report.reference ? `$${report.reference.priceUsd}` : "—"}<span>{report.reference?.kind ?? (zh ? "未提供" : "not provided")}</span></dd></div>
+            <div><dt>{zh ? "股票参考价" : "Stock reference"}</dt><dd className="mono" title={report.reference?.priceUsd}>{report.reference ? fmtPrice(report.reference.priceUsd) : "—"}<span>{report.reference?.kind ?? (zh ? "未提供" : "not provided")}</span></dd></div>
           </dl>
           {(report.reasons.some((r) => r.code === "CLOSE_UNCONFIRMED") || report.reference?.kind === "close_last_tick") && (
             <div className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
@@ -197,10 +208,10 @@ export function JobClient({ jobId }: { jobId: string }) {
             <Card title={t("reference")} className="cvf-detail-card">
               {report.reference ? (
                 <>
-                  <Row k={report.reference.underlyingId} v={`$${report.reference.priceUsd}`} mono />
+                  <Row k={report.reference.underlyingId} v={fmtPrice(report.reference.priceUsd)} mono />
                   <Row k={locale === "zh" ? "类型" : "Kind"} v={<Pill tone={report.reference.kind === "live" ? "ok" : report.reference.kind.includes("close") ? "brand" : "warn"}>{report.reference.kind}</Pill>} />
                   <Row k={locale === "zh" ? "交易日" : "Trading date"} v={report.reference.tradingDate ?? "—"} mono />
-                  <Row k={locale === "zh" ? "源时间" : "Source time"} v={report.reference.sourcePublishedAt ?? (locale === "zh" ? "未提供" : "not provided")} mono />
+                  <Row k={locale === "zh" ? "源时间" : "Source time"} v={report.reference.sourcePublishedAt ? fmtLocal(report.reference.sourcePublishedAt, locale) : (locale === "zh" ? "未提供" : "not provided")} mono />
                   <Row k={locale === "zh" ? "来源" : "Source"} v={report.reference.sourceId} mono />
                   <Row k={locale === "zh" ? "可执行价 vs 参考" : "Executable vs reference"} v={report.reference.deviationBps === null ? "—" : `${report.reference.deviationBps > 0 ? "+" : ""}${(report.reference.deviationBps / 100).toFixed(2)}%`} mono />
                   <Row k={locale === "zh" ? "可比性" : "Comparison"} v={report.comparisonStatus} mono />
@@ -215,26 +226,27 @@ export function JobClient({ jobId }: { jobId: string }) {
             <Card title={t("quote")} className="cvf-detail-card">
               {report.normalizedQuote ? (
                 <>
-                  <Row k={zh ? "输入金额（原始单位）" : "Input amount (raw units)"} v={report.normalizedQuote.amountInRaw} mono />
-                  <Row k={zh ? "预计到账（原始单位）" : "Expected output (raw units)"} v={report.normalizedQuote.expectedOutRaw} mono />
-                  <Row k={`${t("min_out")} (${zh ? "原始单位" : "raw units"})`} v={report.normalizedQuote.minOutRaw} mono />
+                  <Row k={tx(locale, "input_amount")} v={inAmt(report.normalizedQuote.amountInRaw)} mono />
+                  <Row k={tx(locale, "expected_out")} v={outAmt(report.normalizedQuote.expectedOutRaw, true)} mono />
+                  <Row k={tx(locale, "min_out")} v={outAmt(report.normalizedQuote.minOutRaw)} mono />
                   <Row k={locale === "zh" ? "价格冲击" : "Price impact"} v={report.normalizedQuote.adverseImpactBps === null ? (locale === "zh" ? "未知（不当作 0）" : "unknown (not treated as 0)") : `${report.normalizedQuote.adverseImpactBps} bps`} mono />
-                  <Row k={locale === "zh" ? "可执行单价 (USD/股)" : "Executable USD/share"} v={report.normalizedQuote.executableUsdPerShare ?? "—"} mono />
-                  <Row k={locale === "zh" ? "报价接收时间" : "Quote received"} v={report.normalizedQuote.receivedAt} mono />
+                  <Row k={locale === "zh" ? "可执行单价" : "Executable price"} v={`${fmtPrice(report.normalizedQuote.executableUsdPerShare)} ${tx(locale, "usd_per_share")}`} mono />
+                  <Row k={locale === "zh" ? "报价接收时间" : "Quote received"} v={fmtLocal(report.normalizedQuote.receivedAt, locale)} mono />
+                  <p className="mt-2 text-xs text-fg-3">{tx(locale, "approx_note")}</p>
                 </>
               ) : (
                 <p className="text-sm text-fg-2">—</p>
               )}
             </Card>
             <Card title={t("task_record")} className="cvf-detail-card">
-              <Row k={t("payment")} v={<Pill tone={["PAID", "DELIVERED", "SETTLEMENT_PENDING"].includes(job.order.state) ? "ok" : "warn"}>{job.order.state}{job.order.priceUsd === "0" ? " · free" : ` · $${job.order.priceUsd}`}</Pill>} />
+              <Row k={t("payment")} v={<Pill tone={["PAID", "DELIVERED", "SETTLEMENT_PENDING"].includes(job.order.state) ? "ok" : "warn"}>{job.order.priceUsd === "0" ? tx(locale, "free_this_time") : `${job.order.state} · ${fmtPrice(job.order.priceUsd)}`}</Pill>} />
               <Row k={t("report_versions")} v={`v${job.latestReport?.version ?? 1}`} mono />
-              <Row k={t("refreshes_left")} v={job.entitlement ? `${job.entitlement.remaining} / ${job.entitlement.maxRefreshes} · ${new Date(job.entitlement.expiresAt).toLocaleTimeString()}` : "—"} mono />
+              <Row k={t("refreshes_left")} v={job.entitlement ? `${job.entitlement.remaining} / ${job.entitlement.maxRefreshes} · ${tx(locale, "reset_at", { t: fmtClock(job.entitlement.expiresAt, locale) })}` : "—"} mono />
               <Row k={t("executions")} v={job.executions.length === 0 ? "—" : job.executions.map((e) => (
                 <span key={e.attemptId} className="block">
                   <Pill tone={execStateTone(e.state)}>{e.state}</Pill> {e.txHash && (<a className="underline" href={`${EXPLORER}/tx/${e.txHash}`} target="_blank" rel="noreferrer">{short(e.txHash)}</a>)}
-                  {e.receipt?.event && <span className="ml-2 text-fg-2">{t("receipt_verified")} · spent {e.receipt.event.spent} · received {e.receipt.event.received} · refunded {e.receipt.event.refunded}</span>}
-                  {e.state === "REORG_PENDING" && e.receipt && <span className="ml-2 text-fg-2">{e.receipt.confirmations}/{e.receipt.requiredConfirmations} conf</span>}
+                  {e.receipt?.event && <span className="ml-2 text-fg-2">{t("receipt_verified")} · {tx(locale, "server_receipt_line", { spent: inAmt(e.receipt.event.spent), received: outAmt(e.receipt.event.received), refunded: inAmt(e.receipt.event.refunded) })}</span>}
+                  {e.state === "REORG_PENDING" && e.receipt && <span className="ml-2 text-fg-2">{tx(locale, "confirmations", { n: e.receipt.confirmations ?? 0, m: e.receipt.requiredConfirmations ?? 0 })}</span>}
                   {e.state === "UNKNOWN" && e.receipt?.reason && <span className="ml-2 text-fg-2">{e.receipt.reason}</span>}
                 </span>
               ))} mono />
@@ -257,7 +269,7 @@ export function JobClient({ jobId }: { jobId: string }) {
                   <Pill tone={e.mode === "LIVE" ? "ok" : "warn"}>{e.mode}</Pill>
                   <span className="mono" title={e.payload.kind}>{evidenceKindLabel(e.payload.kind, e.provider)}</span>
                   </div><p className="mt-2 text-fg-2">{e.provider} · {e.endpoint}</p>
-                  <p className="mono mt-2 text-xs text-fg-3">{zh ? "源时间" : "Source"} {e.time.sourcePublishedAt ?? "—"}<br />{zh ? "接收时间" : "Received"} {e.time.receivedAt}</p></div>
+                  <p className="mono mt-2 text-xs text-fg-3">{zh ? "源时间" : "Source"} {e.time.sourcePublishedAt ? fmtLocal(e.time.sourcePublishedAt, locale) : "—"}<br />{zh ? "接收时间" : "Received"} {fmtLocal(e.time.receivedAt, locale)}</p></div>
                 </li>
               ))}
             </ul>

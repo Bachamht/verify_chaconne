@@ -284,15 +284,17 @@ function evalCashFloor(item: Extract<Condition, { type: "cash_floor" }>, c: Item
 function evalThesis(item: Extract<Condition, { type: "thesis_holds" }>, c: ItemCtx): ConditionItemResult {
   const t = c.ev.theses[item.thesisId];
   if (!t) return result(item, "INSUFFICIENT_EVIDENCE", [reason("THESIS_UNKNOWN", [], { thesisId: item.thesisId, reason: "not_loaded" })], [], null);
+  // 下次复评时刻由服务给（monitor 周期）；已知就写，未知才 null（V-27）
+  const next = t.nextCheckAt && Date.parse(t.nextCheckAt) > c.nowMs ? t.nextCheckAt : null;
   switch (t.status) {
     case "holds":
       return result(item, "SATISFIED", [], t.evidenceIds, null);
     case "invalidated":
-      return result(item, "UNSATISFIED", [reason("THESIS_INVALIDATED", t.evidenceIds, { thesisId: item.thesisId })], t.evidenceIds, null);
+      return result(item, "UNSATISFIED", [reason("THESIS_INVALIDATED", t.evidenceIds, { thesisId: item.thesisId })], t.evidenceIds, next);
     case "expired":
       return result(item, "UNSATISFIED", [reason("THESIS_EXPIRED", t.evidenceIds, { thesisId: item.thesisId })], t.evidenceIds, null);
     default:
-      return result(item, "INSUFFICIENT_EVIDENCE", [reason("THESIS_UNKNOWN", t.evidenceIds, { thesisId: item.thesisId })], t.evidenceIds, null);
+      return result(item, "INSUFFICIENT_EVIDENCE", [reason("THESIS_UNKNOWN", t.evidenceIds, { thesisId: item.thesisId })], t.evidenceIds, next);
   }
 }
 

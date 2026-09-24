@@ -1,11 +1,14 @@
 "use client";
 /**
- * 全局钱包选择框 + 连接状态提示（V-06）。挂在 layout；lib/wallet.ts 的 connect() 通过事件驱动它。
- * 多个注入钱包（EIP-6963）时列出全部，OKX Wallet 排第一标"推荐"；连接中显示"请在钱包里确认"，60 s 无响应给排查提示。
+ * 全局钱包选择框 + 连接状态提示（V-06 / V-36）。挂在 layout；lib/wallet.ts 的 connect() 通过事件驱动它。
+ * 多个注入钱包（EIP-6963）时列出全部，OKX Wallet 排第一标"推荐"；任何钱包请求进行中显示「请在 <钱包名> 弹窗里确认」，
+ * 60 s 无响应给「没看到弹窗？」排查提示 + 取消等待 + 更换钱包；执行页钱包卡会显示同一份状态，这里只在其它页面兜底。
  */
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { isRecommended, selectWallet, type WalletProviderInfo, type WalletStatus } from "@/lib/wallet";
+import { tx } from "@/lib/i18n.execute";
+import { useWalletStatus } from "@/lib/useWalletStatus";
+import { forgetWallet, isRecommended, selectWallet, type WalletProviderInfo } from "@/lib/wallet";
 
 type Req = { wallets: WalletProviderInfo[]; resolve: (rdns: string | null) => void };
 
@@ -13,17 +16,12 @@ export function WalletChooser() {
   const { locale } = useI18n();
   const zh = locale === "zh";
   const [req, setReq] = useState<Req | null>(null);
-  const [status, setStatus] = useState<WalletStatus>("idle");
+  const status = useWalletStatus();
 
   useEffect(() => {
     const onChoose = (ev: Event) => setReq((ev as CustomEvent<Req>).detail);
-    const onStatus = (ev: Event) => setStatus((ev as CustomEvent<WalletStatus>).detail);
     window.addEventListener("verify:choose-wallet", onChoose);
-    window.addEventListener("verify:wallet-status", onStatus);
-    return () => {
-      window.removeEventListener("verify:choose-wallet", onChoose);
-      window.removeEventListener("verify:wallet-status", onStatus);
-    };
+    return () => window.removeEventListener("verify:choose-wallet", onChoose);
   }, []);
 
   const pick = (rdns: string | null) => {
@@ -32,6 +30,8 @@ export function WalletChooser() {
     req.resolve(rdns);
     setReq(null);
   };
+  const phaseText = status.phase ? tx(locale, `phase_${status.phase}` as "phase_connect") : "";
+  const confirmLine = status.walletName ? tx(locale, "wallet_confirm_in", { wallet: status.walletName }) : tx(locale, "wallet_confirm_generic");
 
   return (
     <>
@@ -39,7 +39,7 @@ export function WalletChooser() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center" role="dialog" aria-modal="true" onClick={() => pick(null)}>
           <div className="card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-1 text-lg font-bold">{zh ? "选择钱包" : "Choose a wallet"}</h2>
-            <p className="mb-3 text-sm text-fg-2">{zh ? "检测到多个钱包。X Layer 上推荐 OKX Wallet；你的选择会被记住，可在钱包区更换。" : "Several wallets are installed. OKX Wallet is recommended on X Layer; your choice is remembered and can be changed later."}</p>
+            <p className="mb-3 text-sm text-fg-2">{zh ? "检测到多个钱包。X Layer 上推荐 OKX Wallet；你的选择会被记住，可在钱包区「更换钱包」。" : "Several wallets are installed. OKX Wallet is recommended on X Layer; your choice is remembered and can be changed with \"Switch wallet\" in the wallet card."}</p>
             <ul className="space-y-2">
               {req.wallets.map((w) => (
                 <li key={w.rdns}>
@@ -56,9 +56,22 @@ export function WalletChooser() {
           </div>
         </div>
       )}
-      {status !== "idle" && (
-        <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-lg border border-line-strong bg-neutral-900 px-4 py-2 text-sm shadow-lg">
-          {status === "connecting" ? (zh ? "请在钱包弹窗里确认连接…" : "Confirm the connection in your wallet…") : zh ? "钱包 60 秒没有响应：可能锁着、弹窗被浏览器挡住，或需要在钱包里切换到这个站点。" : "No response from the wallet for 60 s: it may be locked, the popup may be blocked, or the wallet needs you to switch to this site."}
+      {status.status !== "idle" && (
+        <div className="fixed bottom-4 left-1/2 z-40 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 rounded-lg border border-line-strong bg-neutral-900 px-4 py-3 text-sm shadow-lg" role="status" aria-live="polite">
+          <p>
+            <span className="mono mr-2 text-xs text-fg-3">{phaseText}</span>
+            {confirmLine}
+          </p>
+          {status.status === "slow" && (
+            <div className="mt-2 space-y-2">
+              <p className="text-warn">{tx(locale, "wallet_no_popup")}</p>
+              <div className="flex flex-wrap gap-2">
+                {status.cancel && <button className="btn-ghost px-3 py-1 text-xs" onClick={() => status.cancel?.()}>{tx(locale, "wallet_cancel_wait")}</button>}
+                <button className="btn-ghost px-3 py-1 text-xs" onClick={() => { status.cancel?.(); forgetWallet(); }}>{tx(locale, "wallet_change")}</button>
+              </div>
+              <p className="text-xs text-fg-3">{tx(locale, "wallet_cancel_note")}</p>
+            </div>
+          )}
         </div>
       )}
     </>

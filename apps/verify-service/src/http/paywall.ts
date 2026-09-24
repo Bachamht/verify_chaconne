@@ -169,7 +169,8 @@ export function createPaywall(cfg: VerifyConfig, facilitator: ObservedFacilitato
         res.status(202).json({
           error: "payment_unknown",
           orderId: order.id,
-          message: "上一笔付款结算结果未知，正在对账；请勿重复付款，稍后重试同一请求。",
+          message: "The previous payment's settlement result is unknown and is being reconciled; do not pay again, retry the same request shortly.",
+          messageZh: "上一笔付款结算结果未知，正在对账；请勿重复付款，稍后重试同一请求。",
           statusUrl: `/v1/jobs/${order.jobId}`,
         });
         return;

@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { EventImpact } from "@chaconne/core/verify";
-import { createTestEnv, type TestEnv } from "./helpers";
+import { api, createTestEnv, type TestEnv } from "./helpers";
 
 let env: TestEnv | null = null;
 afterEach(async () => {
@@ -57,12 +57,38 @@ describe("O-02 · POST /a2mcp/agent-tasks", () => {
     expect(r.json["priceUsd"]).toBe("0");
     expect((r.json["events"] as { status: string }).status).toBe("unavailable");
     expect((r.json["eventImpacts"] as { status: string }).status).toBe("not_requested");
-    const drafts = r.json["taskDrafts"] as Array<{ mode: string; dateLabel: string; createBody: { playbookId: string; conditions: { hash: string }; mode: string } }>;
+    const drafts = r.json["taskDrafts"] as Array<{ mode: string; dateLabel: string; replay: { from: string; to: string } | null; missingForCreate: string[]; draft: { mode: string; params: Record<string, unknown> }; createBody: { playbookId: string; conditions: { hash: string }; mode: string } }>;
     expect(drafts[0]!.mode).toBe("REPLAY");
     expect(drafts[0]!.dateLabel).toBe("2026-09-17");
     expect(drafts[0]!.createBody.mode).toBe("SIMULATION");
     expect(drafts[0]!.createBody.conditions.hash).toMatch(/^0x/);
+    // V-25：回放区间不进任务体；没给 owner 时明说还缺 ownerAddress
+    expect(drafts[0]!.replay).toMatchObject({ from: "2026-09-17T00:00:00Z", to: "2026-09-17T23:59:59Z" });
+    expect(drafts[0]!.draft.params).not.toHaveProperty("from");
+    expect(drafts[0]!.missingForCreate).toEqual(["ownerAddress"]);
     expect(JSON.stringify(r.json)).not.toMatch(/will rise|will fall/);
+  });
+
+  it("V-25 每个草案原样 POST /v1/tasks → 201（有事件与无事件两种；draft 与 createBody 相同）", async () => {
+    const owner = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    for (const withEvents of [false, true]) {
+      env = await createTestEnv(withEvents ? { agentHooks: { events: async () => [{ id: "crowsnest:MACRO_TIER1:2026-09-18:fomc", kind: "MACRO_TIER1", name: "FOMC", underlyingIds: [], scheduledAtUtc: "2026-09-18T18:00:00Z", dateLocal: "2026-09-18", datePrecision: "exact", sessionHint: null, status: "confirmed", revision: 1, source: "crowsnest", sourceFetchedAt: "2026-09-18T00:00:00Z", firstKnownAt: "2026-09-01T00:00:00Z", tz: "America/New_York" }] } } : {});
+      const r = await call(env, { owner, horizonHours: 48 });
+      expect(r.json["status"]).toBe("delivered");
+      const drafts = r.json["taskDrafts"] as Array<{ kind: string; draft: Record<string, unknown>; createBody: Record<string, unknown>; missingForCreate: string[] }>;
+      expect(drafts.length).toBeGreaterThan(0);
+      expect(drafts.map((x) => x.kind)).toContain(withEvents ? "event" : "replay");
+      for (const t of drafts) {
+        expect(t.missingForCreate).toEqual([]);
+        expect(t.createBody).toEqual(t.draft);
+        const created = await api(env, "POST", "/v1/tasks", t.draft);
+        expect(created.status, JSON.stringify(created.json).slice(0, 300)).toBe(201);
+        expect((created.json["task"] as { status: string; playbookId: string }).playbookId).toBe(t.draft["playbookId"]);
+        expect(created.json["mandateDraft"]).toBeNull(); // SIMULATION：不需要签名
+      }
+      await env.close();
+      env = null;
+    }
   });
 
   it("owner + Lane D 钩子接上 → eventImpacts.status=ok，事件任务草案；GET 带 query 也可", async () => {

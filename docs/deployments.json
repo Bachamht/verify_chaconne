@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-09-21",
+  "updatedAt": "2026-09-24T04:00:00.000Z",
   "roles": {
     "attestationSigner": {
       "address": "0x757fdc93fd8db505529680b2c6c5364263f5e615",
@@ -196,7 +196,8 @@
       "id": 40806,
       "serviceId": "f3ffac46-8f54-48ca-94d5-f32810983f42"
     },
-    "listing": "RESUBMITTED 2026-09-21T07:04Z after fix (CV-D10): platform shows \"Listing under review\" (approvalStatus 2). First review REJECTED 2026-09-21 (bare probe got HTTP 400). Public re-check via OKX CLI before resubmit: bare probe → input_required; AAPLx amount=100 → delivered (LIVE)."
+    "listing": "LISTED 2026-09-24T01:48Z (Brisbane 11:48): approvalDisplayStatus 4 \"Listed — eligible for task recommendations\", agent active/online, soldCount 2 at first check. History: created 2026-09-20; first review REJECTED 2026-09-21 (bare probe got HTTP 400, fixed as CV-D10); RESUBMITTED 2026-09-21T07:04Z; second rejection (avatar) fixed 2026-09-23 (FIX-157); listed 2026-09-24.",
+    "agentTasksService": "implemented at POST /a2mcp/agent-tasks (200 input_required on bare probe, verified 2026-09-24); NOT submitted as a second ASP service — deferred by D-085 and, after #13803 was listed, deliberately left unsubmitted before the deadline so an agent update cannot put the approved listing back under review."
   },
   "mainnetEvidence": {
     "mode": "LIVE",

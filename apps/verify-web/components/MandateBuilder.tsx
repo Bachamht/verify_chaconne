@@ -12,6 +12,7 @@ import { Card, Pill, Row } from "@/components/ui";
 import { CHAIN_ID, connect, currentChainId, ensureChain, short } from "@/lib/wallet";
 import { fmtLocal, humanToRaw, rawToHuman } from "@/lib/format";
 import { apiError } from "@/lib/errors";
+import { walletErrorText } from "@/lib/i18n.execute";
 import { remember } from "@/lib/history";
 
 export function MandateBuilder({ plan, candidates, assets, onBack }: { plan: PlanView; candidates: PlanCandidate[]; assets: AssetsResponse | null; onBack: () => void }) {
@@ -74,7 +75,7 @@ export function MandateBuilder({ plan, candidates, assets, onBack }: { plan: Pla
       }
     } catch (e) {
       setStep("error");
-      setMsg((e as { code?: number }).code === 4001 ? t("rejected_sign") : e instanceof Error && e.message === "planguard_not_deployed" ? t("mandate_not_deployed") : String(e));
+      setMsg(e instanceof Error && e.message === "planguard_not_deployed" ? t("mandate_not_deployed") : walletErrorText(e, locale));
     }
   }
 

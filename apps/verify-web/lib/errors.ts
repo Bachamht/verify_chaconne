@@ -29,7 +29,46 @@ const E: Record<string, { en: string; zh: string }> = {
   attempt_rejected: { en: "This execution attempt was rejected.", zh: "这次执行尝试已被拒绝。" },
   tx_hash_conflict: { en: "This attempt is already bound to another transaction.", zh: "这次尝试已绑定另一笔交易。" },
   share_not_found: { en: "This report is private or does not exist.", zh: "这份战报是私密的或不存在。" },
+  timeout: { en: "The service did not answer within 30 s.", zh: "服务 30 秒内没有回应。" },
+  invalid_playbook_params: { en: "Some task fields need attention.", zh: "任务里有几个字段需要修正。" },
+  task_not_found: { en: "Task not found, or it belongs to another wallet.", zh: "找不到任务，或它属于另一个钱包。" },
+  invalid_transition: { en: "The task cannot move to that state from where it is now.", zh: "任务当前状态不允许这个操作。" },
 };
+
+/** 字段级校验码 → 人话（V-24：400 invalid_playbook_params 的 details[].code） */
+const F: Record<string, { en: string; zh: string }> = {
+  required: { en: "Required", zh: "必填" },
+  unknown_param: { en: "Not accepted by this playbook", zh: "这个模板不接受此参数" },
+  expected_integer_in_range: { en: "Must be a whole number within the allowed range", zh: "需为允许范围内的整数" },
+  expected_number_in_range: { en: "Must be a number within the allowed range", zh: "需为允许范围内的数字" },
+  expected_positive_raw_amount: { en: "Must be a positive amount", zh: "需为正数金额" },
+  expected_positive_decimal_string: { en: "Must be a positive number", zh: "需为正数" },
+  expected_asset_key: { en: "Pick an asset from the registry", zh: "请从登记表里选一个资产" },
+  not_stable_input: { en: "Must be a funding currency from the registry", zh: "必须是登记表里的资金币种" },
+  must_be_future: { en: "Must be in the future", zh: "必须是未来的时间" },
+  expected_boolean: { en: "Must be yes or no", zh: "需为是/否" },
+  expected_iso: { en: "Must be a valid date/time", zh: "需为有效的日期时间" },
+  unknown_policy: { en: "Unknown policy", zh: "未知策略" },
+  unknown_version: { en: "Unknown policy version", zh: "未知策略版本" },
+  require_one_of: { en: "One of these is required", zh: "其中至少填一项" },
+};
+export function fieldErrorText(code: string, locale: Locale): string {
+  return F[code]?.[locale] ?? (locale === "zh" ? `不合法（${code}）` : `Invalid (${code})`);
+}
+/** details[] → { field → 人话 }；字段名去掉 params. 前缀 */
+export function fieldErrors(details: unknown, locale: Locale): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!Array.isArray(details)) return out;
+  for (const d of details) {
+    if (!d || typeof d !== "object") continue;
+    const f = (d as { field?: unknown }).field;
+    const c = (d as { code?: unknown }).code;
+    if (typeof f !== "string") continue;
+    const key = f.replace(/^params\./, "");
+    if (!(key in out)) out[key] = fieldErrorText(typeof c === "string" ? c : "invalid", locale);
+  }
+  return out;
+}
 
 /** 把 {status, data:{error,message,details}} 变成一句人话 */
 export function apiError(r: { status: number; data: unknown }, locale: Locale): string {
@@ -39,6 +78,7 @@ export function apiError(r: { status: number; data: unknown }, locale: Locale): 
     const detail = Array.isArray(d.details) ? fieldsOf(d.details) : "";
     return E[code]![locale] + (detail ? ` (${detail})` : "");
   }
+  if (r.status === 0) return E["timeout"]![locale];
   if (r.status === 404) return E["job_not_found"]![locale];
   if (r.status === 429) return E["rate_limited"]![locale];
   if (r.status === 502 || r.status === 503) return E["service_unreachable"]![locale];

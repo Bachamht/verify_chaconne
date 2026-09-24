@@ -187,10 +187,16 @@ export class ClubService {
     return row.ownerAddress;
   }
 
-  /** 公开读取：只返回 public=true 的，经隐私过滤 */
-  async publicReport(shareId: string) {
+  /** 公开分享行（只返回 public=true 的）；/pub/reports/:shareId/bundle 用它找到 kind/refId/callerId（V-39） */
+  async publicShareRow(shareId: string) {
     const share = (await this.d.db.select().from(verifyShares).where(eq(verifyShares.shareId, shareId)).limit(1))[0];
     if (!share || !share.public) throw new HttpError(404, "share_not_found");
+    return share;
+  }
+
+  /** 公开读取：只返回 public=true 的，经隐私过滤 */
+  async publicReport(shareId: string) {
+    const share = await this.publicShareRow(shareId);
     const stored = share.privacyJson as SharePrivacy & { title?: string };
     const privacy: SharePrivacy = { amounts: stored.amounts, wallet: "hidden" };
     const title = stored.title ?? null;
@@ -216,7 +222,8 @@ export class ClubService {
         headlineZh: title ?? headlineForZh(status, outEntry?.displaySymbol ?? "股票", persona?.tone ?? "calm"),
         goal: { side: j.side ?? "buy", input: inEntry?.displaySymbol ?? null, output: outEntry?.displaySymbol ?? null, amount: amount(j.amountInRaw, inEntry?.tokenDecimals ?? 6), policyId: j.policyId },
         result: r ? { verdict: r.verdict, comparisonStatus: r.comparisonStatus, marketSession: r.marketSession, reasons: r.reasons.map((x) => x.code), reasonDetails: r.reasons.map((x) => ({ code: x.code, severity: x.severity })), completionBps: confirmed ? 10_000 : null, reportHash: latest!.reportHash, evidenceHash: r.evidenceHash, evaluatedAt: r.evaluatedAt, execution: confirmed ? { txHash: confirmed.txHash, received: privacy.amounts === "exact" ? (confirmed.receiptJson as { event?: { received?: string } } | null)?.event?.received ?? null : null } : null } : null,
-        verifier: { bundleUrl: `/v1/jobs/${share.refId}/bundle`, contractAddress: this.d.cfg.GUARD_ADDRESS || null },
+        // publicBundleUrl：无需 key 的证据包（V-39）；bundleUrl 仍是 owner 用 key 读的路径
+        verifier: { bundleUrl: `/v1/jobs/${share.refId}/bundle`, publicBundleUrl: `/pub/reports/${shareId}/bundle`, contractAddress: this.d.cfg.GUARD_ADDRESS || null },
       };
     }
     if (share.kind === "mandate") {
@@ -235,7 +242,7 @@ export class ClubService {
         headlineZh: title ?? headlineForZh(status, json.legs.map((l) => this.d.registry.entries.find((e) => e.assetKey === l.outputAssetKey)?.displaySymbol ?? "股票").join("+"), persona?.tone ?? "calm"),
         goal: { side: json.side, input: inEntry?.displaySymbol ?? null, outputs: json.legs.map((l) => this.d.registry.entries.find((e) => e.assetKey === l.outputAssetKey)?.displaySymbol ?? null), budget: amount(row.budgetCap, inEntry?.tokenDecimals ?? 6), steps: { done: row.stepsDone, max: row.maxSteps } },
         result: { state: row.state, completionBps: done, latestStatus: latest?.status ?? null, latestDelta: (latest?.deltaJson as { summary?: unknown } | null)?.summary ?? null, evaluatedAt: latest?.evaluatedAt.toISOString() ?? null },
-        verifier: { bundleUrl: `/v1/mandates/${share.refId}/bundle`, contractAddress: this.d.cfg.PLANGUARD_ADDRESS || null },
+        verifier: { bundleUrl: `/v1/mandates/${share.refId}/bundle`, publicBundleUrl: `/pub/reports/${shareId}/bundle`, contractAddress: this.d.cfg.PLANGUARD_ADDRESS || null },
       };
     }
     if (share.kind === "simulation") {

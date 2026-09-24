@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { fmtLocal } from "@/lib/format";
 import { apiError } from "@/lib/errors";
-import { Card, Pill, Row } from "@/components/ui";
+import { Card, Json, Pill, Row } from "@/components/ui";
+import { blockerSentence } from "../tasks/taskTitle";
 import { lab, type ExplainWaitView } from "./api";
 
 const OUTCOME_TONE: Record<string, "ok" | "warn" | "info"> = { SATISFIED: "ok", UNSATISFIED: "warn", INSUFFICIENT_EVIDENCE: "info" };
@@ -44,7 +45,7 @@ export function WaitDiagnosis({ initialTaskId, onTaskId }: { initialTaskId: stri
 
   const unknown = zh ? "未知" : "unknown";
   return (
-    <Card title={zh ? "等待诊断 · 为什么没买？" : "Wait diagnosis · Why hasn't it bought?"} right={d ? <Pill tone={OUTCOME_TONE[d.outcome] ?? "neutral"}>{outcomeLabel(d.outcome, zh)}</Pill> : null}>
+    <Card className="scroll-mt-24" title={<span id="wait">{zh ? "等待诊断 · 为什么没买？" : "Wait diagnosis · Why hasn't it bought?"}</span>} right={d ? <Pill tone={OUTCOME_TONE[d.outcome] ?? "neutral"}>{outcomeLabel(d.outcome, zh)}</Pill> : null}>
       <p className="mb-3 text-sm text-fg-2">{zh ? "列出任务的全部阻塞项——不止第一个。每项给证据时间与已知恢复点；恢复时间未知就写未知，不猜倒计时。" : "Every blocker on the task, not just the first. Each shows its evidence time and a known recovery point; unknown stays unknown, no countdown is invented."}</p>
       <form
         className="flex flex-wrap gap-2"
@@ -66,7 +67,7 @@ export function WaitDiagnosis({ initialTaskId, onTaskId }: { initialTaskId: stri
             <Row k={zh ? "下次检查点（最早已知）" : "Next check (earliest known)"} v={d.nextCheckAt ? fmtLocal(d.nextCheckAt, locale) : unknown} mono />
             <Row k={zh ? "证据快照" : "Evidence snapshot"} v={d.evidenceSnapshotId ?? "—"} mono />
             <Row k={zh ? "求值来源" : "Evaluation source"} v={d.source === "latest_evaluation" ? (zh ? "最近一次落库评估" : "latest stored evaluation") : (zh ? `现算（${d.evaluatorId}）` : `evaluated now (${d.evaluatorId})`)} mono />
-            <Row k={zh ? "执行器" : "Executor"} v={d.executorPresence} mono />
+            <Row k={zh ? "执行器" : "Executor"} v={d.executorPresence === "online" ? (zh ? "在线" : "online") : d.executorPresence === "awaiting_signature" ? (zh ? "等你签名" : "awaiting your signature") : (zh ? "离线（模拟任务不需要）" : "offline (not needed for simulation)")} />
           </div>
           <p className="text-xs text-fg-3">{zh ? d.nextCheckNote.zh : d.nextCheckNote.en}</p>
           <h3 className="text-sm font-semibold">{zh ? `阻塞项（${d.blockers.length}）` : `Blockers (${d.blockers.length})`}</h3>
@@ -74,22 +75,24 @@ export function WaitDiagnosis({ initialTaskId, onTaskId }: { initialTaskId: stri
             <p className="text-sm text-ok">{zh ? "没有阻塞项。" : "No blockers."}</p>
           ) : (
             <ul className="space-y-2">
-              {d.blockers.map((b, i) => (
-                <li key={`${b.code}-${i}`} className={`rounded-md border p-3 text-sm ${b.userActionRequired ? "border-warn/40 bg-warn/8" : "border-line bg-surface-2"}`}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Pill tone={b.userActionRequired ? "warn" : "neutral"}>{b.code}</Pill>
-                    {b.userActionRequired && <span className="text-xs text-warn">{zh ? "需要你处理" : "Needs your action"}</span>}
-                  </div>
-                  <p className="mt-1 leading-6">{zh ? (d.i18n[i]?.zh ?? b.text) : (d.i18n[i]?.en ?? b.text)}</p>
-                  <div className="mono mt-1 flex flex-wrap gap-x-4 text-xs text-fg-3">
-                    <span>{zh ? "证据时间" : "Evidence at"}: {b.evidenceAt ? fmtLocal(b.evidenceAt, locale) : unknown}</span>
-                    <span>{zh ? "下次检查" : "Next check"}: {b.nextCheckAt ? fmtLocal(b.nextCheckAt, locale) : unknown}</span>
-                    {b.evidenceIds.length > 0 && <span>{zh ? "证据" : "Evidence"}: {b.evidenceIds.join(", ")}</span>}
-                  </div>
-                </li>
-              ))}
+              {d.blockers.map((b, i) => {
+                const fromApi = d.i18n?.find((x) => x.code === b.code) ?? d.i18n?.[i];
+                const text = fromApi ? (zh ? fromApi.zh : fromApi.en) : blockerSentence(b, locale);
+                const evidenceAt = b.evidenceAt ?? d.evidenceAt ?? null;
+                return (
+                  <li key={`${b.code}-${i}`} className={`rounded-md border p-3 text-sm ${b.userActionRequired ? "border-warn/40 bg-warn/8" : "border-line bg-surface-2"}`}>
+                    <p className="leading-6">{text}{b.userActionRequired && <> <Pill tone="warn">{zh ? "需要你处理" : "Needs your action"}</Pill></>}</p>
+                    <div className="mt-1 flex flex-wrap gap-x-4 text-xs text-fg-3">
+                      <span>{zh ? "证据时间" : "Evidence at"}: {evidenceAt ? fmtLocal(evidenceAt, locale) : (zh ? `未知（评估于 ${fmtLocal(d.evaluatedAt, locale)}）` : `unknown (evaluated ${fmtLocal(d.evaluatedAt, locale)})`)}</span>
+                      <span>{zh ? "下次检查" : "Next check"}: {b.nextCheckAt ? fmtLocal(b.nextCheckAt, locale) : unknown}</span>
+                      {b.evidenceIds.length > 0 && <span>{zh ? "证据" : "Evidence"}: {b.evidenceIds.length} {zh ? "条" : "record(s)"}</span>}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
+          <details><summary className="cursor-pointer text-xs text-fg-3">{zh ? "开发者视图（原始响应）" : "Developer view (raw response)"}</summary><Json value={d} /></details>
         </div>
       )}
     </Card>

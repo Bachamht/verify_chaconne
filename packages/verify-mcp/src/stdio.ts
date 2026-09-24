@@ -43,7 +43,7 @@ heartbeat?.start();
 const server = createVerifyMcpServer({ client, rpcUrl, wallet, heartbeat });
 const transport = new StdioServerTransport();
 server.connect(transport).then(
-  () => console.error(`[chaconne-verify-mcp] ready → ${baseUrl}${wallet ? ` | agent-wallet ${wallet.address} max $${wallet.cfg.maxSpendUsd} chains ${wallet.chainIds.join(",")} | executor heartbeat 60 s` : " | agent-wallet: off"}`),
+  () => console.error(`[chaconne-verify-mcp] ready → ${baseUrl}${apiKey ? "" : " | free read-only mode (no VERIFY_API_KEY): keyed tools answer not_available"}${wallet ? ` | agent-wallet ${wallet.address} max $${wallet.cfg.maxSpendUsd} chains ${wallet.chainIds.join(",")} | executor heartbeat 60 s` : " | agent-wallet: off"}`),
   (err) => {
     console.error("[chaconne-verify-mcp] failed:", err);
     process.exit(1);

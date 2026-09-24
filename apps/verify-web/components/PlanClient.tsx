@@ -3,20 +3,24 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import type { PlanCandidate, PlanGoal, PlanNextStep } from "@chaconne/core/verify";
+import type { PlanCandidate, PlanGoal, PlanNextStep, PolicyId } from "@chaconne/core/verify";
 import { api, type AssetsResponse } from "@/lib/api";
 import { plans, templates, type PlanView, type TemplateView } from "@/lib/api-v2";
 import { useI18n } from "@/lib/i18n";
 import { useAccount } from "@/lib/useAccount";
 import { reasonText } from "@/lib/reasons";
 import { Card, Pill, Row } from "@/components/ui";
-import { connect, fmtUnits } from "@/lib/wallet";
+import { balanceOf, connect } from "@/lib/wallet";
+import { fmtAmount } from "@/lib/format.execute";
+import { tx } from "@/lib/i18n.execute";
 import { MandateBuilder } from "@/components/MandateBuilder";
 import { addressProblem, blockingSummary, fmtLocal, isAddress, nextStepText, tzLabel } from "@/lib/format";
 import { useMounted } from "@/lib/useMounted";
 import { apiError } from "@/lib/errors";
+import { walletErrorText } from "@/lib/i18n.execute";
 import { remember } from "@/lib/history";
 
+const POLICIES: PolicyId[] = ["STRICT_LIVE", "REFERENCE_CONTEXT", "QUOTE_ONLY"];
 const NEXT_TONE: Record<PlanNextStep, "ok" | "warn" | "bad" | "neutral"> = { READY: "ok", ACCEPT_PARTIAL: "warn", SWITCH_INPUT: "warn", WAIT_CONDITION: "neutral", PROVIDE_DATA: "neutral", USER_MUST_RELAX_LIMIT: "bad" };
 
 export function PlanClient() {
@@ -52,6 +56,11 @@ export function PlanClient() {
   const [plan, setPlan] = useState<PlanView | null>(null);
   const [tpl, setTpl] = useState<TemplateView | null>(null);
   const [mandateFor, setMandateFor] = useState<PlanCandidate[] | null>(null);
+  /** 三策略对照：选中的策略驱动候选表的结论与阻断列（null = 规划时所选策略） */
+  const [viewPolicy, setViewPolicy] = useState<PolicyId | null>(null);
+  /** 提交前查余额（V-44）：不足时给出「钱包里只有 X，预算 Y」并可一键改按余额规划 */
+  const [shortfall, setShortfall] = useState<{ balanceHuman: string; balanceRaw: string } | null>(null);
+  const [checkingBalance, setCheckingBalance] = useState(false);
 
   const [connected, setConnected] = useState<string | null>(null);
   // 资产只加载一次；默认值只在表单尚未填写时设置（V-08：规划后不再把篮子重置回默认）
@@ -100,12 +109,31 @@ export function PlanClient() {
   const ownerProblem = addressProblem(owner, connected, locale);
   const disabledWhy = !owner.trim() ? t("why_owner") : ownerProblem ? t("why_owner_invalid") : emptyRow !== -1 ? t("plan_row_no_asset", { n: emptyRow + 1 }) : weightSum !== 10000 ? t("plan_weights_sum", { x: (weightSum / 100).toFixed(1) }) : inputs.length === 0 ? t("why_inputs") : !budgetRaw ? t("why_budget") : null;
 
-  async function run() {
+  async function run(opts: { budgetRaw?: string } = {}) {
     setErr(null);
-    if (!budgetRaw || budgetRaw === "0") return setErr(t("why_budget"));
+    setShortfall(null);
+    const useBudgetRaw = opts.budgetRaw ?? budgetRaw;
+    if (!useBudgetRaw || useBudgetRaw === "0") return setErr(t("why_budget"));
     if (!isAddress(owner)) return setErr(t("why_owner_invalid"));
     if (emptyRow !== -1) return setErr(t("plan_row_no_asset", { n: emptyRow + 1 }));
     if (weightSum !== 10000) return setErr(t("plan_weights_sum", { x: (weightSum / 100).toFixed(1) }));
+    // 余额检查：读不到（RPC 故障等）不拦，链上读到确实不够才拦
+    if (primary && /^0x[0-9a-fA-F]{40}$/.test(primary.tokenAddress)) {
+      setCheckingBalance(true);
+      try {
+        const balRaw = await balanceOf(primary.tokenAddress as `0x${string}`, owner.trim() as `0x${string}`);
+        if (balRaw < BigInt(useBudgetRaw)) {
+          const balanceHuman = fmtAmount(balRaw, primary.tokenDecimals, primary.displaySymbol);
+          setShortfall({ balanceHuman, balanceRaw: balRaw.toString() });
+          setErr(tx(locale, "plan_balance_short", { balance: balanceHuman, budget: fmtAmount(useBudgetRaw, primary.tokenDecimals, primary.displaySymbol) }));
+          return;
+        }
+      } catch {
+        /* 读不到余额：不当成 0，也不拦 */
+      } finally {
+        setCheckingBalance(false);
+      }
+    }
     setBusy(true);
     try {
       const goal: PlanGoal & { clientRequestId: string } = {
@@ -114,7 +142,7 @@ export function PlanClient() {
         recipientAddress: owner.trim() as `0x${string}`,
         executionChainId: assets?.chainId ?? 196,
         legs,
-        budget: { inputAssetKeys: inputs, amountInRaw: budgetRaw },
+        budget: { inputAssetKeys: inputs, amountInRaw: useBudgetRaw },
         side,
         policyId: policy as PlanGoal["policyId"],
         policyVersion: "1.1.0",
@@ -141,7 +169,7 @@ export function PlanClient() {
     const r = await plans.toJob(plan.planId, c.candidateId);
     setBusy(false);
     if (r.status === 200 || r.status === 201) {
-      remember({ kind: "job", id: r.data.jobId, title: `${zh ? "部分完成" : "Partial"} ${sym(plan.goal.legs[c.legIndex]?.outputAssetKey ?? "")} · ${fmtUnits(c.amountInRaw, dec(c.inputAssetKey))} ${sym(c.inputAssetKey)}`, owner: owner.trim() });
+      remember({ kind: "job", id: r.data.jobId, title: `${zh ? "部分完成" : "Partial"} ${sym(plan.goal.legs[c.legIndex]?.outputAssetKey ?? "")} · ${fmtAmount(c.amountInRaw, dec(c.inputAssetKey), sym(c.inputAssetKey))}`, owner: owner.trim() });
       router.push(`/jobs/${r.data.jobId}`);
     } else setErr(apiError(r, locale));
   }
@@ -206,7 +234,7 @@ export function PlanClient() {
                 {account && owner.trim().toLowerCase() === account.toLowerCase() ? (
                   <span className="inline-flex h-10 shrink-0 items-center whitespace-nowrap rounded-md bg-ok/12 px-3 text-xs text-ok">{t("wallet_using")}</span>
                 ) : (
-                  <button className="btn-ghost shrink-0" type="button" onClick={() => connect().then((a) => { setOwner(a); setConnected(a); }).catch(() => setErr(t("no_wallet")))}>{t("connect")}</button>
+                  <button className="btn-ghost shrink-0" type="button" onClick={() => connect().then((a) => { setOwner(a); setConnected(a); }).catch((e: unknown) => setErr(walletErrorText(e, locale)))}>{t("connect")}</button>
                 )}
               </div>
               {ownerProblem && <span className="mt-1 block text-xs text-bad">{ownerProblem}</span>}
@@ -249,8 +277,13 @@ export function PlanClient() {
           </div>
         </Card>
       </div>
-      {err && <p className="text-sm text-bad">{err}</p>}
-      <button className="btn w-full" disabled={busy || !!disabledWhy} onClick={run}>{busy ? t("plan_running") : t("plan_run")}</button>
+      {err && <p className="text-sm text-bad" role="alert">{err}</p>}
+      {shortfall && primary && (
+        <div className="flex flex-wrap justify-center gap-2">
+          <button className="btn-ghost px-3 py-1 text-xs" disabled={busy || checkingBalance || shortfall.balanceRaw === "0"} onClick={() => { const h = fmtAmount(shortfall.balanceRaw, primary.tokenDecimals, "").trim(); setBudget(h); void run({ budgetRaw: shortfall.balanceRaw }); }}>{tx(locale, "plan_use_balance", { balance: shortfall.balanceHuman })}</button>
+        </div>
+      )}
+      <button className="btn w-full" disabled={busy || checkingBalance || !!disabledWhy} onClick={() => void run()} aria-busy={busy || checkingBalance}>{checkingBalance ? tx(locale, "plan_balance_checking") : busy ? t("plan_running") : t("plan_run")}</button>
       {disabledWhy && !busy && <p className="text-center text-xs text-fg-2">{disabledWhy}</p>}
       {plan && <p className="text-center text-xs text-fg-3">{t("plan_form_kept")}</p>}
 
@@ -273,29 +306,41 @@ export function PlanClient() {
             <p className="text-sm text-neutral-300">{t("plan_none")}</p>
           ) : (
             <div className="overflow-x-auto">
+              <div className="mb-3 flex flex-wrap items-center gap-2 text-xs" role="group" aria-label={tx(locale, "plan_view_policy")}>
+                <span className="text-fg-2">{tx(locale, "plan_view_policy")}</span>
+                <button type="button" className={`px-2 py-0.5 ${viewPolicy === null ? "btn" : "btn-ghost"}`} aria-pressed={viewPolicy === null} onClick={() => setViewPolicy(null)}>{tx(locale, "plan_view_chosen")} · {plan.goal.policyId}</button>
+                {POLICIES.map((pid) => (
+                  <button key={pid} type="button" className={`mono px-2 py-0.5 ${viewPolicy === pid ? "btn" : "btn-ghost"}`} aria-pressed={viewPolicy === pid} onClick={() => setViewPolicy(viewPolicy === pid ? null : pid)}>{pid}</button>
+                ))}
+                {viewPolicy && <span className="w-full text-fg-3">{tx(locale, "plan_view_note", { policy: plan.goal.policyId })}</span>}
+              </div>
               <table className="w-full text-left text-sm">
-                <thead className="text-xs text-fg-2"><tr><th className="py-2 pr-3">leg</th><th className="pr-3">{t("f_input")}</th><th className="pr-3">{t("f_amount")}</th><th className="pr-3">{t("plan_completion")}</th><th className="pr-3">expectedOut</th><th className="pr-3">impact</th><th className="pr-3">{t("verdict")}</th><th className="pr-3">{t("policy_matrix")}</th><th className="pr-3">{t("plan_next")}</th><th className="pr-3">{t("reasons")}</th><th></th></tr></thead>
+                <thead className="text-xs text-fg-2"><tr><th className="py-2 pr-3">{tx(locale, "col_leg")}</th><th className="pr-3">{t("f_input")}</th><th className="pr-3">{t("f_amount")}</th><th className="pr-3">{t("plan_completion")}</th><th className="pr-3">{tx(locale, "col_expected_out")}</th><th className="pr-3">{tx(locale, "col_impact")}</th><th className="pr-3">{t("verdict")}</th><th className="pr-3">{t("policy_matrix")}</th><th className="pr-3">{t("plan_next")}</th><th className="pr-3">{t("reasons")}</th><th className="pr-3">{tx(locale, "col_actions")}</th></tr></thead>
                 <tbody>
                   {report.candidates.map((c) => {
                     const rec = report.recommended === c.candidateId;
-                    const tone = c.chosenPolicyVerdict === "eligible" ? "ok" : c.chosenPolicyVerdict === "limited" ? "warn" : "bad";
+                    const viewed = viewPolicy ? c.verdictByPolicy[viewPolicy] : null;
+                    const verdict = viewed?.verdict ?? c.chosenPolicyVerdict;
+                    const tone = verdict === "eligible" ? "ok" : verdict === "limited" ? "warn" : "bad";
+                    const outKey = plan.goal.legs[c.legIndex]?.outputAssetKey ?? "";
                     return (
                       <tr key={c.candidateId} className={`border-t border-line ${rec ? "bg-ok/5" : ""}`}>
-                        <td className="mono py-2 pr-3">{c.legIndex}</td>
+                        <td className="mono py-2 pr-3">{c.legIndex + 1} · {sym(outKey)}</td>
                         <td className="pr-3">{sym(c.inputAssetKey)}</td>
-                        <td className="mono pr-3">{fmtUnits(c.amountInRaw, dec(c.inputAssetKey))}</td>
+                        <td className="mono pr-3">{fmtAmount(c.amountInRaw, dec(c.inputAssetKey), sym(c.inputAssetKey))}</td>
                         <td className="mono pr-3">{(c.completionBps / 100).toFixed(0)}%</td>
-                        <td className="mono pr-3">{c.expectedOutRaw ?? "—"}</td>
-                        <td className="mono pr-3">{c.adverseImpactBps === null ? "?" : `${c.adverseImpactBps} bps`}</td>
-                        <td className="pr-3"><Pill tone={tone}>{c.chosenPolicyVerdict}</Pill></td>
+                        <td className="mono pr-3">{c.expectedOutRaw ? fmtAmount(c.expectedOutRaw, dec(outKey), sym(outKey), { approx: true }) : "—"}</td>
+                        <td className="mono pr-3">{c.adverseImpactBps === null ? (zh ? "未知" : "unknown") : `${c.adverseImpactBps} bps`}</td>
+                        <td className="pr-3"><Pill tone={tone}>{verdict}</Pill></td>
                         <td className="pr-3">
                           <span className="flex flex-col gap-0.5">
                             {(Object.keys(c.verdictByPolicy) as Array<keyof typeof c.verdictByPolicy>).map((pid) => {
                               const v = c.verdictByPolicy[pid];
+                              const on = viewPolicy === pid;
                               return (
-                                <span key={pid} className="mono text-xs" title={v.blocking.join(", ")}>
+                                <button key={pid} type="button" className={`mono rounded-full text-left text-xs ${on ? "ring-2 ring-line-strong" : ""}`} title={v.blocking.map((code) => reasonText(code, locale)).join("; ") || pid} aria-pressed={on} onClick={() => setViewPolicy(on ? null : (pid as PolicyId))}>
                                   <Pill tone={v.verdict === "eligible" ? "ok" : v.verdict === "limited" ? "warn" : "bad"}>{pid.replace("REFERENCE_CONTEXT", "REF_CTX").replace("STRICT_LIVE", "STRICT")}</Pill>
-                                </span>
+                                </button>
                               );
                             })}
                           </span>
@@ -305,7 +350,15 @@ export function PlanClient() {
                           <p className="mt-1 max-w-[16rem] text-xs text-fg-2">{nextStepText(c.nextStep, locale)}</p>
                         </td>
                         <td className="pr-3 text-xs text-fg-2">
-                          {c.reasons.filter((r) => r.severity !== "info").length === 0 ? "—" : (
+                          {viewed ? (
+                            viewed.blocking.length === 0 ? "—" : (
+                              <ul className="max-w-[18rem] space-y-0.5">
+                                {viewed.blocking.map((code) => (
+                                  <li key={code}><span className="text-bad">{reasonText(code, locale)}</span> <span className="mono text-[11px] text-fg-3">{code}</span></li>
+                                ))}
+                              </ul>
+                            )
+                          ) : c.reasons.filter((r) => r.severity !== "info").length === 0 ? "—" : (
                             <ul className="max-w-[18rem] space-y-0.5">
                               {c.reasons.filter((r) => r.severity !== "info").map((r) => (
                                 <li key={r.code}><span className={r.severity === "block" ? "text-bad" : "text-warn"}>{reasonText(r.code, locale)}</span> <span className="mono text-[11px] text-fg-3">{r.code}</span></li>
@@ -325,7 +378,8 @@ export function PlanClient() {
             </div>
           )}
           <div className="mt-4 flex flex-wrap gap-2">
-            <button className="btn-ghost" onClick={() => setMandateFor(report?.candidates.filter((c) => c.completionBps === 10000) ?? [])}>{t("plan_keep_wait")}</button>
+            <button className="btn-ghost" title={tx(locale, "plan_sign_wait_hint")} onClick={() => setMandateFor(report?.candidates.filter((c) => c.completionBps === 10000) ?? [])}>{tx(locale, "plan_sign_wait")}</button>
+            <span className="self-center text-xs text-fg-3">{tx(locale, "plan_sign_wait_hint")}</span>
             <Link href="/verify-bundle" className="btn-ghost">{t("nav_verify_bundle")}</Link>
           </div>
           {report && (

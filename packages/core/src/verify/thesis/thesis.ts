@@ -1,9 +1,11 @@
 /**
  * 理由卡（C7，interfaces §11.5）纯函数：
  *  - machine 前提 = 其 Condition 的三态（SATISFIED→holds / UNSATISFIED→invalidated / INSUFFICIENT→unknown）；
+ *  - timing 前提（V-27）= 纯时间/时段门（session / min_gap_trading_days / max_steps_per_trading_day / 事件窗口 / 静默期）：
+ *    同样按 Condition 三态求值并展示，但不参与卡片状态、不触发 onInvalidation——休市只是等待，不是论点被推翻；
  *  - research 前提只收 reviewItems（sourceUrl 必填），保持 unknown 直到用户标记；
  *  - 卡片状态：validUntil 过期 → expired；任一 machine 前提 invalidated → invalidated；任一 machine 前提 unknown → unknown；否则 holds。
- *    research 前提不参与卡片状态（它们是给用户复核的材料，不能把模型一句判断翻译成交易通过）。
+ *    research / timing 前提不参与卡片状态（research 是给用户复核的材料，不能把模型一句判断翻译成交易通过）。
  *  - onInvalidation 由服务执行：notify / pause_issuance / draft_exit（这里只判定「该不该触发」）。
  */
 import type { Condition, IsoUtc, Premise, PremiseReviewItem, PremiseStatus, ThesisCard, ThesisOnInvalidation, ThesisStatus } from "../contracts";
@@ -14,7 +16,7 @@ import { validateCondition } from "../conditions/validate";
 export interface ThesisInput {
   goal: string;
   rationale: string;
-  premises: Array<{ kind: "machine"; text: string; condition: unknown } | { kind: "research"; text: string }>;
+  premises: Array<{ kind: "machine" | "timing"; text: string; condition: unknown } | { kind: "research"; text: string }>;
   validUntil: IsoUtc;
   onInvalidation: ThesisOnInvalidation;
 }
@@ -24,6 +26,12 @@ export interface ThesisError {
 }
 
 export const THESIS_ACTIONS: readonly ThesisOnInvalidation[] = ["notify", "pause_issuance", "draft_exit"];
+
+/** 纯时间/时段类条件：作为前提时标 kind="timing"，不参与卡片状态（V-27） */
+export const TIMING_CONDITION_TYPES: ReadonlySet<Condition["type"]> = new Set<Condition["type"]>(["session", "min_gap_trading_days", "max_steps_per_trading_day", "avoid_event_window", "earnings_window", "not_in_fed_blackout"]);
+export function premiseKindForCondition(c: Condition): "machine" | "timing" {
+  return TIMING_CONDITION_TYPES.has(c.type) ? "timing" : "machine";
+}
 
 export function validateThesisInput(raw: unknown, mode: "LIVE" | "SIMULATION", nowIso: IsoUtc): { ok: true; input: ThesisInput; conditions: Condition[] } | { ok: false; errors: ThesisError[] } {
   const errors: ThesisError[] = [];
@@ -44,11 +52,12 @@ export function validateThesisInput(raw: unknown, mode: "LIVE" | "SIMULATION", n
     const q = (p ?? {}) as Record<string, unknown>;
     const text = typeof q["text"] === "string" ? q["text"].trim().slice(0, 500) : "";
     if (!text) errors.push({ field: `premises[${i}].text`, code: "required" });
-    if (q["kind"] === "machine") {
+    if (q["kind"] === "machine" || q["kind"] === "timing") {
       const c = validateCondition(q["condition"], i, mode);
       if (!c.ok) errors.push(...c.errors.map((e) => ({ field: `premises[${i}].condition.${e.field}`, code: e.code })));
       else {
-        premises.push({ kind: "machine", text, condition: c.item });
+        // 输入写 machine 但条件是时间门 → 归为 timing（不让 session 之类推翻论点）
+        premises.push({ kind: premiseKindForCondition(c.item), text, condition: c.item });
         conditions.push(c.item);
       }
     } else if (q["kind"] === "research") premises.push({ kind: "research", text });
@@ -76,7 +85,8 @@ export function premiseStatusFromOutcome(outcome: "SATISFIED" | "UNSATISFIED" | 
 
 export function thesisStatusOf(premises: readonly Premise[], validUntil: IsoUtc, nowIso: IsoUtc): ThesisStatus {
   if (Date.parse(nowIso) > Date.parse(validUntil)) return "expired";
-  const machine = premises.filter((p) => p.kind === "machine");
+  // 只有 machine 前提决定卡片状态；timing（时间门）与 research 不参与（V-27）
+  const machine = premises.filter((p) => p.kind === "machine" && !(p.condition && premiseKindForCondition(p.condition) === "timing"));
   if (machine.some((p) => p.status === "invalidated")) return "invalidated";
   if (machine.some((p) => p.status === "unknown")) return "unknown";
   return "holds";
@@ -97,20 +107,22 @@ export function checkThesis(card: ThesisCard, evidence: ConditionEvidence, taskS
   const newlyInvalidated: string[] = [];
   const evidenceIds = new Set<string>();
   const premises: Premise[] = card.premises.map((p) => {
-    if (p.kind !== "machine" || !p.condition) return p;
+    if (p.kind === "research" || !p.condition) return p;
+    // 旧卡里存成 machine 的时间门按 timing 处理（不推翻论点）
+    const kind = premiseKindForCondition(p.condition);
     const r = evaluateConditionItem(p.condition, { ev: evidence, st: taskState, nowMs, cal });
     const status = premiseStatusFromOutcome(r.outcome);
     for (const id of r.evidenceIds) evidenceIds.add(id);
-    if (status === "invalidated" && p.status !== "invalidated") newlyInvalidated.push(p.id);
-    return { ...p, status, lastCheckedAt: nowIso, evidenceIds: r.evidenceIds };
+    if (kind === "machine" && status === "invalidated" && p.status !== "invalidated") newlyInvalidated.push(p.id);
+    return { ...p, kind, status, lastCheckedAt: nowIso, evidenceIds: r.evidenceIds };
   });
   const status = thesisStatusOf(premises, card.validUntil, nowIso);
   return { card: { ...card, premises, status }, newlyInvalidated, newlyExpired: status === "expired" && card.status !== "expired", evidenceIds: [...evidenceIds].sort() };
 }
 
-/** 从条件集生成机器前提草案（每条条件一条前提；文案只描述条件，不预测） */
+/** 从条件集生成机器/时间门前提草案（每条条件一条前提；时间门标 kind=timing；文案只描述条件，不预测） */
 export function machinePremisesFromConditions(items: readonly Condition[], idPrefix: string): Premise[] {
-  return items.map((c, i) => ({ id: `${idPrefix}_m${i}`, kind: "machine", text: describeCondition(c), condition: c, status: "unknown", lastCheckedAt: null, evidenceIds: [] }));
+  return items.map((c, i) => ({ id: `${idPrefix}_m${i}`, kind: premiseKindForCondition(c), text: describeCondition(c), condition: c, status: "unknown", lastCheckedAt: null, evidenceIds: [] }));
 }
 
 export function describeCondition(c: Condition): string {

@@ -162,6 +162,11 @@ async function main(): Promise<void> {
     notify,
     lab,
     recaps,
+    // A2MCP agent-tasks / GET /v1/missions 的事件影响与事件列表 = 与 /v1/event-impacts、/v1/events 同一实现（V-25：此前未接，字段永远 unavailable）
+    agentHooks: {
+      ...(laneD ? { impacts: async (owner: string, horizonHours: number) => (await laneD.impacts.impacts(owner, horizonHours)).impacts } : {}),
+      events: async (fromUtc: Date, toUtc: Date) => events.list({ from: fromUtc.toISOString().slice(0, 10), to: toUtc.toISOString().slice(0, 10) }),
+    },
     health: () => ({
       startedAt: new Date(startedAt).toISOString(),
       evidenceMode: cfg.EVIDENCE_MODE,

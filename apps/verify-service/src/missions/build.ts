@@ -5,7 +5,7 @@
  * 纯函数；HTTP 与 A2MCP 共用。
  */
 import { NYSE_CALENDAR, type MarketCalendar } from "@chaconne/core";
-import { hashCanonical, type Condition, type ConditionSet, type MarketEvent, type PlaybookId } from "@chaconne/core/verify";
+import { hashCanonical, type AssetRegistry, type Condition, type ConditionSet, type MarketEvent, type PlaybookId } from "@chaconne/core/verify";
 import { previousTradingDay } from "../recaps/window";
 
 export interface MissionAsset {
@@ -14,11 +14,37 @@ export interface MissionAsset {
   underlyingId: string;
   executionAllowed: boolean;
 }
+/**
+ * 任务草案 = `POST /v1/tasks` 原样可接受的请求体（V-25）：只有 SIMULATION 一种模式（任务层没有 REPLAY 模式），
+ * params 只含模板认识的键（inputAssetKey / outputAssetKey / steps / perStepAmountRaw）；回放建议放在 Mission.replay，不进请求体。
+ * ownerAddress 未知时不写（调用方补上再提交）。
+ */
 export interface MissionDraft {
+  clientRequestId: string;
   playbookId: PlaybookId;
-  mode: "SIMULATION" | "REPLAY";
-  params: Record<string, unknown>;
+  mode: "SIMULATION";
+  ownerAddress?: string;
+  params: { inputAssetKey: string; outputAssetKey: string; steps: number; perStepAmountRaw: string };
   conditions: ConditionSet;
+}
+/** 无事件时的回放建议（不是任务参数；`/v1/replays` 或 /agent/lab 回放页用） */
+export interface MissionReplay {
+  assetKey: string;
+  from: string;
+  to: string;
+  url: string;
+}
+/** 草案的资金侧缺省：登记表里优先级最高的资金币种（USDG，其次第一个 stable_input）+ 1 个单位/步 */
+export interface DraftFunding {
+  inputAssetKey: string;
+  perStepAmountRaw: string;
+  displaySymbol: string;
+}
+export function defaultDraftFunding(registry: AssetRegistry): DraftFunding | null {
+  const stables = registry.entries.filter((e) => e.role === "stable_input");
+  const e = stables.find((x) => x.displaySymbol === "USDG") ?? stables[0];
+  if (!e) return null;
+  return { inputAssetKey: e.assetKey, perStepAmountRaw: (10n ** BigInt(e.tokenDecimals)).toString(), displaySymbol: e.displaySymbol };
 }
 export interface Mission {
   id: string;
@@ -34,6 +60,8 @@ export interface Mission {
   assetKey: string | null;
   underlyingId: string | null;
   draft: MissionDraft;
+  /** kind=replay 时的回放区间；其它为 null */
+  replay: MissionReplay | null;
   /** 页面入口：预填表单 */
   href: string;
 }
@@ -46,6 +74,10 @@ export interface MissionInput {
   focus?: string[];
   horizonDays?: number;
   calendar?: MarketCalendar;
+  /** 草案资金侧（inputAssetKey / perStepAmountRaw）；由 defaultDraftFunding(registry) 得到 */
+  funding: DraftFunding;
+  /** 已知 owner 时写进草案（草案即可直接提交） */
+  owner?: string | null;
 }
 
 export function conditionSet(items: Condition[]): ConditionSet {
@@ -53,6 +85,8 @@ export function conditionSet(items: Condition[]): ConditionSet {
 }
 
 const sym = (a: MissionAsset) => a.displaySymbol;
+/** clientRequestId 只允许 [A-Za-z0-9_\-:.]，≤128 */
+const draftRequestId = (missionId: string) => `draft-${missionId.replace(/[^A-Za-z0-9_\-:.]/g, "-")}`.slice(0, 128);
 
 export function buildMissions(i: MissionInput): Mission[] {
   const cal = i.calendar ?? NYSE_CALENDAR;
@@ -63,6 +97,14 @@ export function buildMissions(i: MissionInput): Mission[] {
   for (const a of covered) byUnderlying.set(a.underlyingId.toLowerCase(), a);
   const focus = new Set((i.focus ?? []).map((k) => k.toLowerCase()));
   const out: Mission[] = [];
+  const draft = (id: string, playbookId: PlaybookId, a: MissionAsset, steps: number, items: Condition[]): MissionDraft => ({
+    clientRequestId: draftRequestId(id),
+    playbookId,
+    mode: "SIMULATION",
+    ...(i.owner ? { ownerAddress: i.owner } : {}),
+    params: { inputAssetKey: i.funding.inputAssetKey, outputAssetKey: a.assetKey, steps, perStepAmountRaw: i.funding.perStepAmountRaw },
+    conditions: conditionSet(items),
+  });
 
   if (i.events) {
     const upcoming = i.events
@@ -77,8 +119,9 @@ export function buildMissions(i: MissionInput): Mission[] {
         for (const u of e.underlyingIds) {
           const a = byUnderlying.get(u.toLowerCase());
           if (!a) continue;
+          const id = `msn_${e.id}_${a.assetKey.slice(-8)}`;
           out.push({
-            id: `msn_${e.id}_${a.assetKey.slice(-8)}`,
+            id,
             kind: "event",
             mode: "SIMULATION",
             title: { en: `Set an earnings wait window on a ${sym(a)} accumulate plan`, zh: `为 ${sym(a)} 的加仓计划设置财报等待窗口` },
@@ -89,15 +132,17 @@ export function buildMissions(i: MissionInput): Mission[] {
             eventStatus: e.status,
             assetKey: a.assetKey,
             underlyingId: a.underlyingId,
-            draft: { playbookId: "event_aware_accumulate", mode: "SIMULATION", params: { outputAssetKey: a.assetKey, steps: 3 }, conditions: conditionSet([{ type: "session", allow: ["US_REGULAR"] }, { type: "avoid_event_window", kinds: ["MACRO_TIER1"], beforeMin: 30, afterMin: 20, includeEstimated: true, wholeDayIfDayPrecision: true }, { type: "earnings_window", beforeTradingDays: 1, afterSessions: 1, requireRegularSessionAfter: true, requireLiveReferenceAfter: true }]) },
+            draft: draft(id, "event_aware_accumulate", a, 3, [{ type: "session", allow: ["US_REGULAR"] }, { type: "avoid_event_window", kinds: ["MACRO_TIER1"], beforeMin: 30, afterMin: 20, includeEstimated: true, wholeDayIfDayPrecision: true }, { type: "earnings_window", beforeTradingDays: 1, afterSessions: 1, requireRegularSessionAfter: true, requireLiveReferenceAfter: true }]),
+            replay: null,
             href: `/agent?entry=buy&playbook=event_aware_accumulate&asset=${encodeURIComponent(a.assetKey)}&event=${encodeURIComponent(e.id)}`,
           });
         }
       } else if (e.kind === "MACRO_TIER1" || e.kind === "FED_SPEECH") {
         const a = covered.find((x) => focus.has(x.assetKey.toLowerCase())) ?? covered[0];
         if (!a) continue;
+        const id = `msn_${e.id}_compare`;
         out.push({
-          id: `msn_${e.id}_compare`,
+          id,
           kind: "event",
           mode: "SIMULATION",
           title: { en: `Compare two post-open policies around ${e.name} (simulation)`, zh: `围绕 ${e.name} 在模拟中比较两种开盘后策略` },
@@ -108,7 +153,8 @@ export function buildMissions(i: MissionInput): Mission[] {
           eventStatus: e.status,
           assetKey: a.assetKey,
           underlyingId: a.underlyingId,
-          draft: { playbookId: "session_dca", mode: "SIMULATION", params: { outputAssetKey: a.assetKey, steps: 2 }, conditions: conditionSet([{ type: "session", allow: ["US_REGULAR"] }, { type: "avoid_event_window", kinds: ["MACRO_TIER1"], beforeMin: 30, afterMin: 20, includeEstimated: true, wholeDayIfDayPrecision: e.datePrecision !== "exact" }]) },
+          draft: draft(id, "session_dca", a, 2, [{ type: "session", allow: ["US_REGULAR"] }, { type: "avoid_event_window", kinds: ["MACRO_TIER1"], beforeMin: 30, afterMin: 20, includeEstimated: true, wholeDayIfDayPrecision: e.datePrecision !== "exact" }]),
+          replay: null,
           href: `/agent?entry=compare&asset=${encodeURIComponent(a.assetKey)}&event=${encodeURIComponent(e.id)}`,
         });
       }
@@ -121,8 +167,10 @@ export function buildMissions(i: MissionInput): Mission[] {
     const replayDate = previousTradingDay(nyToday, cal);
     const a = covered.find((x) => focus.has(x.assetKey.toLowerCase())) ?? covered[0];
     if (a) {
+      const id = `msn_replay_${replayDate}_${a.assetKey.slice(-8)}`;
+      const href = `/agent/lab?replay=1&asset=${encodeURIComponent(a.assetKey)}&date=${replayDate}`;
       out.push({
-        id: `msn_replay_${replayDate}_${a.assetKey.slice(-8)}`,
+        id,
         kind: "replay",
         mode: "REPLAY",
         title: { en: `Replay a Session DCA decision for ${sym(a)} on ${replayDate}`, zh: `回放 ${replayDate} 对 ${sym(a)} 的 Session DCA 决策` },
@@ -133,8 +181,10 @@ export function buildMissions(i: MissionInput): Mission[] {
         eventStatus: null,
         assetKey: a.assetKey,
         underlyingId: a.underlyingId,
-        draft: { playbookId: "session_dca", mode: "REPLAY", params: { outputAssetKey: a.assetKey, steps: 2, from: `${replayDate}T00:00:00Z`, to: `${replayDate}T23:59:59Z` }, conditions: conditionSet([{ type: "session", allow: ["US_REGULAR"] }, { type: "min_gap_trading_days", days: 1 }]) },
-        href: `/agent/lab?replay=1&asset=${encodeURIComponent(a.assetKey)}&date=${replayDate}`,
+        // 草案本身仍是可提交的 SIMULATION 任务；回放区间单独给（任务层没有 REPLAY 模式，from/to 不是模板参数）
+        draft: draft(id, "session_dca", a, 2, [{ type: "session", allow: ["US_REGULAR"] }, { type: "min_gap_trading_days", days: 1 }]),
+        replay: { assetKey: a.assetKey, from: `${replayDate}T00:00:00Z`, to: `${replayDate}T23:59:59Z`, url: href },
+        href,
       });
     }
   }

@@ -21,17 +21,20 @@ const MCP_TOOLS: Array<[string, string[]]> = [
   ["v6 · tasks (playbooks + conditions)", ["create_task", "get_task", "pause_task", "resume_task", "cancel_task", "authorize_task", "explain_task_wait", "compare_task_policies", "replay_policy"]],
   ["v6 · thesis, budget, portfolio, rebalance", ["watch_thesis", "add_thesis_review_item", "get_budget_group", "create_budget_group", "get_portfolio", "report_cost_override", "preview_rebalance", "create_rebalance_plan"]],
   ["v6 · notifications & executor", ["register_webhook", "link_telegram", "executor_heartbeat"]],
+  ["free · no key (read-only)", ["verify_once_free", "plan_free", "agent_tasks_free"]],
 ];
 
-function Tbl({ rows }: { rows: Array<[string, string]> }) {
+/** V-45：路径列可换行（此前 whitespace-nowrap 把长路径截断）、说明列必填、表格可横向滚动 */
+function Tbl({ rows, zh }: { rows: Array<[string, string]>; zh: boolean }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
+      <table className="w-full min-w-[520px] text-left text-sm">
+        <thead><tr className="text-xs text-fg-3"><th className="w-[42%] py-1 pr-4 font-medium">{zh ? "端点" : "Endpoint"}</th><th className="py-1 font-medium">{zh ? "说明" : "What it does"}</th></tr></thead>
         <tbody>
           {rows.map(([p, d]) => (
-            <tr key={p} className="border-b border-line last:border-0">
-              <td className="mono whitespace-nowrap py-2 pr-4 align-top text-brand">{p}</td>
-              <td className="py-2 text-neutral-300">{d}</td>
+            <tr key={p} className="border-b border-line last:border-0 align-top">
+              <td className="mono break-words py-2 pr-4 text-brand [overflow-wrap:anywhere]">{p}</td>
+              <td className="py-2 text-neutral-300">{d || "—"}</td>
             </tr>
           ))}
         </tbody>
@@ -39,6 +42,18 @@ function Tbl({ rows }: { rows: Array<[string, string]> }) {
     </div>
   );
 }
+
+const SECTIONS: Array<{ id: string; zh: string; en: string }> = [
+  { id: "free", zh: "免 key 接入", en: "No-key access" },
+  { id: "a2mcp", zh: "A2MCP（OKX AI）", en: "A2MCP (OKX AI)" },
+  { id: "addresses", zh: "合约地址", en: "Addresses" },
+  { id: "v1", zh: "REST · 核验 v1", en: "REST · verification v1" },
+  { id: "v5", zh: "REST · 规划 / 授权 v5", en: "REST · plans / mandates v5" },
+  { id: "v6", zh: "REST · Agent v6", en: "REST · agent v6" },
+  { id: "mcp", zh: "MCP 工具", en: "MCP tools" },
+  { id: "sdk", zh: "SDK", en: "SDK" },
+  { id: "trust", zh: "信任边界", en: "Trust boundary" },
+];
 
 export default function DevelopersPage() {
   const { t, locale } = useI18n();
@@ -64,7 +79,7 @@ export default function DevelopersPage() {
     ["POST /v1/mandates/:id/steps/:n/submissions", zh ? "记录步骤 tx hash；核实器按 MandateStep 事件确认" : "Record the step tx hash; the verifier confirms via the MandateStep event"],
     ["GET /v1/mandates/:id/bundle · /bill", zh ? "授权计划的证据包与账单" : "Evidence bundle and bill of an authorized task"],
     ["POST /v1/simulations · GET /v1/simulations/:id", zh ? "模拟：真实数据跑规划与规则，不签证书不执行（免费）" : "Simulation: real data through planner and rules, no certificate, no execution (free)"],
-    ["GET/PUT /v1/profiles/me · POST/GET /v1/templates", zh ? "角色（只影响文案）· 翻创模板（只含结构，不含金额/钱包）" : "Persona (copy only) · remix templates (structure only, never amounts/wallets)"],
+    ["GET/PUT /v1/profiles/me · POST/GET /v1/templates", zh ? "角色（只影响文案）· 复用模板（只含结构，不含金额/钱包）" : "Persona (copy only) · remix templates (structure only, never amounts/wallets)"],
     ["POST /v1/shares · GET /pub/reports[/:shareId]", zh ? "战报公开设置 · 公开读取（无需 key，金额可区间化，钱包恒隐藏）" : "Share settings · public read (no key; amounts can be ranged; wallet always hidden)"],
     ["POST /a2mcp/plan · POST /a2mcp/monitor · GET /a2mcp/monitor/:id", zh ? "第二个 A2MCP 服务「Plan & Monitor」（同一 200 契约）" : "Second A2MCP service “Plan & Monitor” (same 200 contract)"],
   ];
@@ -80,20 +95,32 @@ export default function DevelopersPage() {
     ["POST /a2mcp/agent-tasks", zh ? "第三个 A2MCP 服务「Agent Tasks」草稿：owner 或资产集合 → 事件影响 + 任务草案；审核期价格 0；等 #13803 结果后再提交上架" : "Third A2MCP service “Agent Tasks” (draft): owner and/or assets → event impacts + task drafts; price 0 during review; submitted only after #13803 concludes"],
   ];
   return (
-    <div className="space-y-5">
+    <div className="lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-6">
+      <aside className="mb-4 lg:sticky lg:top-24 lg:mb-0 lg:self-start">
+        <p className="text-xs font-semibold uppercase tracking-wide text-fg-3">{zh ? "目录" : "Contents"}</p>
+        <nav className="mt-2 flex flex-wrap gap-1.5 lg:flex-col lg:gap-0.5" aria-label={zh ? "开发者页目录" : "Developers page contents"}>
+          {SECTIONS.map((x) => <a key={x.id} href={`#${x.id}`} className="rounded-md px-2 py-1 text-xs text-fg-2 ring-1 ring-line hover:bg-surface-2 hover:text-fg-1 lg:ring-0">{zh ? x.zh : x.en}</a>)}
+        </nav>
+        <p className="mt-3 hidden text-[11px] text-fg-3 lg:block">{zh ? "免 key：/v1/context · /v1/assets · /v1/policies · /a2mcp/* · /pub/* · /openapi.json · /llms.txt · /.well-known/agent-card.json。其它 REST 需要 x-api-key。" : "No key: /v1/context · /v1/assets · /v1/policies · /a2mcp/* · /pub/* · /openapi.json · /llms.txt · /.well-known/agent-card.json. Other REST calls need x-api-key."}</p>
+      </aside>
+    <div className="min-w-0 space-y-5">
       <h1 className="text-2xl font-bold">{t("dev_h")}</h1>
+      <p className="text-sm text-fg-2">{zh ? "机器可读的入口：" : "Machine-readable entry points: "}<a className="mono underline" href="/openapi.json">/openapi.json</a> · <a className="mono underline" href="/llms.txt">/llms.txt</a> · <a className="mono underline" href="/.well-known/agent-card.json">/.well-known/agent-card.json</a>{zh ? "（描述全部端点、哪些免 key、怎么调用）。" : " (every endpoint, which ones need no key, how to call)."}</p>
 
-      <Card title={zh ? "免费档：GET /v1/context（O-01）" : "Free tier: GET /v1/context (O-01)"}>
+      <Card title={<span id="free" className="scroll-mt-24">{zh ? "免 key：GET /v1/context（agent 档）· /v1/assets · /v1/policies" : "No key needed: GET /v1/context (agent tier) · /v1/assets · /v1/policies"}</span>}>
         <p className="text-sm text-neutral-300">{zh ? "任何 Agent 都可以免费读市场上下文的 agent 档：只含派生字段（时段、事件、窗口、静默期、曲线形态、漂移判定）与官方公开源数值；私有研究不导出。字段不在档位时整个字段标 unavailable（note=not_in_tier），绝不省略键。响应带 crowsnest Ed25519 签名与 provenance.mode（live / backfill / sample）——只有 live 才能参与 LIVE 判定。" : "Any agent can read the agent tier of the market context for free: derived fields only (session, events, windows, blackout, curve shape, drift verdict) plus official public-source values; private research is never exported. Fields outside the tier are whole-field unavailable (note=not_in_tier), never omitted. Responses carry the crowsnest Ed25519 signature and provenance.mode (live / backfill / sample); only live may take part in a LIVE decision."}</p>
-        <pre className="mono mt-3 overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`curl "${SERVICE}/v1/context?tier=agent&assetKey=eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a" -H "x-api-key: <your key>"
+        <pre className="mono mt-3 overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`# no API key needed
+curl "${SERVICE}/v1/assets"        # registry: assetKey, symbol, decimals, role, executionAllowed
+curl "${SERVICE}/v1/policies"      # the three policies with definition hashes
+curl "${SERVICE}/v1/context?tier=agent&assetKey=eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
 # → 200 { "schemaVersion":"chaconne-context/1", "packagedAt":"…", "provenance":{"mode":"live"},
 #         "session":{"label":{"value":"US_REGULAR","status":"ok","source":"…","observedAt":"…"}, …},
 #         "events":[…], "fed":{…}, "rates":{"y10":{"value":"4.96","status":"ok"}, …},
 #         "risk":{"vix":{"value":null,"status":"unavailable","note":"not_in_tier"}, …} }`}</pre>
-        <p className="mt-2 text-xs text-fg-3">{zh ? "MCP：get_market_context；SDK：client.context.get({ tier: \"agent\" })。" : "MCP: get_market_context; SDK: client.context.get({ tier: \"agent\" })."}</p>
+        <p className="mt-2 text-xs text-fg-3">{zh ? "MCP：get_market_context；SDK：client.context.get({ tier: \"agent\" })。其它档位（display / paid）才需要 key。" : "MCP: get_market_context; SDK: client.context.get({ tier: \"agent\" }). Only the display / paid tiers need a key."}</p>
       </Card>
 
-      <Card title={zh ? "通过 OKX AI 使用（A2MCP）" : "Use through OKX AI (A2MCP)"}>
+      <Card title={<span id="a2mcp" className="scroll-mt-24">{zh ? "免 key：通过 OKX AI 使用（A2MCP）" : "No key needed: use through OKX AI (A2MCP)"}</span>}>
         <p className="text-sm text-neutral-300">{zh ? "服务：Chaconne Verify · StockProof Trade Verification（ASP #13803）。A2MCP 传输约定只用两个状态码：任何缺参数/参数错误都是 HTTP 200 + status: input_required（正文带缺失项、提示、schema 和示例）；成功是 HTTP 200 + status: delivered（一句话结论 + 完整报告）；收费阶段是 402 + PAYMENT-REQUIRED（x402 v2）。参数可以直接写符号和人类金额。" : "Service: Chaconne Verify · StockProof Trade Verification (ASP #13803). The A2MCP transport uses only two status codes: any missing/invalid input is HTTP 200 with status: input_required (missing fields, hints, schema and an example in the body); success is HTTP 200 with status: delivered (a one-line summary plus the full report); the paid phase is 402 + PAYMENT-REQUIRED (x402 v2). Symbols and human amounts are accepted directly."}</p>
         <pre className="mono mt-3 overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`curl -X POST ${SERVICE}/a2mcp/verify -H "Content-Type: application/json" -d '{
   "ownerAddress": "0xYourWallet",
@@ -108,7 +135,7 @@ export default function DevelopersPage() {
         <p className="mt-2 text-xs text-fg-3">{zh ? "GET 也可用（参数放 query）。同参数重复调用返回同一任务，不重复计费。" : "GET works too (params in the query string). Repeating the same parameters returns the same task; nothing is charged twice."}</p>
       </Card>
 
-      <Card title={zh ? "地址（X Layer 主网 · chainId 196）" : "Addresses (X Layer mainnet · chainId 196)"}>
+      <Card title={<span id="addresses" className="scroll-mt-24">{zh ? "地址（X Layer 主网 · chainId 196）" : "Addresses (X Layer mainnet · chainId 196)"}</span>}>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <tbody>
@@ -135,21 +162,35 @@ export default function DevelopersPage() {
         <p className="mt-2 text-xs text-fg-3">{zh ? "两个合约均 Sourcify 精确匹配；EIP-712 domain：ChaconneVerifyGuard v1 / ChaconneVerifyPlanGuard v1。当前 signer 与 epoch 也可从 GET /healthz 读取。" : "Both contracts are Sourcify exact matches; EIP-712 domains: ChaconneVerifyGuard v1 / ChaconneVerifyPlanGuard v1. The current signer and epoch are also exposed by GET /healthz."}</p>
       </Card>
 
-      <Card title={zh ? "HTTP API · 核验（v1）" : "HTTP API · verification (v1)"}>
-        <Tbl rows={v1} />
+      <Card title={<span id="v1" className="scroll-mt-24">{zh ? "HTTP API · 核验（v1）· 需 key" : "HTTP API · verification (v1) · key required"}</span>}>
+        <Tbl rows={v1} zh={zh} />
+        <pre className="mono mt-3 overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`# key required (x-api-key or Authorization: Bearer)
+curl -X POST ${SERVICE}/v1/jobs -H "x-api-key: <your key>" -H "Content-Type: application/json" -d '{
+  "clientRequestId": "my-1", "ownerAddress": "0xYourWallet",
+  "inputAssetKey": "eip155:196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8", "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+  "amountInRaw": "5000000", "policyId": "REFERENCE_CONTEXT", "maxSlippageBps": 50, "maxPriceImpactBps": 100, "maxReferenceDeviationBps": 300 }'`}</pre>
       </Card>
-      <Card title={zh ? "HTTP API · 规划、授权计划、模拟、战报（v5）" : "HTTP API · plans, mandates, simulations, reports (v5)"}>
-        <Tbl rows={v2} />
-        <p className="mt-2 text-xs text-fg-3">{zh ? "鉴权：x-api-key 或 Authorization: Bearer；A2MCP 端点与 /pub/* 不需要 key。响应 private/no-store。API key 在 Dev Day 期间联系运营者获取。" : "Auth: x-api-key or Authorization: Bearer; A2MCP endpoints and /pub/* need no key. Responses are private/no-store. During Dev Day, ask the operator for an API key."}</p>
+      <Card title={<span id="v5" className="scroll-mt-24">{zh ? "HTTP API · 规划、授权计划、模拟、战报（v5）· 需 key" : "HTTP API · plans, mandates, simulations, reports (v5) · key required"}</span>}>
+        <Tbl rows={v2} zh={zh} />
+        <p className="mt-2 text-xs text-fg-3">{zh ? "鉴权：x-api-key 或 Authorization: Bearer；A2MCP 端点、/pub/*、/v1/assets、/v1/policies 与 /v1/context?tier=agent 不需要 key。响应 private/no-store。API key 在 Dev Day 期间联系运营者获取。" : "Auth: x-api-key or Authorization: Bearer; A2MCP endpoints, /pub/*, /v1/assets, /v1/policies and /v1/context?tier=agent need no key. Responses are private/no-store. During Dev Day, ask the operator for an API key."}</p>
       </Card>
 
-      <Card title={zh ? "HTTP API · Agent（v6）" : "HTTP API · agent (v6)"}>
-        <Tbl rows={v6} />
+      <Card title={<span id="v6" className="scroll-mt-24">{zh ? "HTTP API · Agent（v6）· 需 key" : "HTTP API · agent (v6) · key required"}</span>}>
+        <Tbl rows={v6} zh={zh} />
+        <pre className="mono mt-3 overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`# create a simulation task: inputAssetKey + perStepAmountRaw are required by the playbook
+curl -X POST ${SERVICE}/v1/tasks -H "x-api-key: <your key>" -H "Content-Type: application/json" -d '{
+  "clientRequestId": "my-task-1", "ownerAddress": "0xYourWallet", "playbookId": "session_dca", "mode": "SIMULATION",
+  "params": { "inputAssetKey": "eip155:196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8", "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a", "steps": 3, "perStepAmountRaw": "1000000" },
+  "conditions": { "version": "conditions/1", "items": [ { "type": "session", "allow": ["US_REGULAR"] }, { "type": "min_gap_trading_days", "days": 1 } ] } }'
+# → 201 { "task": { "id": "tsk_…", "status": "WAITING", "blockers": [...], "nextCheckAt": "…" }, "mode": "SIMULATION", ... }
+# 400 invalid_playbook_params → details[] = [{ "field": "perStepAmountRaw", "code": "required" }, ...]
+# GET  /v1/tasks/:id/explain-wait   (GET only; a POST is not the same resource)`}</pre>
         <p className="mt-2 text-xs text-fg-3">{zh ? "尚未部署到这台服务器的端点返回 404；页面与 MCP 工具据此显示「尚未就绪」，不用假数据。" : "Endpoints not yet deployed on this server return 404; pages and MCP tools then show “not ready” instead of sample data."}</p>
       </Card>
 
-      <Card title={zh ? "MCP 工具（verify-mcp，43 个）" : "MCP tools (verify-mcp, 43)"}>
-        <div className="space-y-2 text-sm">
+      <Card title={<span id="mcp" className="scroll-mt-24">{zh ? "MCP 工具（verify-mcp，46 个）" : "MCP tools (verify-mcp, 46)"}</span>}>
+        <p className="text-sm text-neutral-300">{zh ? "VERIFY_API_KEY 可选：不给 key 时服务器以免 key 只读模式运行——只读工具（get_market_context / get_events / list_supported_assets / get_verification_policy / get_products）与三个免 key 工具 verify_once_free / plan_free / agent_tasks_free 都可用；建任务、授权、执行类工具需要 key。" : "VERIFY_API_KEY is optional: without it the server runs in free read-only mode — the read-only tools (get_market_context / get_events / list_supported_assets / get_verification_policy / get_products) and the three free tools verify_once_free / plan_free / agent_tasks_free all work; task, mandate and execution tools need a key."}</p>
+        <div className="mt-3 space-y-2 text-sm">
           {MCP_TOOLS.map(([group, names]) => (
             <div key={group}>
               <p className="text-xs uppercase tracking-wide text-fg-3">{group}</p>
@@ -157,14 +198,25 @@ export default function DevelopersPage() {
             </div>
           ))}
         </div>
+        <pre className="mono mt-3 overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`// example tool calls (arguments are plain JSON)
+get_market_context      { "tier": "agent", "assetKey": "AAPLx" }
+get_my_event_impacts    { "owner": "0xYourWallet", "horizonHours": 48 }
+create_task             { "ownerAddress": "0xYourWallet", "playbookId": "session_dca", "mode": "SIMULATION",
+                          "params": { "inputAssetKey": "USDG", "outputAssetKey": "AAPLx", "steps": 3, "perStepAmountRaw": "1000000" },
+                          "conditions": { "version": "conditions/1", "items": [ { "type": "session", "allow": ["US_REGULAR"] } ] } }
+explain_task_wait       { "taskId": "tsk_…" }`}</pre>
         <p className="mt-2 text-xs text-fg-3">{zh ? "stdio 传输；默认不持有任何私钥。可选 agent-wallet 模式（用户自己的 Agent 钱包，AGENT_WALLET_PRIVATE_KEY + AGENT_WALLET_MAX_SPEND_USD + AGENT_WALLET_CHAIN_IDS 三者齐备才启用）：x402 自动付款带花费上限、代签 TradeMandate、执行步骤（发交易前读链上 stepIndex，预授权后再取证书）。" : "stdio transport; holds no private key by default. Optional agent-wallet mode (your own agent wallet; enabled only when AGENT_WALLET_PRIVATE_KEY + AGENT_WALLET_MAX_SPEND_USD + AGENT_WALLET_CHAIN_IDS are all set): auto-pays x402 within a spend cap, signs TradeMandate, executes steps (reads the on-chain stepIndex before sending, pre-approves before fetching the certificate)."}</p>
-        <pre className="mono mt-3 overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`{ "mcpServers": { "chaconne-verify": {
-    "command": "npx", "args": ["-y", "@chaconne/verify-mcp"],
-    "env": { "VERIFY_SERVICE_URL": "${SERVICE}", "VERIFY_API_KEY": "<your key>" }
+        <pre className="mono mt-3 overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`# the package is not published on npm yet — run it from the repo:
+git clone https://github.com/Bachamht/verify_chaconne && cd verify_chaconne && pnpm install && node packages/verify-mcp/bin/chaconne-verify-mcp.mjs
+
+{ "mcpServers": { "chaconne-verify": {
+    "command": "node", "args": ["<path-to>/verify_chaconne/packages/verify-mcp/bin/chaconne-verify-mcp.mjs"],
+    "env": { "VERIFY_SERVICE_URL": "${SERVICE}" }                                   // free read-only mode
+    // "env": { "VERIFY_SERVICE_URL": "${SERVICE}", "VERIFY_API_KEY": "<your key>" }   // full tool set (optional)
 } } }`}</pre>
       </Card>
 
-      <Card title="SDK (@chaconne/verify-sdk)">
+      <Card title={<span id="sdk" className="scroll-mt-24">SDK (@chaconne/verify-sdk)</span>}>
         <pre className="mono overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`import { createClient } from "@chaconne/verify-sdk";
 const c = createClient({ baseUrl: "${SERVICE}", apiKey: process.env.VERIFY_API_KEY /*, x402Signer: account */ });
 
@@ -177,7 +229,7 @@ const bundle = await c.jobs.bundle(job.body.jobId);         // re-check offline 
         <p className="mt-2 break-words text-xs text-fg-3 [overflow-wrap:anywhere]">{zh ? "方法：assets · policies · products · healthz · jobs.{create,get,report,prepareExecution,submit,bundle,bill} · plans.{create,get,toJob} · mandates.{create,get,pause,resume,cancel,prepareStep,submitStep,bundle,bill} · simulations · profiles · templates · shares.{create,getPublic} · a2mcp.{verify,plan,agentTasks} · v6：context.get · events.{list,revisions,impacts} · tasks.{create,get,list,pause,resume,cancel,authorize,prepareStep,explainWait,comparePolicies} · executor.heartbeat · theses · budgetGroups · portfolio · notify · replays · rebalance · recaps.{list,get,share,getPublic} · missions.list · isNotAvailable()。" : "Methods: assets · policies · products · healthz · jobs.{create,get,report,prepareExecution,submit,bundle,bill} · plans.{create,get,toJob} · mandates.{create,get,pause,resume,cancel,prepareStep,submitStep,bundle,bill} · simulations · profiles · templates · shares.{create,getPublic} · a2mcp.{verify,plan,agentTasks} · v6: context.get · events.{list,revisions,impacts} · tasks.{create,get,list,pause,resume,cancel,authorize,prepareStep,explainWait,comparePolicies} · executor.heartbeat · theses · budgetGroups · portfolio · notify · replays · rebalance · recaps.{list,get,share,getPublic} · missions.list · isNotAvailable()."}</p>
       </Card>
 
-      <Card title={zh ? "信任边界（如实）" : "Trust boundary (stated plainly)"}>
+      <Card title={<span id="trust" className="scroll-mt-24">{zh ? "信任边界（如实）" : "Trust boundary (stated plainly)"}</span>}>
         <ul className="list-disc space-y-1 pl-5 text-sm text-neutral-300">
           <li>{zh ? "服务持有一把只签证明（VerificationCertificate / StepCertificate / bundleHash）的私钥；不持有用户资金私钥，不代签付款或交易，不做 relayer。" : "The service holds one attestation key that signs only certificates (VerificationCertificate / StepCertificate / bundleHash); it never holds user fund keys, never signs payments or trades, and runs no relayer."}</li>
           <li>{zh ? "Guard / PlanGuard 强制金额、最小到账、收款人、路由/选择器白名单、期限、nonce 与步序；它们不知道链下股票参考是否正确——这是证明服务的判断，通过 evidenceHash 绑定，任何人可用证据包离线复核。" : "Guard / PlanGuard enforce amount, minimum output, recipient, route/selector allowlists, deadline, nonce and step order; they cannot know whether off-chain stock data was correct — that judgement is the attestation service's, bound by evidenceHash and re-checkable offline from the evidence bundle."}</li>
@@ -186,6 +238,7 @@ const bundle = await c.jobs.bundle(job.body.jobId);         // re-check offline 
         </ul>
         <p className="mt-3 text-sm"><Link className="underline" href="/replay/AAPLx">{t("replay_h")} →</Link> · <Link className="underline" href="/verify-bundle">{t("nav_verify_bundle")} →</Link></p>
       </Card>
+    </div>
     </div>
   );
 }

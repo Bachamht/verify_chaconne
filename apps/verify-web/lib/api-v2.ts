@@ -310,6 +310,21 @@ export interface TaskCreated {
   mandateDraft: MandateDraftView | null;
   thesisDraft: ThesisCard | null;
   budgetAllocation: (Partial<BudgetAllocation> & { state: string }) | null;
+  /** 服务端 tasks/service.ts view() 额外字段（可选：旧部署可能没有） */
+  mode?: TaskMode;
+  params?: Record<string, unknown>;
+  steps?: { planned: number; confirmed: number; lastConfirmedAt: string | null };
+  mandates?: Array<{ mandateId: string; state: string; current?: boolean; spent?: string; stepsDone?: number; maxSteps?: number; deadline?: string; pulledUnexpiredSteps?: number[]; revokeStatus?: "none" | "pending" | "confirmed" }>;
+  evidenceMode?: string;
+}
+/** prepare-step 的响应（tasks/service.ts prepareStep）：200 READY / 409 WAIT；SIMULATION 不签证书 */
+export interface PrepareStepView extends PreparedStep {
+  taskId?: string;
+  taskStatus?: string;
+  blockers?: Task["blockers"];
+  nextCheckAt?: string | null;
+  mode?: "SIMULATION";
+  note?: string;
 }
 /** 服务侧停止（D-088）：响应体里的 note 必须写明只阻止后续签发 */
 export interface TaskStopped {
@@ -333,9 +348,11 @@ export interface PortfolioView {
   /** 服务端实际返回 block:{number,hash,timestamp}；旧字段 blockNumber 兼容保留为可选 */
   block?: { number: number; hash?: string; timestamp?: number | string };
   blockNumber?: number;
-  /** 服务端把 tracedQtyRaw 剥掉了（成本只覆盖可追溯数量，覆盖率走 costCoverageBps）；这里一律当可选 */
-  holdings: Array<{ assetKey: string; displaySymbol?: string; balanceRaw: string; tracedQtyRaw?: string | null; costUsd?: string | null; costCoverageBps?: number | null; source?: string }>;
-  cash?: unknown;
+  /** 服务端把 tracedQtyRaw 剥掉了（成本只覆盖可追溯数量，覆盖率走 coverage.coverageBps）；这里一律当可选。
+   *  unavailable=true 表示链上读取失败：balanceRaw 是 "0" 占位，**不能当真实 0**（V-31） */
+  holdings: Array<{ assetKey: string; symbol?: string; displaySymbol?: string; underlyingId?: string; decimals?: number; balanceRaw: string; unavailable?: boolean; priceUsd?: string | null; tracedQtyRaw?: string | null; costUsd?: string | null; costCoverageBps?: number | null; coverage?: { coverageBps: number | null; unknownQtyRaw?: string; note?: string } | null; traced?: { qtyRaw: string | null; costRaw: string | null; costAssetKey?: string | null } | null; userReported?: { qtyRaw: string; costRaw: string } | null; source?: string }>;
+  /** 资金币种余额（服务端 portfolio/service.ts）：同样带 unavailable */
+  cash?: Array<{ assetKey: string; symbol: string; balanceRaw: string; decimals: number; unavailable: boolean }>;
   authorizations?: unknown[];
   budgetGroups?: unknown[];
   notes?: Record<string, string>;
@@ -427,7 +444,7 @@ export const agentTasks = {
   resume: (id: string) => mapOk<TaskStopped>(api("POST", `v1/tasks/${id}/resume`), normalizeTask),
   cancel: (id: string) => mapOk<TaskStopped>(api("POST", `v1/tasks/${id}/cancel`), normalizeTask),
   authorize: (id: string, body: { typedData: MandateDraftView["typedData"]; signature: `0x${string}`; outputSet: `0x${string}`[]; clientRequestId: string }) => mapOk<TaskCreated & { mandateId?: string }>(api("POST", `v1/tasks/${id}/authorize`, body), normalizeTask),
-  prepareStep: (id: string) => api<PreparedStep & { blockers?: Task["blockers"]; nextCheckAt?: string | null }>("POST", `v1/tasks/${id}/prepare-step`, { refreshKey: `web-${Date.now()}` }),
+  prepareStep: (id: string) => api<PrepareStepView>("POST", `v1/tasks/${id}/prepare-step`, { refreshKey: `web-${Date.now()}` }),
   explainWait: (id: string) => api<ExplainWaitView>("GET", `v1/tasks/${id}/explain-wait`),
   comparePolicies: (id: string, variants: Array<{ label: string; conditions: { version: "conditions/1"; items: Condition[] } }>) => api<PolicyComparison>("POST", `v1/tasks/${id}/compare-policies`, { variants }),
 };
@@ -449,7 +466,8 @@ export const portfolio = {
   get: (owner: string) => mapOk<PortfolioView>(api("GET", `v1/portfolio/${owner}`), normalizeList("holdings")),
 };
 export const recaps = {
-  list: (owner: string, date?: string) => api<RecapView | RecapPendingView>("GET", `v1/recaps${q({ owner, date })}`),
+  /** refresh=1：服务端重新生成（V-35「重新生成」按钮） */
+  list: (owner: string, date?: string, refresh = false) => api<RecapView | RecapPendingView>("GET", `v1/recaps${q({ owner, date, refresh: refresh ? 1 : undefined })}`),
   get: (id: string) => api<RecapView>("GET", `v1/recaps/${id}`),
   share: (id: string, body: { public: boolean; hideAssets?: boolean; hideAmounts?: boolean }) => api<{ recapId: string; share: RecapView["share"] }>("POST", `v1/recaps/${id}/share`, body),
 };
