@@ -128,6 +128,8 @@ async function main(): Promise<void> {
     ...(portfolio ? { holdings: holdingsForLaneD(portfolio) } : {}),
     ...(notify ? { notify: { enqueue: async (p) => { await notify.notify(p.type, p.entityId, p.version, p.summary, p.url, ""); } } } : {}),
   });
+  // 宏观事件（crowsnest 摄入）的改期 / 发布 → Lane D 传播：重算受影响任务的 nextCheckAt / 阻塞 + event.revised|released 通知
+  if (laneD) crowsnest.setEventChangeSink((r) => laneD.propagator.onChange(r));
   /* v6 Lane E：求值器 = Lane B evaluateConditions；任务读取 = verify_tasks + 最近一次求值（含证据 / 上下文 / 事件版本） */
   const lab = new LabService({ db, cfg, registry, evaluator: laneBConditionEvaluator(), taskReader: taskReaderForLaneE(tasks), archive: new DbReplayArchive(db) });
   /* v6 Lane F：C5 Recap——任务钩子 = Lane B（callerId+owner 鉴权），事件钩子 = verify_events（D 财报 + B 宏观同一张表） */

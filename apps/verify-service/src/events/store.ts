@@ -15,6 +15,14 @@ export interface EventUpsertResult {
   inserted: string[];
   revised: string[];
   unchanged: string[];
+  /** 逐条变更（与 Lane D `EventUpsertResult` 同形），供修订传播：created 不传播，revised / released 才发 event.* 通知并重算受影响任务 */
+  changes: EventChangeRecord[];
+}
+export interface EventChangeRecord {
+  event: MarketEvent;
+  change: "created" | "revised" | "released";
+  changedFields: string[];
+  previous: MarketEvent | null;
 }
 
 export interface EventListFilter {
@@ -35,7 +43,7 @@ export class EventStore {
   constructor(private readonly db: Db) {}
 
   async upsert(events: readonly MarketEvent[], receivedAt: Date): Promise<EventUpsertResult> {
-    const res: EventUpsertResult = { inserted: [], revised: [], unchanged: [] };
+    const res: EventUpsertResult = { inserted: [], revised: [], unchanged: [], changes: [] };
     for (const incoming of events) {
       const row = (await this.db.select().from(verifyEvents).where(eq(verifyEvents.id, incoming.id)).limit(1))[0];
       const existing = row ? (row.eventJson as MarketEvent) : null;
@@ -71,7 +79,9 @@ export class EventStore {
         await this.db.update(verifyEvents).set(values).where(eq(verifyEvents.id, ev.id));
         res.revised.push(ev.id);
       }
-      await this.db.insert(verifyEventRevisions).values({ eventId: ev.id, revision: ev.revision, eventJson: ev, changedFields: changedFields(existing, ev), changedAt: receivedAt }).onConflictDoNothing();
+      const fields = changedFields(existing, ev);
+      res.changes.push({ event: ev, change: merged.isNew ? "created" : ev.status === "released" && existing?.status !== "released" ? "released" : "revised", changedFields: fields, previous: existing });
+      await this.db.insert(verifyEventRevisions).values({ eventId: ev.id, revision: ev.revision, eventJson: ev, changedFields: fields, changedAt: receivedAt }).onConflictDoNothing();
     }
     return res;
   }

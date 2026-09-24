@@ -18,8 +18,7 @@ import {
   validateMarketContext,
   type EvidenceMode,
   type EvidenceRecord,
-  type MarketContext,
-} from "@chaconne/core/verify";
+  type MarketContext, type MarketEvent } from "@chaconne/core/verify";
 import { newId } from "../ids";
 import { log } from "../log";
 import type { EventStore } from "../events/store";
@@ -37,11 +36,19 @@ export interface CrowsnestDeps {
   now?: () => Date;
 }
 
+/** 事件修订接收方（Lane D 的 EventRevisionPropagator.onChange 同形）：只收 revised / released */
+export type EventChangeSink = (r: { event: MarketEvent; change: "revised" | "released"; changedFields: string[]; previous: MarketEvent | null }) => Promise<unknown>;
+
 export type IngestOutcome =
   | { ok: true; snapshotId: string; contextHash: string; provenance: "live" | "backfill" | "sample"; fieldStatus: Record<string, string>; events: { inserted: string[]; revised: string[]; unchanged: string[] }; evidence: EvidenceRecord }
   | { ok: false; snapshotId: string; reason: "unreachable" | "invalid_json" | "schema_rejected" | "unknown_public_key" | "signature_invalid"; detail: unknown; evidence: EvidenceRecord };
 
 export class CrowsnestAdapter {
+  private eventSink: EventChangeSink | null = null;
+  /** 后绑定修订传播（index.ts 在 Lane D 装配完成后调用） */
+  setEventChangeSink(sink: EventChangeSink | null): void {
+    this.eventSink = sink;
+  }
   private readonly now: () => Date;
   private readonly fetchImpl: typeof fetch;
   constructor(private readonly d: CrowsnestDeps) {
@@ -114,8 +121,20 @@ export class CrowsnestAdapter {
       error: null,
       createdAt: receivedDate,
     });
-    const events = await this.d.events.upsert(ctx.events, receivedDate);
+    const upserted = await this.d.events.upsert(ctx.events, receivedDate);
+    const events = { inserted: upserted.inserted, revised: upserted.revised, unchanged: upserted.unchanged };
     log.info("上下文快照已摄入", { id, publicKeyId: ctx.publicKeyId, packagedAt: ctx.packagedAt, provenance, stale: Object.entries(fieldStatus).filter(([, s]) => s !== "ok").length, events });
+    // 宏观事件的改期 / 发布同样要传播到受影响任务并发 event.* 通知（此前只有 Lane D 自己摄入的财报会传播——2026-09-23 线上翻动期间 0 条通知的原因之一）
+    if (this.eventSink && provenance === "live") {
+      for (const c of upserted.changes) {
+        if (c.change === "created") continue;
+        try {
+          await this.eventSink({ event: c.event, change: c.change, changedFields: c.changedFields, previous: c.previous });
+        } catch (e) {
+          log.warn("事件修订传播失败（摄入不受影响）", { eventId: c.event.id, revision: c.event.revision, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+    }
     return { ok: true, snapshotId: id, contextHash: hashOfRaw, provenance, fieldStatus, events, evidence };
   }
 

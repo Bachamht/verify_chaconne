@@ -341,3 +341,32 @@ describe("K-09 改条件 = 新授权；D-088 停止语义；K-03 上下文不可
 });
 
 void ((): TestKeypair | null => null);
+
+describe("宏观事件修订传播（crowsnest 摄入 → Lane D 传播，2026-09-23 补接）", () => {
+  it("事件改期 → 受影响任务 nextCheckAt / 阻塞重算 + event.revised 入 outbox；同一 revision 再摄入不重复；created 不传播", async () => {
+    const kp = testKeypair();
+    env = await createTestEnv({ now: "2026-09-18T15:00:00.000Z", crowsnestPubkey: `${kp.publicKeyId}=${kp.publicKeyHex}`, wire: "production" });
+    const { verifyNotificationOutbox } = await import("@chaconne/db");
+    const v0 = fixtureEvent({ id: "crowsnest.fred:MACRO_TIER1:2026-09-18:cpi", kind: "MACRO_TIER1", name: "CPI", dateLocal: "2026-09-18", scheduledAtUtc: "2026-09-18T16:00:00.000Z", firstKnownAt: "2026-09-10T01:05:00.000Z" });
+    await env.crowsnest.ingest(signedContext(kp, { at: "2026-09-18T14:59:00.000Z", events: [v0] }), { endpoint: "test", mode: "LIVE" });
+    // 建一个避开 MACRO_TIER1 窗口的任务（SIMULATION，立即 ACTIVE/WAITING）
+    const create = await api(env, "POST", "/v1/tasks", dcaBody({ conditions: { version: "conditions/1", items: [{ type: "session", allow: ["US_REGULAR"] }, { type: "avoid_event_window", kinds: ["MACRO_TIER1"], beforeMin: 30, afterMin: 20, includeEstimated: true, wholeDayIfDayPrecision: true }] } }));
+    expect(create.status).toBe(201);
+    const taskId = (create.json["task"] as { id: string }).id;
+    const e = env;
+    const eventKeys = async () => (await e.db.select().from(verifyNotificationOutbox)).map((x) => x.idempotencyKey).filter((k) => k.startsWith("event."));
+    expect(await eventKeys()).toEqual([]); // created 不传播（任务自身的 task.* 通知不算）
+    // 改期到 15:20（当前 15:00 → 落入 30 分钟前窗）→ revision 1
+    const v1 = { ...v0, revision: 1, scheduledAtUtc: "2026-09-18T15:20:00.000Z", status: "revised" as const, revisedFrom: { dateLocal: "2026-09-18", scheduledAtUtc: "2026-09-18T16:00:00.000Z" } };
+    const r = await env.crowsnest.ingest(signedContext(kp, { at: "2026-09-18T15:00:30.000Z", events: [v1] }), { endpoint: "test", mode: "LIVE" });
+    expect(r.ok && r.events.revised).toEqual([v0.id]);
+    expect(await eventKeys()).toEqual([`event.revised:${v0.id}:1`]);
+    const t = await api(env, "GET", `/v1/tasks/${taskId}`);
+    const task = t.json["task"] as { blockers: Array<{ code: string }>; nextCheckAt: string | null };
+    expect(task.blockers.map((b) => b.code)).toContain("EVENT_WINDOW_ACTIVE");
+    // 同一 revision 再来 → unchanged，不再入队
+    await env.crowsnest.ingest(signedContext(kp, { at: "2026-09-18T15:01:00.000Z", events: [v1] }), { endpoint: "test", mode: "LIVE" });
+    expect(await eventKeys()).toEqual([`event.revised:${v0.id}:1`]);
+  });
+});
+

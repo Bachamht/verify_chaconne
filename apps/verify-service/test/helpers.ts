@@ -238,6 +238,7 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
     : opts.wire === "production"
       ? createLaneD(cfg, db, registry, { tasks: tasksReaderForLaneD(tasks), commands: taskCommandsForLaneD(tasks), holdings: holdingsForLaneD(portfolio), clock: now, notify: { enqueue: async (p) => { await notify.notify(p.type, p.entityId, p.version, p.summary, p.url, ""); } } })
       : null;
+  if (laneD) crowsnest.setEventChangeSink((r) => laneD.propagator.onChange(r));
   const lab = opts.wire === "production"
     ? new LabService({ db, cfg, registry, evaluator: laneBConditionEvaluator(), taskReader: taskReaderForLaneE(tasks), archive: new DbReplayArchive(db), now })
     : new LabService({ db, cfg, registry, evaluator: opts.labEvaluator ?? createReferenceEvaluator(), taskReader: labTasks, archive: labArchive, now });
