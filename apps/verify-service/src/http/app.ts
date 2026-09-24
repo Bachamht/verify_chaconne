@@ -483,24 +483,25 @@ export function createApp(d: AppDeps) {
   /* ================================================================== */
   /* v6 Lane B：上下文（C1）/ 事件 / 任务（C3）/ 理由卡（C7）——每个能力独立开关，缺省开        */
   /* ================================================================== */
+  /* 免费档鉴权（D-085 / FIX-168 / V-48）：无 key 或「通配 key 且无合法 caller」按匿名放行（callerId 为空串）；函数作用域，供 context / events / missions 共用 */
+  const wildcardKeys = new Set(d.cfg.apiKeys.filter((e) => e.callerId.endsWith("*")).map((e) => e.key));
+  const optionalAuth = (req: Request, res: Response, next: NextFunction) => {
+    const rawKey = (req.header("x-api-key") || req.header("authorization")?.replace(/^Bearer\s+/i, "") || "").trim();
+    // v6 上线实测（2026-09-23）：verify-web 代理对所有请求都带 web:* 通配 key，未连钱包的访客没有
+    // x-verify-caller，走 auth 会被 400 missing_caller —— /agent 首页的上下文卡对每个未连钱包访客都显示
+    // 「尚未就绪 (HTTP 400)」。免费档本就允许匿名，这种情况按匿名处理（只给 agent 档），不该拒。
+    const wildcardWithoutCaller = rawKey && wildcardKeys.has(rawKey) && !/^0x[0-9a-f]{40}$/.test((req.header("x-verify-caller") ?? "").trim().toLowerCase());
+    if (rawKey && !wildcardWithoutCaller) {
+      auth(req, res, next);
+      return;
+    }
+    // 匿名限流由 freeRateLimiter（按 IP，带 RateLimit-* 头）统一处理（V-42）
+    res.setHeader("Cache-Control", "public, max-age=30");
+    res.locals["callerId"] = "";
+    next();
+  };
   {
     /** 免费档（D-085）：无 key 只给 agent 档；带合法 key 可指定档位（internal/display 只给受信调用方） */
-    const wildcardKeys = new Set(d.cfg.apiKeys.filter((e) => e.callerId.endsWith("*")).map((e) => e.key));
-    const optionalAuth = (req: Request, res: Response, next: NextFunction) => {
-      const rawKey = (req.header("x-api-key") || req.header("authorization")?.replace(/^Bearer\s+/i, "") || "").trim();
-      // v6 上线实测（2026-09-23）：verify-web 代理对所有请求都带 web:* 通配 key，未连钱包的访客没有
-      // x-verify-caller，走 auth 会被 400 missing_caller —— /agent 首页的上下文卡对每个未连钱包访客都显示
-      // 「尚未就绪 (HTTP 400)」。免费档本就允许匿名，这种情况按匿名处理（只给 agent 档），不该拒。
-      const wildcardWithoutCaller = rawKey && wildcardKeys.has(rawKey) && !/^0x[0-9a-f]{40}$/.test((req.header("x-verify-caller") ?? "").trim().toLowerCase());
-      if (rawKey && !wildcardWithoutCaller) {
-        auth(req, res, next);
-        return;
-      }
-      // 匿名限流由 freeRateLimiter（按 IP，带 RateLimit-* 头）统一处理（V-42）
-      res.setHeader("Cache-Control", "public, max-age=30");
-      res.locals["callerId"] = "";
-      next();
-    };
     if (d.context && d.cfg.agentC1) {
       const context = d.context;
       const crowsnest = d.crowsnest;
@@ -875,7 +876,7 @@ export function createApp(d: AppDeps) {
     // Missions：事件日历 × 资产覆盖；事件源未接上 → 标注日期的回放任务
     app.get(
       "/v1/missions",
-      auth,
+      optionalAuth,
       wrap(async (req, res) => {
         const now = (d.now ?? (() => new Date()))();
         const horizonDays = Math.min(14, Math.max(1, Number(req.query["horizonDays"] ?? 14) || 14));
@@ -884,7 +885,7 @@ export function createApp(d: AppDeps) {
         const assets = d.service.registry.entries.filter((e) => e.role === "stock_output").map((e) => ({ assetKey: e.assetKey, displaySymbol: e.displaySymbol, underlyingId: e.underlyingId, executionAllowed: e.executionAllowed }));
         const funding = defaultDraftFunding(d.service.registry);
         if (!funding) throw new HttpError(503, "registry_no_stable_input");
-        const owner = typeof req.query["owner"] === "string" && /^0x[0-9a-fA-F]{40}$/.test(req.query["owner"]) ? req.query["owner"].toLowerCase() : callerOf(res).match(/(0x[0-9a-f]{40})$/)?.[1] ?? null;
+        const owner = typeof req.query["owner"] === "string" && /^0x[0-9a-fA-F]{40}$/.test(req.query["owner"]) ? req.query["owner"].toLowerCase() : String(res.locals["callerId"] ?? "").match(/(0x[0-9a-f]{40})$/)?.[1] ?? null;
         res.json({ generatedAt: now.toISOString(), eventsCoverage: events ? "ok" : "unavailable", missions: buildMissions({ now, events, assets, focus, horizonDays, funding, owner }) });
       }),
     );

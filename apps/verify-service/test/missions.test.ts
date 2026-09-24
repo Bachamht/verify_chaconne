@@ -80,3 +80,21 @@ describe("GET /v1/missions", () => {
     expect((r2.json["missions"] as Array<{ kind: string; eventId: string }>)[0]).toMatchObject({ kind: "event", eventId: "crowsnest:MACRO_TIER1:2026-09-18:fomc" });
   });
 });
+
+describe("V-48 未连钱包访客也能看 missions", () => {
+  it("通配 key 不带 caller → 200（按匿名放行，不再 400 missing_caller）；无 key → 200；带地址 caller 仍按 owner 过滤", async () => {
+    const env = await createTestEnv({ extraKeys: "vk_web:web*" });
+    try {
+      const noCaller = await api(env, "GET", "/v1/missions", undefined, {}, "vk_web");
+      expect(noCaller.status).toBe(200);
+      expect(Array.isArray(noCaller.json["missions"])).toBe(true);
+      const anon = await fetch(env.url + "/v1/missions");
+      expect(anon.status).toBe(200);
+      const withOwner = await api(env, "GET", "/v1/missions", undefined, { "x-verify-caller": "0x1111111111111111111111111111111111111111" }, "vk_web");
+      expect(withOwner.status).toBe(200);
+    } finally {
+      await env.close();
+    }
+  });
+});
+
