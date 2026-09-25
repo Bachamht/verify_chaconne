@@ -1,7 +1,6 @@
 /** V-43 公开 /healthz 不暴露 contextUrl / crowsnestKeys；?deep=1 需 key */
 import { afterEach, describe, expect, it } from "vitest";
-import { FIXTURE_STABLE_KEY, FIXTURE_STOCK_KEY } from "@chaconne/core/verify/fixtures";
-import { api, createTestEnv, TEST_API_KEY, type TestEnv } from "./helpers";
+import { api, createTestEnv, type TestEnv } from "./helpers";
 
 let env: TestEnv | null = null;
 afterEach(async () => {
@@ -9,12 +8,6 @@ afterEach(async () => {
   env = null;
 });
 
-const owner = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const verifyParams = { ownerAddress: owner, inputAssetKey: FIXTURE_STABLE_KEY, outputAssetKey: FIXTURE_STOCK_KEY, amountInRaw: "100000000", policyId: "STRICT_LIVE", maxSlippageBps: 50 };
-const a2mcp = async (e: TestEnv, body: unknown) => {
-  const res = await fetch(e.url + "/a2mcp/verify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  return { status: res.status, headers: res.headers, json: (await res.json()) as Record<string, unknown> };
-};
 
 describe("V-43 healthz", () => {
   const full = () => ({ evidenceMode: "fixture", registryVersion: "r", paymentNetwork: "eip155:1952", paid: false, release: { treeHash: "abc" }, startedAt: "2026-09-18T00:00:00.000Z", agent: { c4: true }, agentB: { c1: true, c2: true, crowsnestKeys: ["crowsnest-ctx-k1"], contextUrl: "http://127.0.0.1:8795/context/context.json", playbooks: "playbooks/1.0.0" } });

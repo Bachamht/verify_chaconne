@@ -4,7 +4,7 @@
  */
 import type { MarketCalendar } from "../calendar";
 import { hashCanonical } from "./canonical";
-import type { Bytes32, EvidenceBundle, EvidenceRecord, Hex, MandateStep, PlanReport, StepCertificate, TradeIntent, TradeMandate, VerificationCertificate, VerifyReport } from "./contracts";
+import type { Bytes32, EvidenceBundle, EvidenceRecord, Hex, MandateStep, StepCertificate, TradeIntent, TradeMandate, VerificationCertificate, VerifyReport } from "./contracts";
 import { certificateDigest, EIP712_TYPES_V2, intentDigest, makeDomain, makePlanGuardDomain, mandateDigest, stepCertificateDigest, stepDigest } from "./eip712";
 import { evaluateVerification } from "./evaluate";
 import { buildEffectivePolicy, policyDefinitionHash } from "./policy";

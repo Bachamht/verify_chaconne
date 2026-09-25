@@ -32,7 +32,7 @@ export function NlBox({ onDraft }: { onDraft: (d: Partial<CreateTaskBody>) => vo
   if (!agent) {
     return (
       <Card title={zh ? "用一句话交代（需要已连接的 Agent）" : "Say it in one sentence (needs a connected agent)"} right={<Pill tone="neutral">{zh ? "未检测到 Agent" : "no agent detected"}</Pill>}>
-        <p className="ag-note">{zh ? "这个页面不内置模型。把 Chaconne 的 MCP 服务器接到你的 Agent（任意 MCP host）后，由它把你的话编译成 create_task 调用；金额、规则、权限仍由你在表单里确认。现在请直接用上面的四个入口。" : "This page has no built-in model. Connect the Chaconne MCP server to your agent any MCP host and it compiles your sentence into a create_task call; amounts, rules and permissions are still confirmed by you in the form. For now, use the four entries above."}</p>
+        <p className="ag-note">{zh ? "这个页面不内置模型。把 Chaconne 的 MCP 服务器接到你的 Agent（任意 MCP host）后，由它把你的话编译成 create_task 调用；金额、规则、权限仍由你在表单里确认。现在请直接用上面的入口与表单。" : "This page has no built-in model. Connect the Chaconne MCP server to your agent any MCP host and it compiles your sentence into a create_task call; amounts, rules and permissions are still confirmed by you in the form. For now, use the entries and forms above."}</p>
         <p className="mt-2 text-sm"><Link className="underline" href="/developers">{zh ? "接入说明 →" : "How to connect →"}</Link></p>
       </Card>
     );

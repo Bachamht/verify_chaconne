@@ -1,7 +1,6 @@
 /** V-28 已知路径错误方法 → 405 + Allow */
 import { afterEach, describe, expect, it } from "vitest";
-import { FIXTURE_STABLE_KEY, FIXTURE_STOCK_KEY } from "@chaconne/core/verify/fixtures";
-import { api, createTestEnv, TEST_API_KEY, type TestEnv } from "./helpers";
+import { api, createTestEnv, type TestEnv } from "./helpers";
 
 let env: TestEnv | null = null;
 afterEach(async () => {
@@ -9,12 +8,6 @@ afterEach(async () => {
   env = null;
 });
 
-const owner = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const verifyParams = { ownerAddress: owner, inputAssetKey: FIXTURE_STABLE_KEY, outputAssetKey: FIXTURE_STOCK_KEY, amountInRaw: "100000000", policyId: "STRICT_LIVE", maxSlippageBps: 50 };
-const a2mcp = async (e: TestEnv, body: unknown) => {
-  const res = await fetch(e.url + "/a2mcp/verify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  return { status: res.status, headers: res.headers, json: (await res.json()) as Record<string, unknown> };
-};
 
 describe("V-28 错误方法 → 405 + Allow", () => {
   it("POST /v1/tasks/:id/explain-wait → 405 Allow: GET, HEAD, OPTIONS；DELETE /v1/tasks/:id → 405 列出 GET；未知路径仍 404", async () => {

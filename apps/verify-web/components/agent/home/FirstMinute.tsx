@@ -32,7 +32,7 @@ export function FirstMinute({ assets, onRetryAssets }: { assets: AssetsLoad; onR
   const [sampleIdx, setSampleIdx] = useState(0);
   const [events, setEvents] = useState<Loaded<MarketEvent[]>>({ kind: "idle" });
   const [ctx, setCtx] = useState<Loaded<MarketContext>>({ kind: "idle" });
-  const [run, setRun] = useState<Loaded<{ task: TaskCreated["task"] } | { replay: ReplayRun }>>({ kind: "idle" });
+  const [run, setRun] = useState<Loaded<{ created: TaskCreated } | { replay: ReplayRun }>>({ kind: "idle" });
   const [showForm, setShowForm] = useState(false);
   const [showSample, setShowSample] = useState(false);
   const chosen = stocks.find((a) => a.assetKey === asset) ?? stocks[0] ?? null;
@@ -117,9 +117,9 @@ export function FirstMinute({ assets, onRetryAssets }: { assets: AssetsLoad; onR
             <button className="btn" disabled={!chosen || run.kind === "busy"} aria-expanded={showForm} onClick={() => setShowForm((v) => !v)}>{zh ? "创建模拟任务" : "Create simulation task"}</button>
             <button className="btn-ghost" disabled={!chosen || run.kind === "busy"} onClick={replay}>{zh ? "回放最近 3 天" : "Replay the last 3 days"}</button>
           </div>
-          {showForm && chosen && <div className="mt-3"><TaskForm assets={assets.assets} assetsSource={assets.source} onRetryAssets={onRetryAssets} preset={{ playbookId: sample.playbookId, outputAssetKey: chosen.assetKey, steps: sample.steps, mode: "SIMULATION", conditions: sample.conditions }} allowPlaceholderOwner onCreated={(v) => { setRun({ kind: "ok", v: { task: v.task } }); setShowForm(false); }} /></div>}
+          {showForm && chosen && <div className="mt-3"><TaskForm assets={assets.assets} assetsSource={assets.source} onRetryAssets={onRetryAssets} preset={{ playbookId: sample.playbookId, outputAssetKey: chosen.assetKey, steps: sample.steps, mode: "SIMULATION", conditions: sample.conditions }} allowPlaceholderOwner modeLock="SIMULATION" onCreated={(v) => { setRun({ kind: "ok", v: { created: v } }); setShowForm(false); }} /></div>}
           {run.kind === "nr" && <NotReady what={"POST /v1/replays"} status={run.http} />}
-          {run.kind === "ok" && "task" in run.v && <div className="mt-2 space-y-1"><div className="ag-actions"><ModeTag mode="SIMULATION" /><Pill tone="ok">{t("ag_task_created")}</Pill><Link className="text-sm underline" href={`/agent/tasks/${run.v.task.id}`}>{zh ? "打开任务 →" : "Open the task →"}</Link></div><p className="ag-note">{zh ? `阻塞项 ${run.v.task.blockers.length} 个；下次检查 ${run.v.task.nextCheckAt ? fmtLocal(run.v.task.nextCheckAt, locale) : "未知"}。这就是 Agent 会做的事：条件不满足就等，满足了才签发证书。` : `${run.v.task.blockers.length} blocker(s); next check ${run.v.task.nextCheckAt ? fmtLocal(run.v.task.nextCheckAt, locale) : "unknown"}. That is what the agent does: waits while conditions fail, certifies only when they hold.`}</p></div>}
+          {run.kind === "ok" && "created" in run.v && <FirstMinuteTaskResult value={run.v.created} />}
           {run.kind === "ok" && "replay" in run.v && <div className="mt-2 space-y-1"><div className="ag-actions"><ModeTag mode="REPLAY" /><span className="mono text-xs">{run.v.replay.id}</span></div><p className="ag-note">{zh ? `${run.v.replay.points.length} 个评估点，${run.v.replay.gaps.length} 段缺口（缺口如实显示，不补）；只用当时可知的信息，不输出收益。` : `${run.v.replay.points.length} evaluation point(s), ${run.v.replay.gaps.length} gap(s) shown as gaps; only information known at the time, no returns.`}</p></div>}
         </li>
         <li className="ag-step" data-done={account ? "1" : "0"}>
@@ -130,4 +130,16 @@ export function FirstMinute({ assets, onRetryAssets }: { assets: AssetsLoad; onR
       </ol>
     </Card>
   );
+}
+
+/** 结果的模式只来自响应，不能用入口所选模式替代服务端缺失信息。 */
+export function FirstMinuteTaskResult({ value }: { value: TaskCreated }) {
+  const { locale, t } = useI18n();
+  const zh = locale === "zh";
+  const { task } = value;
+  return <div className="mt-2 space-y-1">
+    <div className="ag-actions"><ModeTag mode={value.mode ?? "unknown"} /><Pill tone="ok">{t("ag_task_created")}</Pill><Link className="text-sm underline" href={`/agent/tasks/${task.id}`}>{zh ? "打开任务 →" : "Open the task →"}</Link></div>
+    <p className="ag-note">{zh ? `阻塞项 ${task.blockers.length} 个；下次检查 ${task.nextCheckAt ? fmtLocal(task.nextCheckAt, locale) : "未知"}。` : `${task.blockers.length} blocker(s); next check ${task.nextCheckAt ? fmtLocal(task.nextCheckAt, locale) : "unknown"}.`}</p>
+    <p className="ag-note">{value.mode === "SIMULATION" ? (zh ? "这是条件模拟，不签发交易证书，也不会执行买入。打开任务可查看等待原因。" : "This simulates the conditions. No trade certificate is signed and no buy is executed. Open the task to see why it is waiting.") : value.mode === "LIVE" ? (zh ? "服务返回的是实盘任务。创建成功不代表已经授权或成交，请打开任务确认下一步。" : "The service returned a live task. Creation does not mean authorization or execution; open the task to review its next step.") : (zh ? "服务未返回任务模式。请打开任务核对，不能据此认定为模拟或实盘。" : "The service did not return a task mode. Open the task to check; this response does not establish simulation or live mode.")}</p>
+  </div>;
 }

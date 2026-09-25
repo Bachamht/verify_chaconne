@@ -17,7 +17,7 @@ export const API_TIMEOUT_MS = 30_000;
 /** 超过这个时间页面显示「还在加载 · 重试」 */
 export const API_SLOW_MS = 10_000;
 
-export async function api<T>(method: string, path: string, body?: unknown, headers: Record<string, string> = {}, opts: { timeoutMs?: number } = {}): Promise<{ status: number; data: T; headers: Headers }> {
+export async function api<T>(method: string, path: string, body?: unknown, headers: Record<string, string> = {}, opts: { timeoutMs?: number; credentials?: RequestCredentials } = {}): Promise<{ status: number; data: T; headers: Headers }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? API_TIMEOUT_MS);
   let res: Response;
@@ -27,6 +27,7 @@ export async function api<T>(method: string, path: string, body?: unknown, heade
       headers: { "content-type": "application/json", ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
       cache: "no-store",
+      credentials: opts.credentials ?? "same-origin",
       signal: ctrl.signal,
     });
   } catch (e) {

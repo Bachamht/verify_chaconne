@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { PlanCandidate, PlanGoal, PlanNextStep, PolicyId } from "@chaconne/core/verify";
 import { api, type AssetsResponse } from "@/lib/api";
-import { plans, templates, type PlanView, type TemplateView } from "@/lib/api-v2";
+import { plans, simulations, templates, type PlanView, type SimulationView, type TemplateView } from "@/lib/api-v2";
+import { prefillFromSimulationGoal } from "@/components/planPrefill";
 import { useI18n } from "@/lib/i18n";
 import { useAccount } from "@/lib/useAccount";
 import { reasonText } from "@/lib/reasons";
@@ -55,6 +56,8 @@ export function PlanClient() {
   const [err, setErr] = useState<string | null>(null);
   const [plan, setPlan] = useState<PlanView | null>(null);
   const [tpl, setTpl] = useState<TemplateView | null>(null);
+  /** /play 承接（from_simulation）：只预填结构与示例预算，owner / deadline 由用户当场确认 */
+  const [fromSim, setFromSim] = useState<{ kind: "busy" } | { kind: "ok"; v: SimulationView } | { kind: "err"; msg: string } | null>(null);
   const [mandateFor, setMandateFor] = useState<PlanCandidate[] | null>(null);
   /** 三策略对照：选中的策略驱动候选表的结论与阻断列（null = 规划时所选策略） */
   const [viewPolicy, setViewPolicy] = useState<PolicyId | null>(null);
@@ -77,6 +80,11 @@ export function PlanClient() {
   useEffect(() => {
     const tid = sp.get("template");
     if (tid) templates.get(tid).then((r) => r.status === 200 && setTpl(r.data));
+    const simId = sp.get("from_simulation");
+    if (simId && /^[A-Za-z0-9_\-:.]{1,128}$/.test(simId)) {
+      setFromSim({ kind: "busy" });
+      simulations.get(simId).then((r) => setFromSim(r.status === 200 ? { kind: "ok", v: r.data } : { kind: "err", msg: apiError(r, locale) })).catch(() => setFromSim({ kind: "err", msg: t("ag_service_unreachable") }));
+    }
     const pid = sp.get("plan");
     if (pid) setPlan((cur) => (cur?.planId === pid ? cur : cur)); // 不清空
     if (pid) plans.get(pid).then((r) => r.status === 200 && setPlan((cur) => (cur?.planId === r.data.planId ? cur : r.data)));
@@ -93,6 +101,21 @@ export function PlanClient() {
     setImpact(s.maxPriceImpactBps ?? 100);
     setDeviation(s.maxReferenceDeviationBps ?? 300);
   }, [tpl]);
+
+  // 承接试玩：goal 里的资产 / 方向 / 策略 / 限额 / 示例预算进表单（资产精度已知时才换算预算）
+  useEffect(() => {
+    if (fromSim?.kind !== "ok" || !assets) return;
+    const pre = prefillFromSimulationGoal(fromSim.v.goal, (k) => assets.assets.find((a) => a.assetKey.toLowerCase() === k.toLowerCase())?.tokenDecimals ?? null);
+    if (!pre) return;
+    setSide(pre.side);
+    setLegs(pre.legs);
+    setInputs(pre.inputs);
+    setPolicy(pre.policy);
+    setSlippage(pre.slippage);
+    setImpact(pre.impact);
+    setDeviation(pre.deviation);
+    if (pre.budgetHuman) setBudget(pre.budgetHuman);
+  }, [fromSim, assets]);
 
   const stableAssets = useMemo(() => assets?.assets.filter((a) => a.role === "stable_input") ?? [], [assets]);
   const stockAssets = useMemo(() => assets?.assets.filter((a) => a.role === "stock_output") ?? [], [assets]);
@@ -190,6 +213,13 @@ export function PlanClient() {
       {tpl && (
         <p className="text-sm text-fg-2">
           {t("remix_credit")} <span className="text-neutral-200">{tpl.authorName ?? tpl.templateId}</span> · {t("remix_note")}
+        </p>
+      )}
+      {fromSim && (
+        <p className="text-sm text-fg-2" role="status">
+          {fromSim.kind === "busy" ? (zh ? "正在读取刚才的试玩方案…" : "Loading the simulation you just ran…")
+            : fromSim.kind === "ok" ? (zh ? "已带入刚才试玩的资产、策略与限额；预算可以改成你自己的。钱包与截止时间请在下面确认。" : "Assets, policy and limits from your simulation are filled in; change the budget to your own. Confirm the wallet and deadline below.")
+            : (zh ? `没有读到那次试玩（${fromSim.msg}），下面是空白表单。` : `That simulation could not be loaded (${fromSim.msg}); the form below starts blank.`)}
         </p>
       )}
 

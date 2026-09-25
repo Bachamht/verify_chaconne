@@ -8,13 +8,15 @@ import { ChainBadge, ModeBadge } from "./Header";
 import { LogoMark, Wordmark } from "./Logo";
 
 export function Footer() {
-  const { t, demo, setDemo } = useI18n();
+  const { t, locale, demo, setDemo } = useI18n();
   return (
     <footer className="verify-footer">
       <div className="verify-footer-inner">
         <div className="verify-footer-top">
           <Link href="/" className="verify-brand" aria-label={t("brand")}><LogoMark size={27} /><Wordmark /></Link>
-          <nav className="verify-footer-links" aria-label="Chaconne Agent resources">
+          <nav className="verify-footer-links" aria-label={locale === "zh" ? "产品与资源" : "Product & resources"}>
+            <Link href="/start">{locale === "zh" ? "开始体验" : "Get started"}</Link>
+            <Link href="/agent">{locale === "zh" ? "完整工作区" : "Workspace"}</Link>
             <Link href="/developers">{t("nav_dev")}</Link>
             <Link href="/verify-bundle">{t("nav_verify_bundle")}</Link>
             <Link href="/replay/AAPLx">{t("replay_h")}</Link>

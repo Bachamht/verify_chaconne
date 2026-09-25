@@ -5,12 +5,15 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeftRight, CalendarSearch, HelpCircle, ShoppingCart } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeftRight, ArrowUpRight, CalendarSearch, HelpCircle, ShoppingCart, Sparkles } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { marketContext, type CreateTaskBody } from "@/lib/api-v2";
 import { assetByKey, loadAssets, type AssetsLoad } from "@/lib/assets";
 import { useAccount } from "@/lib/useAccount";
+import { agentTaskHistory } from "@/lib/history";
 import { Card } from "@/components/ui";
+import { RecentAgentTasks } from "../tasks/RecentAgentTasks";
 import { Crew } from "../crew/Crew";
 import { Missions } from "../crew/Missions";
 import { nextUpcomingEvent } from "../crew/nextEvent";
@@ -32,6 +35,15 @@ export function AgentHome() {
   const [assets, setAssets] = useState<AssetsLoad>({ assets: [], source: "none", evidenceMode: null });
   const [entry, setEntry] = useState<EntryId | null>((sp.get("entry") as EntryId | null) && ENTRIES.some((e) => e.id === sp.get("entry")) ? (sp.get("entry") as EntryId) : null);
   const [crewData, setCrewData] = useState<Record<string, unknown>>({});
+  // 新用户优先（VERIFY-UX-REVIEW P1）：没连钱包也没有本机任务时，先给一个能直接跑的示例入口；四个功能入口保留在其后
+  const [localTasks, setLocalTasks] = useState<number | null>(null);
+  useEffect(() => {
+    const read = () => setLocalTasks(agentTaskHistory().length);
+    read();
+    window.addEventListener("verify:history", read);
+    return () => window.removeEventListener("verify:history", read);
+  }, []);
+  const newcomer = !account && localTasks === 0;
   // 草稿来源三选一：一句话编译（NlBox）> 会话交接（Missions「用这个草案」）> 查询串（playbook / asset / steps / inputAssetKey / perStepAmountRaw / mode）
   const [draft, setDraft] = useState<DraftHandoff | null>(null);
   useEffect(() => {
@@ -96,6 +108,13 @@ export function AgentHome() {
         <h1 className="ag-h1">{zh ? "把今晚的事交给你的 Agent" : "Hand tonight to your agent"}</h1>
         <p className="ag-lead">{zh ? "它先读市场上下文和事件日历，按你定的条件等待或行动；每一步先核验、签证书，再由合约按你签过的边界执行。单笔核验、规划、试玩与验证器在页头「工具」里。" : "It reads the market context and the event calendar, waits or acts by the conditions you set; every step is verified and certified before a contract executes it inside the boundaries you signed. Single verification, planning, play and the verifier live under Tools in the header."}</p>
       </header>
+      {newcomer && (
+        <Card className="ag-start-here" title={zh ? "第一次来？先免费模拟一个任务" : "First time here? Simulate a task for free"} right={<Sparkles size={18} aria-hidden="true" className="text-brand-300" />}>
+          <p className="ag-note">{zh ? "不需要钱包，也不需要自备 Agent。选一个模板、设一个模拟预算，看看它现在会行动还是等待；满意后再决定是否授权真实交易。下面的四个入口和表单是完整工作区，随时可用。" : "No wallet or agent of your own needed. Pick a template and a simulation budget to see whether it would act or wait now; decide about real trades afterwards. The four entries and forms below are the full workspace and stay available."}</p>
+          <div className="ag-actions mt-3"><Link className="btn" href="/start">{zh ? "免费体验一个任务" : "Try a task for free"}<ArrowUpRight size={15} aria-hidden="true" /></Link><Link className="btn-ghost" href="/agent/tasks">{zh ? "我已经有任务" : "I already have tasks"}</Link></div>
+        </Card>
+      )}
+      {!account && localTasks !== null && localTasks > 0 && <RecentAgentTasks />}
       <div className="ag-entries" role="tablist" aria-label={zh ? "四个入口" : "Four entries"}>
         {ENTRIES.map((e) => {
           const Icon = ICONS[e.id];
@@ -103,8 +122,8 @@ export function AgentHome() {
         })}
       </div>
       {entry && <Card title={t(ENTRIES.find((e) => e.id === entry)!.key)}><EntryPanel entry={entry} assets={assets.assets} assetsSource={assets.source} onRetryAssets={reloadAssets} preset={preset} taskId={taskId} /></Card>}
-      <NlBox onDraft={(d: Partial<CreateTaskBody>) => { setDraft({ playbookId: d.playbookId, mode: d.mode, params: d.params, conditions: d.conditions }); setEntry("buy"); }} />
       <FirstMinute assets={assets} onRetryAssets={reloadAssets} />
+      <NlBox onDraft={(d: Partial<CreateTaskBody>) => { setDraft({ playbookId: d.playbookId, mode: d.mode, params: d.params, conditions: d.conditions }); setEntry("buy"); }} />
       <Card title={zh ? "今晚的 Crew" : "Tonight's crew"} right={<span className="ag-note">{zh ? "台词只复述真实响应字段" : "lines quote real response fields only"}</span>}><Crew data={crewData} /></Card>
       <Missions eventsKnown={eventsKnown} />
     </>

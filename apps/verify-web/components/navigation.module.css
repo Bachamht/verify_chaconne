@@ -1,0 +1,113 @@
+.header .desktopNav {
+  gap: 22px;
+}
+
+.header a.startLink {
+  align-self: center;
+  min-height: 36px;
+  padding: 8px 13px;
+  border: 1px solid #8054b6;
+  border-radius: 8px;
+  background: #352044;
+  color: #eedcff;
+}
+
+.header a.startLink:hover,
+.header a.startLink[aria-current="page"] {
+  border-color: #bc93ff;
+  background: #442959;
+}
+
+.header a.startLink::after,
+.header .toolsPanel a::after {
+  display: none;
+}
+
+.header :global(.verify-tools-toggle)[data-active="true"] {
+  color: var(--color-fg-1);
+}
+
+.header :global(.verify-tools-toggle)[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.toolsPanel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: -84px;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  width: 405px;
+  max-height: calc(100dvh - 100px);
+  overflow-y: auto;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  background: #100b19;
+  box-shadow: 0 18px 40px #0007;
+}
+
+.groupTitle {
+  margin: 0 0 8px;
+  padding: 3px 10px;
+  color: var(--color-fg-3);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.toolGroup ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.header .toolsPanel a {
+  min-height: 40px;
+  padding: 10px;
+  border-radius: 7px;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.header .toolsPanel a:hover,
+.header .toolsPanel a[aria-current="page"] {
+  background: #261833;
+  color: #e8d5ff;
+}
+
+.header :is(a, button):focus-visible {
+  outline: 2px solid #c7a5ff;
+  outline-offset: 3px;
+}
+
+.header .mobilePrimary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mobileResources {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-line);
+}
+
+@media (max-width: 1080px) {
+  .header .desktopNav {
+    display: none;
+  }
+
+  .header :global(.verify-menu-toggle) {
+    display: flex;
+  }
+
+  .header :global(.verify-header-actions) {
+    margin-left: auto;
+  }
+}
+
+@media (min-width: 1081px) {
+  .header .mobilePanel {
+    display: none;
+  }
+}

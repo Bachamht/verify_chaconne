@@ -8,7 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
 import { budgetGroups, notReady, portfolio, type BudgetGroupView, type PortfolioView } from "@/lib/api-v2";
 import { apiError } from "@/lib/errors";
-import { formatAmount, formatTime } from "@/lib/format";
+import { formatAmount, formatTime, humanToRaw } from "@/lib/format";
 import { assetByKey, loadAssets, type AssetEntry } from "@/lib/assets";
 import { balanceOf } from "@/lib/wallet";
 import { Card, Pill } from "@/components/ui";
@@ -28,7 +28,14 @@ export function Funds() {
   const [groupId, setGroupId] = useState(sp.get("group") ?? "");
   const [bg, setBg] = useState<L<BudgetGroupView>>({ kind: "idle" });
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: "", inputAssetKey: "", capRaw: "", cashFloorRaw: "0" });
+  // 表单用人类单位（VERIFY-UX-REVIEW P2）：按所选资金币种精度换成最小单位再提交；raw 只在开发者视图
+  const [form, setForm] = useState({ name: "", inputAssetKey: "", cap: "", cashFloor: "0" });
+  const formStable = assetByKey(assets, form.inputAssetKey);
+  const formDecimals = formStable?.tokenDecimals ?? null;
+  // 小数位不能超过币种精度：humanToRaw 会静默截断，这里先按精度拒绝（与新手引导的预算校验一致）
+  const withinPrecision = (v: string) => (v.split(".")[1]?.length ?? 0) <= (formDecimals ?? 0);
+  const capRaw = formDecimals === null || !withinPrecision(form.cap) ? null : humanToRaw(form.cap, formDecimals);
+  const cashFloorRaw = formDecimals === null ? null : /^(0+(\.0+)?)?$/.test(form.cashFloor.trim()) ? "0" : !withinPrecision(form.cashFloor) ? null : humanToRaw(form.cashFloor, formDecimals);
   useEffect(() => { void loadAssets().then((r) => setAssets(r.assets)); }, []);
   const [pfSeq, setPfSeq] = useState(0);
   const reloadPf = useCallback(() => setPfSeq((n) => n + 1), []);
@@ -67,7 +74,7 @@ export function Funds() {
     setCreating(true);
     const now = new Date();
     const end = new Date(now.getTime() + 30 * 86_400_000);
-    const r = await budgetGroups.create({ owner: owner.toLowerCase() as `0x${string}`, name: form.name, inputAssetKey: form.inputAssetKey, periodStart: now.toISOString(), periodEnd: end.toISOString(), capRaw: form.capRaw, cashFloorRaw: form.cashFloorRaw || "0" }).catch(() => null);
+    const r = await budgetGroups.create({ owner: owner.toLowerCase() as `0x${string}`, name: form.name, inputAssetKey: form.inputAssetKey, periodStart: now.toISOString(), periodEnd: end.toISOString(), capRaw: capRaw ?? "0", cashFloorRaw: cashFloorRaw ?? "0" }).catch(() => null);
     setCreating(false);
     if (!r) return setBg({ kind: "nr", http: 0 });
     if (notReady(r)) return setBg({ kind: "nr", http: r.status });
@@ -151,10 +158,11 @@ export function Funds() {
           <div className="ag-form">
             <label>{zh ? "名称" : "Name"}<input className="field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
             <label>{zh ? "资金币种" : "Currency"}<select className="field" value={form.inputAssetKey} onChange={(e) => setForm({ ...form, inputAssetKey: e.target.value })}><option value="">—</option>{assets.filter((a) => a.role === "stable_input").map((a) => <option key={a.assetKey} value={a.assetKey}>{a.displaySymbol}</option>)}</select></label>
-            <label>{zh ? "上限（最小单位）" : "Cap (raw)"}<input className="field mono" inputMode="numeric" value={form.capRaw} onChange={(e) => setForm({ ...form, capRaw: e.target.value.trim() })} /></label>
-            <label>{zh ? "现金下限（最小单位）" : "Cash floor (raw)"}<input className="field mono" inputMode="numeric" value={form.cashFloorRaw} onChange={(e) => setForm({ ...form, cashFloorRaw: e.target.value.trim() })} /></label>
+            <label>{zh ? "本期上限" : "Cap per period"}{formStable ? ` (${formStable.displaySymbol})` : ""}<input className="field" inputMode="decimal" value={form.cap} onChange={(e) => setForm({ ...form, cap: e.target.value.trim() })} aria-invalid={form.cap !== "" && capRaw === null} placeholder="100" />{form.cap !== "" && formDecimals !== null && capRaw === null && <span className="ag-field-err" role="alert">{zh ? "请输入正数金额，小数位不超过该币种精度。" : "Enter a positive amount within the token's decimal precision."}</span>}</label>
+            <label>{zh ? "现金下限" : "Cash floor"}{formStable ? ` (${formStable.displaySymbol})` : ""}<input className="field" inputMode="decimal" value={form.cashFloor} onChange={(e) => setForm({ ...form, cashFloor: e.target.value.trim() })} aria-invalid={cashFloorRaw === null} />{formDecimals !== null && cashFloorRaw === null && <span className="ag-field-err" role="alert">{zh ? "现金下限须为 0 或正数金额。" : "The cash floor must be 0 or a positive amount."}</span>}</label>
           </div>
-          <div className="ag-actions mt-3"><button className="btn" disabled={creating || !valid || !form.name || !/^eip155:\d+:0x[0-9a-fA-F]{40}$/.test(form.inputAssetKey) || !/^\d+$/.test(form.capRaw)} onClick={create}>{zh ? "创建（30 天周期）" : "Create (30-day period)"}</button></div>
+          <div className="ag-actions mt-3"><button className="btn" disabled={creating || !valid || !form.name || !formStable || capRaw === null || cashFloorRaw === null} onClick={create}>{zh ? "创建（30 天周期）" : "Create (30-day period)"}</button>{capRaw && formStable && <span className="ag-note">{zh ? "服务额度上限 " : "Service cap "}{formatAmount(capRaw, formStable.tokenDecimals, formStable.displaySymbol)}{zh ? "；现金下限 " : "; cash floor "}{formatAmount(cashFloorRaw ?? "0", formStable.tokenDecimals, formStable.displaySymbol)}</span>}</div>
+          {capRaw && <details className="demo-hide mt-2"><summary className="ag-note cursor-pointer">{t("ag_dev_view")}</summary><span className="mono text-xs text-fg-3">capRaw = {capRaw} · cashFloorRaw = {cashFloorRaw ?? "0"}</span></details>}
         </Card>
       </div>
     </>

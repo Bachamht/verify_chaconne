@@ -8,6 +8,7 @@ export default tseslint.config(
     ignores: [
       "**/node_modules/**",
       ".qa-live/**", // 服务器侧真金测试工件（gitignore，本地存在勿 lint）
+      "qa/**", // 真实链路测试装备（qa/real-path）：自带 package.json 的独立子项目，脚本大量在浏览器上下文里执行（document/window），不按仓库规则 lint
       "**/.next/**",
       "**/.next-*/**", // 零空窗发版的旁路构建目录（.next-build / .next-prev）与本地预览产物
       "**/dist/**",

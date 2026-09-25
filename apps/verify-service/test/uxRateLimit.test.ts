@@ -1,7 +1,7 @@
 /** V-42 免 key 端点按 IP 限流（RateLimit-* / Retry-After / 429 JSON）；带合法 key 不计；/a2mcp/verify 60 s 内同 (owner, 标的, 金额, 策略) 复用 job */
 import { afterEach, describe, expect, it } from "vitest";
 import { FIXTURE_STABLE_KEY, FIXTURE_STOCK_KEY } from "@chaconne/core/verify/fixtures";
-import { api, createTestEnv, TEST_API_KEY, type TestEnv } from "./helpers";
+import { api, createTestEnv, type TestEnv } from "./helpers";
 
 let env: TestEnv | null = null;
 afterEach(async () => {

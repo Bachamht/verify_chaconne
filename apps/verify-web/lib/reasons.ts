@@ -10,7 +10,7 @@ const R: Record<string, { en: string; zh: string }> = {
   REFERENCE_STALE: { en: "Stock reference is older than the policy allows.", zh: "股票参考价比策略允许的更旧。" },
   REFERENCE_PROVISIONAL: { en: "Only a provisional / unofficial close is available — not accepted as an official close.", zh: "只有临时/非正式收盘 — 不作为正式收盘接受。" },
   REFERENCE_DEVIATION_EXCEEDED: { en: "Executable price deviates from the reference beyond your limit.", zh: "可执行单价相对参考价的偏差超过你的上限。" },
-  MARKET_OUTSIDE_REGULAR: { en: "US market is outside regular hours — STRICT_LIVE refuses (this is correct, not a failure).", zh: "美股不在常规时段 — STRICT_LIVE 拒绝（这是正确结果，不是故障）。" },
+  MARKET_OUTSIDE_REGULAR: { en: "US market is outside regular hours — the live-price policy refuses to trade now (this is correct, not a failure).", zh: "美股不在常规时段 — 实时价格策略此时拒绝交易（这是正确结果，不是故障）。" },
   CLOSE_SESSION_MISMATCH: { en: "The close on file is not the most recent completed trading day.", zh: "收盘记录不是最近一个已完成交易日。" },
   SOURCE_CONFLICT: { en: "Two sources disagree beyond tolerance.", zh: "两个来源冲突超过容忍。" },
   TOKEN_UNIT_UNVERIFIED: { en: "Token-to-share conversion is not verified.", zh: "代币与股数换算未核验。" },

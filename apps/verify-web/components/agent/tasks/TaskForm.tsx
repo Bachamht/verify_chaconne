@@ -23,13 +23,15 @@ import { amountParamOf, buildTaskBody, defaultPerStep, validateDraft, type Draft
 
 const PLACEHOLDER_OWNER = "0x0000000000000000000000000000000000000001";
 
-export function TaskForm({ assets, assetsSource, onRetryAssets, preset, allowPlaceholderOwner = false, onCreated }: {
+export function TaskForm({ assets, assetsSource, onRetryAssets, preset, allowPlaceholderOwner = false, modeLock, onCreated }: {
   assets: AssetEntry[];
   assetsSource?: "live" | "cache" | "none";
   onRetryAssets?: () => void;
   preset?: Partial<TaskDraft>;
   /** 第一分钟：没连钱包也能建模拟任务（占位 owner，页面明示） */
   allowPlaceholderOwner?: boolean;
+  /** 无钱包体验入口固定模拟，预填草案不能覆盖；其它入口仍可选模式。 */
+  modeLock?: "SIMULATION";
   /** 给了就不跳转（第一分钟在原地显示结果） */
   onCreated?: (v: TaskCreated) => void;
 }) {
@@ -43,9 +45,10 @@ export function TaskForm({ assets, assetsSource, onRetryAssets, preset, allowPla
   const [outputKey, setOutputKey] = useState(preset?.outputAssetKey ?? "");
   const [inputKey, setInputKey] = useState(preset?.inputAssetKey ?? "");
   const [steps, setSteps] = useState(String(preset?.steps ?? SAMPLES.find((s) => s.playbookId === playbookId)?.steps ?? 3));
-  const [amount, setAmount] = useState(preset?.perStepHuman ?? "1");
-  const [amountTouched, setAmountTouched] = useState(!!preset?.perStepHuman);
-  const [mode, setMode] = useState<"SIMULATION" | "LIVE">(preset?.mode ?? "SIMULATION");
+  const [amountState, setAmountState] = useState({ value: preset?.perStepHuman ?? "1", touched: !!preset?.perStepHuman });
+  const { value: amount, touched: amountTouched } = amountState;
+  const [selectedMode, setMode] = useState<"SIMULATION" | "LIVE">(preset?.mode ?? "SIMULATION");
+  const mode = modeLock ?? selectedMode;
   const [custom, setCustom] = useState(preset?.conditions ?? null);
   const [balance, setBalance] = useState<{ kind: "idle" } | { kind: "busy" } | { kind: "ok"; raw: string } | { kind: "unknown" }>({ kind: "idle" });
   const [busy, setBusy] = useState(false);
@@ -62,7 +65,7 @@ export function TaskForm({ assets, assetsSource, onRetryAssets, preset, allowPla
     if (preset.outputAssetKey) setOutputKey(preset.outputAssetKey);
     if (preset.inputAssetKey) setInputKey(preset.inputAssetKey);
     if (preset.steps) setSteps(String(preset.steps));
-    if (preset.perStepHuman) { setAmount(preset.perStepHuman); setAmountTouched(true); }
+    if (preset.perStepHuman) setAmountState({ value: preset.perStepHuman, touched: true });
     if (preset.mode) setMode(preset.mode);
     if (preset.conditions) setCustom(preset.conditions);
     if (preset.ownerAddress && !connected && /^0x[0-9a-fA-F]{40}$/.test(preset.ownerAddress)) setOwner(preset.ownerAddress);
@@ -74,6 +77,7 @@ export function TaskForm({ assets, assetsSource, onRetryAssets, preset, allowPla
   const conditions = custom ?? sample.conditions;
   const stepsN = Number(steps) || 0;
   const perStep = amountParamOf(playbookId) === "perStepAmountRaw";
+  const multipleSteps = stepsN > 1;
   const effectiveOwner = valid ? owner : allowPlaceholderOwner && mode === "SIMULATION" ? PLACEHOLDER_OWNER : "";
   const decimals = stable?.tokenDecimals ?? null;
 
@@ -88,13 +92,16 @@ export function TaskForm({ assets, assetsSource, onRetryAssets, preset, allowPla
     return () => { alive = false; };
   }, [valid, owner, stable]);
   useEffect(() => {
-    if (amountTouched || !stable) return;
-    if (balance.kind === "ok") setAmount(defaultPerStep(balance.raw, stable.tokenDecimals, perStep ? stepsN : 1));
-    else if (balance.kind === "unknown" || balance.kind === "idle") setAmount("1");
+    if (!stable) return;
+    const next = balance.kind === "ok" ? defaultPerStep(balance.raw, stable.tokenDecimals, perStep ? stepsN : 1)
+      : balance.kind === "unknown" || balance.kind === "idle" ? "1" : null;
+    // Preset and balance effects may share a render; read the latest combined state.
+    if (next !== null) setAmountState((current) => current.touched || current.value === next ? current : { ...current, value: next });
   }, [balance, stable, stepsN, perStep, amountTouched]);
 
   const rawAmount = decimals !== null ? humanToRaw(amount, decimals) : null;
-  const total = useMemo(() => (rawAmount && decimals !== null ? formatAmount(perStep ? (BigInt(rawAmount) * BigInt(Math.max(1, stepsN))).toString() : rawAmount, decimals, stable?.displaySymbol) : "—"), [rawAmount, decimals, perStep, stepsN, stable]);
+  // amountRaw 也是每次金额；累计预算按实际步数计算，不由请求字段名决定。
+  const total = useMemo(() => (rawAmount && decimals !== null && Number.isInteger(stepsN) && stepsN > 0 ? formatAmount((BigInt(rawAmount) * BigInt(stepsN)).toString(), decimals, stable?.displaySymbol) : "—"), [rawAmount, decimals, stepsN, stable]);
   const draft: TaskDraft = { playbookId, outputAssetKey: stock?.assetKey ?? "", inputAssetKey: stable?.assetKey ?? "", steps: stepsN, perStepHuman: amount, mode, conditions, maxPremiumBps: 30 };
 
   async function submit() {
@@ -113,7 +120,7 @@ export function TaskForm({ assets, assetsSource, onRetryAssets, preset, allowPla
     }
     if (notReady(r)) return setNr(r.status);
     if (r.status !== 201 && r.status !== 200) return setMsg(apiError(r, locale));
-    remember({ kind: "mandate", id: r.data.task.id, title: `${sample.title[locale]} ${stock?.displaySymbol ?? ""} (${mode})`, owner: effectiveOwner.toLowerCase() });
+    remember({ kind: "agent_task", id: r.data.task.id, title: `${sample.title[locale]} ${stock?.displaySymbol ?? ""}`, owner: effectiveOwner.toLowerCase() });
     if (onCreated) onCreated(r.data);
     else router.push(`/agent/tasks/${r.data.task.id}`);
   }
@@ -128,11 +135,11 @@ export function TaskForm({ assets, assetsSource, onRetryAssets, preset, allowPla
         <label>{t("ag_f_asset")}<select className="field" value={stock?.assetKey ?? ""} onChange={(e) => setOutputKey(e.target.value)} aria-invalid={!!errs["outputAssetKey"]}>{stocks.length === 0 && <option value="">—</option>}{stocks.map((a) => <option key={a.assetKey} value={a.assetKey}>{a.displaySymbol} · {a.underlyingId.split(":")[1]}</option>)}</select>{err("outputAssetKey")}</label>
         <label>{t("ag_f_playbook")}<select className="field" value={playbookId} onChange={(e) => { setPlaybookId(e.target.value as PlaybookId); setCustom(null); const s = SAMPLES.find((x) => x.playbookId === e.target.value); if (s) setSteps(String(s.steps)); }}>{SAMPLES.map((s) => <option key={s.playbookId} value={s.playbookId}>{s.title[locale]}</option>)}</select></label>
         <label>{t("ag_f_steps")}<input className="field" inputMode="numeric" value={steps} onChange={(e) => setSteps(e.target.value)} aria-invalid={!!errs["steps"]} />{err("steps")}</label>
-        <label>{t("ag_f_pay_with")}<select className="field" value={stable?.assetKey ?? ""} onChange={(e) => { setInputKey(e.target.value); setAmountTouched(false); }} aria-invalid={!!errs["inputAssetKey"]}>{stables.length === 0 && <option value="">—</option>}{stables.map((a) => <option key={a.assetKey} value={a.assetKey}>{a.displaySymbol}</option>)}</select>{err("inputAssetKey")}</label>
-        <label>{perStep ? t("ag_f_per_step") : t("ag_f_amount_total")}{stable ? ` (${stable.displaySymbol})` : ""}<input className="field" inputMode="decimal" value={amount} onChange={(e) => { setAmount(e.target.value); setAmountTouched(true); }} aria-invalid={!!errs["perStepAmountRaw"]} />{err("perStepAmountRaw")}
-          <span className="ag-note">{balance.kind === "busy" ? t("ag_balance_loading") : balance.kind === "ok" && stable ? `${t("ag_balance")} ${formatAmount(balance.raw, stable.tokenDecimals, stable.displaySymbol)}` : balance.kind === "unknown" ? t("ag_balance_unknown") : ""}{perStep && stepsN > 0 ? ` · ${t("ag_total_line", { n: stepsN, total })}` : ""}</span>
+        <label>{t("ag_f_pay_with")}<select className="field" value={stable?.assetKey ?? ""} onChange={(e) => { setInputKey(e.target.value); setAmountState((current) => ({ ...current, touched: false })); }} aria-invalid={!!errs["inputAssetKey"]}>{stables.length === 0 && <option value="">—</option>}{stables.map((a) => <option key={a.assetKey} value={a.assetKey}>{a.displaySymbol}</option>)}</select>{err("inputAssetKey")}</label>
+        <label>{multipleSteps ? t("ag_f_per_step") : t("ag_f_amount_total")}{stable ? ` (${stable.displaySymbol})` : ""}<input className="field" inputMode="decimal" value={amount} onChange={(e) => { setAmountState({ value: e.target.value, touched: true }); }} aria-invalid={!!errs["perStepAmountRaw"]} />{err("perStepAmountRaw")}
+          <span className="ag-note">{balance.kind === "busy" ? t("ag_balance_loading") : balance.kind === "ok" && stable ? `${t("ag_balance")} ${formatAmount(balance.raw, stable.tokenDecimals, stable.displaySymbol)}` : balance.kind === "unknown" ? t("ag_balance_unknown") : ""}{multipleSteps ? ` · ${zh ? `最多 ${stepsN} 次，累计上限 ${total}` : `Up to ${stepsN} steps, ${total} maximum in total`}` : ""}</span>
         </label>
-        <label>{t("ag_f_mode")}<select className="field" value={mode} onChange={(e) => setMode(e.target.value as "SIMULATION" | "LIVE")}><option value="SIMULATION">{t("ag_mode_sim_opt")}</option><option value="LIVE">{t("ag_mode_live_opt")}</option></select></label>
+        {modeLock ? <div><p>{t("ag_f_mode")}</p><p className="ag-note mt-2">{t("ag_mode_sim_opt")}</p></div> : <label>{t("ag_f_mode")}<select className="field" value={mode} onChange={(e) => setMode(e.target.value as "SIMULATION" | "LIVE")}><option value="SIMULATION">{t("ag_mode_sim_opt")}</option><option value="LIVE">{t("ag_mode_live_opt")}</option></select></label>}
         <OwnerField owner={owner} setOwner={setOwner} connected={connected} />
         {err("ownerAddress")}
       </div>

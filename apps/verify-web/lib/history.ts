@@ -1,15 +1,19 @@
 "use client";
-/** 「我的任务」（V-10）：只记在本浏览器的 localStorage，不上传；服务端没有列表接口，任务靠 id 隔离。 */
-export type HistoryKind = "job" | "plan" | "mandate" | "simulation";
+/** 本浏览器打开任务的索引，只保存在 localStorage；不代表钱包同步或服务端任务状态。 */
+export type HistoryKind = "job" | "plan" | "mandate" | "simulation" | "agent_task";
 export interface HistoryItem {
   kind: HistoryKind;
   id: string;
   title: string;
   createdAt: string;
   owner?: string | null;
+  /** New-visitor simulations reopen in their isolated guided review. */
+  isolatedSimulation?: boolean;
 }
 const KEY = "verify_history_v1";
 const MAX = 200;
+/** Shared with the isolated onboarding session; no task or draft storage is swept by prefix. */
+export const ONBOARDING_SNAPSHOT_PREFIX = "verify_onboarding_snapshot_v1:";
 
 export function history(): HistoryItem[] {
   try {
@@ -35,7 +39,9 @@ export function remember(item: Omit<HistoryItem, "createdAt"> & { createdAt?: st
 
 export function forget(kind: HistoryKind, id: string): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(history().filter((x) => !(x.kind === kind && x.id === id))));
+    const items = history();
+    removeIsolatedSnapshots(items.filter((x) => x.kind === kind && x.id === id));
+    localStorage.setItem(KEY, JSON.stringify(items.filter((x) => !(x.kind === kind && x.id === id))));
     window.dispatchEvent(new CustomEvent("verify:history"));
   } catch {
     /* ignore */
@@ -44,6 +50,7 @@ export function forget(kind: HistoryKind, id: string): void {
 
 export function clearHistory(): void {
   try {
+    removeIsolatedSnapshots(history());
     localStorage.removeItem(KEY);
     window.dispatchEvent(new CustomEvent("verify:history"));
   } catch {
@@ -51,7 +58,30 @@ export function clearHistory(): void {
   }
 }
 
+/** Delete snapshots first, so a failed removal does not leave hidden data behind a forgotten record. */
+function removeIsolatedSnapshots(items: HistoryItem[]): void {
+  for (const item of items) {
+    if (item.isolatedSimulation && isAgentTask(item)) localStorage.removeItem(ONBOARDING_SNAPSHOT_PREFIX + item.id);
+  }
+}
+
+/** 早期 TaskForm 曾把 tsk_ 记录为 mandate；读取时兼容，不改写旧数据。 */
+export function isAgentTask(item: HistoryItem): boolean {
+  return item.kind === "agent_task" || (item.kind === "mandate" && item.id.startsWith("tsk_"));
+}
+
+export function agentTaskHistory(items: HistoryItem[] = history()): HistoryItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (!isAgentTask(item) || seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
 export function hrefFor(item: HistoryItem): string {
+  if (item.isolatedSimulation && isAgentTask(item)) return "/start?task=" + encodeURIComponent(item.id);
+  if (isAgentTask(item)) return `/agent/tasks/${encodeURIComponent(item.id)}`;
   switch (item.kind) {
     case "job":
       return `/jobs/${item.id}`;
@@ -61,5 +91,7 @@ export function hrefFor(item: HistoryItem): string {
       return `/tasks/${item.id}`;
     case "simulation":
       return `/play?simulation=${item.id}`;
+    case "agent_task":
+      return `/agent/tasks/${encodeURIComponent(item.id)}`;
   }
 }

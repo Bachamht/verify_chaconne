@@ -1,5 +1,5 @@
 /** 证据包（v5 W3 · V-01～V-04）：离线哈希重算、签名验证（注入 viem）、规则重算、篡改任一字段 → 指出失败层 */
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import { privateKeyToAccount } from "viem/accounts";
 import { verifyMessage, verifyTypedData } from "viem";
 import {
@@ -7,7 +7,6 @@ import {
   buildPlanReport,
   buildReport,
   bundleHash,
-  certificateDigest,
   EIP712_TYPES,
   EIP712_TYPES_V2,
   intentDigest,

@@ -91,7 +91,7 @@ const ZH_EN: Record<string, string> = {
   "未配置 FINNHUB_API_KEY": "FINNHUB_API_KEY is not configured on this deployment",
 };
 
-const CJK = /[㐀-鿿＀-￯　-〿]/;
+const CJK = /[\u3400-\u9fff\uff00-\uffef\u3000-\u303f]/;
 
 /** 字段级 details[].message（core validate.ts 等）的中文 → 英文 */
 const DETAIL_ZH_EN: Record<string, string> = {

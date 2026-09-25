@@ -22,6 +22,7 @@ import { Card, Json, Pill } from "@/components/ui";
 import { LoadingState, ModeTag, NotReady, Skeleton, Toast, useToast } from "../shared";
 import { Blockers } from "./Blockers";
 import { blockerSentence, statusLabel, taskTitle } from "./taskTitle";
+import { taskSummary } from "./taskSummary";
 
 const TONE: Record<string, "ok" | "warn" | "bad" | "info" | "brand" | "neutral"> = { ACTIVE: "ok", STEP_PREPARED: "ok", COMPLETED: "ok", WAITING: "warn", PAUSED: "warn", AWAITING_AUTHORIZATION: "info", DRAFT: "neutral", PARTIAL: "info", REVOKE_PENDING: "bad", REVOKED: "bad", EXPIRED: "neutral", CANCELLED: "neutral" };
 
@@ -122,12 +123,21 @@ export function TaskDetail({ id }: { id: string }) {
   const paused = task.status === "PAUSED";
   const stable = assetByKey(assets, task.goal?.budget?.inputAssetKeys?.[0]);
   const steps = state.v.steps;
+  const summary = taskSummary(state.v, locale);
   return (
     <>
       <header>
         <div className="ag-actions"><h1 className="ag-h1 text-xl">{taskTitle(task, state.v.params, assets, locale)}</h1><Pill tone={TONE[task.status] ?? "neutral"}>{statusLabel(task.status, locale)}</Pill><ModeTag mode={mode} /></div>
         <p className="ag-lead">{steps ? `${t("ag_steps_done", { done: steps.confirmed, max: steps.planned })} · ` : ""}{zh ? "条件" : "conditions"} {task.conditions.items.length} · {zh ? "创建" : "created"} {formatTime(task.createdAt, locale)} · {zh ? "更新" : "updated"} {formatTime(task.updatedAt, locale)}</p>
       </header>
+      <Card title={zh ? "现在在哪一步" : "Where this task stands"} className="ag-summary">
+        <dl className="ag-kv">
+          <dt>{zh ? "进度" : "Progress"}</dt><dd>{summary.progress}</dd>
+          <dt>{zh ? "谁来执行" : "Who executes"}</dt><dd>{summary.executor}</dd>
+          <dt>{zh ? "还缺什么" : "What is missing"}</dt><dd>{summary.missing ?? (zh ? "不缺；按条件等待或行动。" : "Nothing; it waits or acts by its conditions.")}</dd>
+          <dt>{zh ? "下一步" : "Next"}</dt><dd>{summary.next}</dd>
+        </dl>
+      </Card>
       <Card title={zh ? "动作" : "Actions"}>
         <div className="ag-actions">
           {mandateDraft && task.status === "AWAITING_AUTHORIZATION" && <button className="btn" disabled={pending !== null} onClick={() => authorize(mandateDraft)}>{pending === "authorize" ? t("wallet_connecting") : zh ? "签署授权（TradeMandate）" : "Sign the authorization (TradeMandate)"}</button>}
