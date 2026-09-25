@@ -1,0 +1,1 @@
+ALTER TABLE "verify_tasks" ADD COLUMN "agent_turn_json" jsonb;

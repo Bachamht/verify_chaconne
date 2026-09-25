@@ -3,7 +3,7 @@
  * v2 接口的唯一接入点（E2 定稿）。所有字段名假设集中在此，集成时与 C2 对齐只改这一处。
  * 路径：interfaces.md §10.4；类型：@chaconne/core/verify v2 增补。
  */
-import type { Bill, BudgetAllocation, BudgetGroup, Condition, ConditionSet, DeltaExplanation, EventImpact, EvidenceBundle, MandateEvalStatus, MandateState, MandateStep, MandateStepState, MarketContext, MarketEvent, PersonaId, PlanCandidate, PlanGoal, PlanReport, PlaybookId, PolicyComparison, Product, ReplayRun, ShareStatus, StepCertificate, Task, ThesisCard, TradeMandate } from "@chaconne/core/verify";
+import type { Bill, BudgetAllocation, BudgetGroup, Condition, ConditionSet, DeltaExplanation, EventImpact, EvidenceBundle, MandateEvalStatus, MandateState, MandateStep, MandateStepState, MarketContext, MarketEvent, PersonaId, PlanCandidate, PlanGoal, PlanReport, PlaybookId, PolicyComparison, Product, ReplayRun, ShareStatus, StepCertificate, Task, TaskScope, ThesisCard, TradeMandate, AgentTradeIntent, AgentTurn } from "@chaconne/core/verify";
 import { api } from "./api";
 
 /* ---------- 假设的响应形态（C2 定稿后在此对齐） ---------- */
@@ -124,6 +124,8 @@ export interface PublicReport {
   goal: { side: "buy" | "sell"; outputSymbols: string[]; inputSymbol: string; policyId: string; amountDisplay: string | null };
   result: { verdict: string | null; completionBps: number | null; spentDisplay: string | null; receivedDisplay: string | null; feesDisplay: string | null; reasons: Array<{ code: string; severity: string }>; waitingOn: string | null };
   evidence: { evidenceHash: string | null; reportHash: string | null; bundleUrl: string | null; txHashes: string[] };
+  /** 单笔核验（kind=job）的公开核验结果：行情事实 + 核验时间；没执行时页面据此说清「这只是核验」 */
+  check?: { executionEligible: boolean; marketSession: string; comparisonStatus: string; evaluatedAt: string; policyId: string; reference: { kind: string; priceUsd: string; deviationBps: number | null; sourcePublishedAt: string | null; tradingDate: string | null } | null; executableUsdPerShare: string | null; adverseImpactBps: number | null; quoteReceivedAt: string | null } | null;
   templateId: string | null;
   evidenceMode: "LIVE" | "FIXTURE" | "SIMULATION";
   createdAt: string;
@@ -198,7 +200,7 @@ export const mandates = {
 };
 export const jobsV2 = {
   bundle: (id: string) => api<EvidenceBundle>("GET", `v1/jobs/${id}/bundle`),
-  bill: (id: string) => mapOk<Bill | null>(api("GET", `v1/jobs/${id}/bill`), normalizeBill),
+  bill: (id: string, owner?: string | null) => mapOk<Bill | null>(api("GET", `v1/jobs/${id}/bill${owner ? q({ owner }) : ""}`), normalizeBill),
 };
 export const products = { list: () => api<{ products: Product[] }>("GET", "v1/products") };
 export const simulations = {
@@ -265,6 +267,7 @@ export function normalizePublicReport(raw: unknown): PublicReport | null {
       bundleUrl: ((r["verifier"] as { bundleUrl?: string | null } | undefined)?.bundleUrl ?? null),
       txHashes: execution?.txHash ? [execution.txHash] : [],
     },
+    check: (result["check"] as PublicReport["check"] | undefined) ?? null,
     templateId: (r["templateId"] as string | null | undefined) ?? null,
     evidenceMode: ((r["evidenceMode"] as string | null | undefined) ?? "LIVE") as PublicReport["evidenceMode"],
     createdAt: (r["createdAt"] as string | undefined) ?? new Date(0).toISOString(),
@@ -298,13 +301,22 @@ export interface MandateDraftView {
 export interface CreateTaskBody {
   clientRequestId: string;
   ownerAddress: string;
-  playbookId: PlaybookId;
-  params: Record<string, unknown>;
-  conditions: { version: "conditions/1"; items: Condition[] };
+  /** 缺省 = 目标式任务（agent_goal）：没有模板，参数由 scope 合成 */
+  playbookId?: PlaybookId;
+  params?: Record<string, unknown>;
+  conditions?: { version: "conditions/1"; items: Condition[] };
   mode: TaskMode;
+  /** 策略文本（签名之外，留版本）；关注的事件；示例来源 */
+  strategy?: string;
+  watchEvents?: { kinds: string[] };
+  exampleId?: string;
   thesis?: Record<string, unknown>;
   budgetGroupId?: string;
+  /** 授权范围（CV-D16）：缺省由计划推导；网页表单显式带目标描述 / 信任档位 / 签发方式 / 允许卖出 */
+  scope?: Partial<Omit<TaskScope, "version" | "hardConditions">> & { hardConditions?: Condition[] };
 }
+/** 模板任务（固定自动化）的请求体：playbookId / params / conditions 必填 */
+export type TemplateTaskBody = CreateTaskBody & { playbookId: PlaybookId; params: Record<string, unknown>; conditions: { version: "conditions/1"; items: Condition[] } };
 export interface TaskCreated {
   task: Task;
   mandateDraft: MandateDraftView | null;
@@ -316,7 +328,16 @@ export interface TaskCreated {
   steps?: { planned: number; confirmed: number; lastConfirmedAt: string | null };
   mandates?: Array<{ mandateId: string; state: string; current?: boolean; spent?: string; stepsDone?: number; maxSteps?: number; deadline?: string; pulledUnexpiredSteps?: number[]; revokeStatus?: "none" | "pending" | "confirmed" }>;
   evidenceMode?: string;
+  /** CV-D16：签名绑定的哈希与边界说明 */
+  bindingHash?: string;
+  scopeBoundary?: string;
+  /** CV-D16 批次 3：当前轮次（issuance=agent 的任务） */
+  agentTurn?: AgentTurn | null;
+  /** 服务端时间线（状态 / 授权 / 意图 / agent 状态…） */
+  timeline?: TaskTimelineEntry[];
 }
+export interface TaskTimelineEntry { at: string; type: string; from?: string; to?: string; note?: string; ref?: string }
+export type { AgentTradeIntent, AgentTurn };
 /** prepare-step 的响应（tasks/service.ts prepareStep）：200 READY / 409 WAIT；SIMULATION 不签证书 */
 export interface PrepareStepView extends PreparedStep {
   taskId?: string;
@@ -462,6 +483,14 @@ export const records = {
   list: (owner: string) => api<{ owner: string; items: RecordItem[] }>("GET", `v1/records${q({ owner })}`),
 };
 
+/** FIX-175：钱包签发的 Agent API key */
+export interface ApiKeyItem { id: string; label: string; hint: string; ownerAddress: string; callerId: string; createdAt: string; lastUsedAt: string | null }
+export const apiKeys = {
+  list: (owner: string) => api<{ owner: string; keys: ApiKeyItem[] }>("GET", `v1/keys${q({ owner })}`),
+  issue: (body: { ownerAddress: string; label: string; nonce: string; issuedAt: string; signature: string }) => api<ApiKeyItem & { apiKey: string; error?: string; message?: string }>("POST", "v1/keys", body),
+  revoke: (id: string, owner: string) => api<ApiKeyItem & { revoked: true }>("DELETE", `v1/keys/${id}${q({ owner })}`),
+};
+
 export const agentTasks = {
   create: (body: CreateTaskBody) => mapOk<TaskCreated & { error?: string; message?: string; details?: unknown }>(api("POST", "v1/tasks", body), normalizeTask),
   /** owner 给了就带 ?owner=：代理按它当调用方，不受浏览器 cookie 里记住的别的地址影响 */
@@ -473,6 +502,15 @@ export const agentTasks = {
   authorize: (id: string, body: { typedData: MandateDraftView["typedData"]; signature: `0x${string}`; outputSet: `0x${string}`[]; clientRequestId: string }) => mapOk<TaskCreated & { mandateId?: string }>(api("POST", `v1/tasks/${id}/authorize`, body), normalizeTask),
   prepareStep: (id: string) => api<PrepareStepView>("POST", `v1/tasks/${id}/prepare-step`, { refreshKey: `web-${Date.now()}` }),
   explainWait: (id: string) => api<ExplainWaitView>("GET", `v1/tasks/${id}/explain-wait`),
+  /** 批次 7：删除 = 归档（运行中的先取消）；详情仍可开 */
+  archive: (id: string) => mapOk<TaskCreated & { archived?: boolean; cancelled?: boolean; note?: string }>(api("DELETE", `v1/tasks/${id}`), normalizeTask),
+  /** CV-D16 批次 6：owner 改简报（策略文本 / 关注的事件） */
+  updateBrief: (id: string, body: { strategy?: string; watchEvents?: { kinds: string[] }; note?: string }) => mapOk<TaskCreated>(api("POST", `v1/tasks/${id}/brief`, body), normalizeTask),
+  /** 扮演 agent（/start 体验）与真实 agent 共用同一套端点 */
+  submitIntent: (id: string, body: { clientRequestId: string; kind?: "buy" | "sell"; outputAssetKey: string; amountInRaw: string; decision: AgentTradeIntent["decision"] }) => api<{ intent: AgentTradeIntent; taskId: string; taskStatus: string }>("POST", `v1/tasks/${id}/intents`, body),
+  agentStatus: (id: string, body: { status: "accepted" | "declined" | "needs_evidence" | "plan_revised" | "ended"; note: string; agent?: { name: string }; requestedEvidence?: string[]; plan?: { text?: string; conditions?: Condition[] }; strategy?: string }) => mapOk<TaskCreated>(api("POST", `v1/tasks/${id}/agent-status`, body), normalizeTask),
+  /** CV-D16 批次 2：agent 交易意图列表（决策记录 + 四道核验） */
+  intents: (id: string, owner?: string | null) => api<{ intents: AgentTradeIntent[] }>("GET", `v1/tasks/${id}/intents${owner ? q({ owner }) : ""}`),
   comparePolicies: (id: string, variants: Array<{ label: string; conditions: { version: "conditions/1"; items: Condition[] } }>) => api<PolicyComparison>("POST", `v1/tasks/${id}/compare-policies`, { variants }),
 };
 export const marketContext = {

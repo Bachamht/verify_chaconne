@@ -9,7 +9,8 @@ import { formatTime } from "@/lib/format";
 import { loadAssets, type AssetEntry } from "@/lib/assets";
 import type { Task } from "@chaconne/core/verify";
 import { Card, EmptyState, Pill } from "@/components/ui";
-import { LoadingState, NotReady, OwnerField, Skeleton, useOwnerInput } from "../shared";
+import { LoadingState, NotReady, OwnerField, Skeleton, useOwnerInput, useToast, Toast } from "../shared";
+import { RecordsList } from "@/components/MyTasks";
 import { blockerSentence, statusLabel, taskTitle } from "./taskTitle";
 
 const TONE: Record<string, "ok" | "warn" | "bad" | "info" | "brand" | "neutral"> = { ACTIVE: "ok", STEP_PREPARED: "ok", COMPLETED: "ok", WAITING: "warn", PAUSED: "warn", AWAITING_AUTHORIZATION: "info", DRAFT: "neutral", PARTIAL: "info", REVOKE_PENDING: "bad", REVOKED: "bad", EXPIRED: "neutral", CANCELLED: "neutral" };
@@ -22,6 +23,18 @@ export function TasksList() {
   const [state, setState] = useState<{ kind: "idle" } | { kind: "busy" } | { kind: "nr"; http: number } | { kind: "err"; msg: string } | { kind: "ok"; tasks: Task[] }>({ kind: "idle" });
   const [seq, setSeq] = useState(0);
   const reload = useCallback(() => setSeq((n) => n + 1), []);
+  const [toast, setToast] = useToast();
+  const [deleting, setDeleting] = useState<string | null>(null);
+  async function remove(task: Task) {
+    const running = !["COMPLETED", "CANCELLED", "REVOKED", "EXPIRED"].includes(task.status);
+    if (!window.confirm(running ? (zh ? "这个任务还在运行：删除会先取消它（服务侧停止签发；已取走的证书到期前仍可能执行），然后从列表移除。继续？" : "This task is still running: deleting cancels it first (issuance stops; pulled certificates may execute until they expire), then removes it from your lists. Continue?") : (zh ? "从列表移除这个任务？记录与证据保留，详情仍可打开。" : "Remove this task from your lists? Records and evidence are kept; the detail page stays open."))) return;
+    setDeleting(task.id);
+    const r = await agentTasks.archive(task.id).catch(() => null);
+    setDeleting(null);
+    if (!r || r.status !== 200) return setToast({ text: r ? apiError(r, locale) : t("ag_service_unreachable"), tone: "bad" });
+    setToast({ text: zh ? "已删除。" : "Deleted.", tone: "ok" });
+    reload();
+  }
   useEffect(() => { void loadAssets().then((r) => setAssets(r.assets)); }, []);
   useEffect(() => {
     if (!valid) return;
@@ -53,7 +66,7 @@ export function TasksList() {
         {state.kind === "busy" && <div className="mt-3 space-y-2" aria-busy="true"><LoadingState onRetry={reload} /><Skeleton lines={3} /></div>}
         {state.kind === "nr" && <div className="mt-3"><NotReady what="GET /v1/tasks?owner" status={state.http} onRetry={reload} /></div>}
         {state.kind === "err" && <p className="mt-2 text-sm text-bad">{state.msg}</p>}
-        {state.kind === "ok" && (state.tasks.length === 0 ? <div className="mt-3"><EmptyState compact title={zh ? "还没有任务" : "No tasks yet"} description={zh ? "先试一次不需要钱包的模拟，也可以继续设置详细计划。" : "Try a simulation without a wallet, or configure a detailed plan."} primary={{ href: "/start", label: zh ? "试一次模拟" : "Try a simulation" }} secondary={{ href: "/agent?entry=buy", label: zh ? "详细创建" : "Advanced setup" }} /></div> : (
+        {state.kind === "ok" && (state.tasks.length === 0 ? <div className="mt-3"><EmptyState compact title={zh ? "还没有任务" : "No tasks yet"} description={zh ? "写一个目标交给 Agent，或者先用示例任务走一轮。" : "Hand a goal to your agent, or try an example round first."} primary={{ href: "/agent", label: zh ? "把目标交给 Agent" : "Hand a goal to your agent" }} secondary={{ href: "/start", label: zh ? "先走一轮示例" : "Try an example round" }} /></div> : (
           <ul className="ag-list mt-2">
             {state.tasks.map((task) => (
               <li key={task.id} className="ag-task-row">
@@ -63,13 +76,20 @@ export function TasksList() {
                   {task.mandateIds.length > 0 && <Pill tone="info">{zh ? `授权 ${task.mandateIds.length}` : `${task.mandateIds.length} authorization(s)`}</Pill>}
                 </div>
                 <p className="ag-note">{nextLine(task)}</p>
-                <p className="ag-note">{zh ? "创建" : "created"} {formatTime(task.createdAt, locale)} · <Link className="underline" href={`/agent/tasks/${task.id}`}>{zh ? "详情" : "details"}</Link> · <Link className="underline" href={`/agent/lab?taskId=${task.id}#wait`}>{t("ag_entry_wait")}</Link></p>
+                <p className="ag-note">{zh ? "创建" : "created"} {formatTime(task.createdAt, locale)} · <Link className="underline" href={`/agent/tasks/${task.id}`}>{zh ? "详情" : "details"}</Link> · <button type="button" className="underline text-bad" disabled={deleting === task.id} onClick={() => void remove(task)}>{deleting === task.id ? "…" : (zh ? "删除" : "delete")}</button></p>
               </li>
             ))}
           </ul>
         ))}
-        <p className="ag-note mt-3"><Link className="underline" href="/agent?entry=buy">{zh ? "详细创建计划 →" : "Configure a detailed plan →"}</Link></p>
+        <p className="ag-note mt-3"><Link className="underline" href="/agent">{zh ? "把目标交给 Agent →" : "Hand a goal to your agent →"}</Link></p>
       </Card>
+      {valid && (
+        <Card title={zh ? "全部记录" : "All records"}>
+          <p className="ag-note mb-2">{zh ? "这个钱包名下的任务、授权、规划、单笔核验与模拟，按时间倒序。" : "Tasks, authorizations, plans, single verifications and simulations under this wallet, newest first."}</p>
+          <RecordsList account={owner} />
+        </Card>
+      )}
+      <Toast msg={toast} onClose={() => setToast(null)} />
     </>
   );
 }

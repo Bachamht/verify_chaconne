@@ -78,7 +78,7 @@ describe("Y-01 参数校验 / Y-02 全部可 SIMULATION", () => {
     expect(sell.status).toBe(400);
     expect((sell.json["details"] as Array<{ code: string }>)[0]!.code).toBe("require_one_of");
     const catalog = await api(env, "GET", "/v1/playbooks");
-    expect((catalog.json["playbooks"] as Array<{ id: string }>).map((p) => p.id)).toEqual(["session_dca", "event_aware_accumulate", "discount_watch", "target_sell", "portfolio_rebalance"]);
+    expect((catalog.json["playbooks"] as Array<{ id: string }>).map((p) => p.id)).toEqual(["session_dca", "event_aware_accumulate", "discount_watch", "target_sell", "portfolio_rebalance", "agent_goal"]); // agent_goal 内置（CV-D16 批次 6）
     expect(JSON.stringify(catalog.json)).not.toMatch(/not_in_fed_blackout/); // K-07：模板默认不含
   });
 
@@ -110,24 +110,29 @@ describe("Y-01 参数校验 / Y-02 全部可 SIMULATION", () => {
 });
 
 describe("Y-03 Session DCA 跨交易日推进、错过不合并（LIVE：授权 → prepare-step → 回执 → 下一交易日）", () => {
-  it("Y-03 / K-03 / K-10：条件通过才签发；同日第二步 STEP_GAP_NOT_ELAPSED 且 nextCheckAt=下一交易日开盘；每步金额 = perStep；证书 effectivePolicyHash 展开 conditionsHash，证据包可复算", async () => {
+  it("Y-03 / K-03 / K-10：条件通过才签发；同日第二步 STEP_GAP_NOT_ELAPSED 且 nextCheckAt=下一交易日开盘；每步金额 = perStep；证书 effectivePolicyHash 展开 scopeHash（CV-D16），证据包可复算", async () => {
     env = (await envWithContext()).e;
     const created = await api(env, "POST", "/v1/tasks", dcaBody({ mode: "LIVE" }));
     expect(created.status, JSON.stringify(created.json)).toBe(201);
     const task = created.json["task"] as { id: string; status: string; conditions: ConditionSet };
     expect(task.status).toBe("AWAITING_AUTHORIZATION");
-    const draft = created.json["mandateDraft"] as { mandate: { perStepCap: string; budgetCap: string; maxSteps: string; effectivePolicyHash: string }; conditionsHash: string };
+    const draft = created.json["mandateDraft"] as { mandate: { perStepCap: string; budgetCap: string; maxSteps: string; effectivePolicyHash: string }; conditionsHash: string; scopeHash: string };
     expect(draft.mandate.perStepCap).toBe("100000000");
     expect(draft.mandate.budgetCap).toBe("200000000");
     expect(draft.mandate.maxSteps).toBe("2");
-    expect(draft.conditionsHash).toBe(task.conditions.hash);
+    // CV-D16：签名绑定的是 scopeHash（范围），不是计划条件的 conditionsHash
+    const task2 = created.json["task"] as { scope: { outputAssetKeys: string[]; budgetCapRaw: string; issuance: string }; scopeHash: string };
+    expect(task2.scope).toMatchObject({ outputAssetKeys: [STOCK_KEY], budgetCapRaw: "200000000", perStepCapRaw: "100000000", maxSteps: 2, allowSell: false, trustTier: "platform_only", issuance: "auto", hardConditions: [] });
+    expect(draft.scopeHash).toBe(task2.scopeHash);
+    expect(draft.conditionsHash).toBe(task2.scopeHash);
+    expect(created.json["bindingHash"]).toBe(task2.scopeHash);
     // 未授权就 prepare → 409
     expect((await api(env, "POST", `/v1/tasks/${task.id}/prepare-step`, {})).status).toBe(409);
     const { r: auth } = await authorize(env, task.id);
     expect(auth.status, JSON.stringify(auth.json)).toBe(201);
     expect((auth.json["task"] as { status: string }).status).toBe("ACTIVE");
     const mandateId = ((auth.json["mandates"] as Array<{ mandateId: string; conditionsHash: string }>)[0]!).mandateId;
-    expect((auth.json["mandates"] as Array<{ conditionsHash: string }>)[0]!.conditionsHash).toBe(task.conditions.hash);
+    expect((auth.json["mandates"] as Array<{ conditionsHash: string; current: boolean }>)[0]).toMatchObject({ conditionsHash: task2.scopeHash, current: true });
 
     const p = await api(env, "POST", `/v1/tasks/${task.id}/prepare-step`, {});
     expect(p.status, JSON.stringify(p.json)).toBe(200);
@@ -158,7 +163,7 @@ describe("Y-03 Session DCA 跨交易日推进、错过不合并（LIVE：授权 
     const b = await api(env, "GET", `/v1/tasks/${task.id}/bundle`);
     expect(b.status, JSON.stringify(b.json).slice(0, 300)).toBe(200);
     const bundle = b.json as unknown as TaskEvidenceBundle;
-    expect((bundle.effectivePolicy.params as { conditionsHash?: string }).conditionsHash).toBe(task.conditions.hash);
+    expect((bundle.effectivePolicy.params as { conditionsHash?: string }).conditionsHash).toBe(task2.scopeHash);
     expect(bundle.thesis?.taskId).toBe(task.id);
     expect(bundle.certificates.length).toBeGreaterThan(0);
     const checks = await verifyBundleOffline(bundle, {
@@ -173,6 +178,9 @@ describe("Y-03 Session DCA 跨交易日推进、错过不合并（LIVE：授权 
     const tampered = structuredClone(bundle);
     (tampered.conditions.items[1] as { days: number }).days = 0;
     expect(verifyTaskBundleExtras(tampered).find((c) => c.id === "conditions_hash")!.ok).toBe(false);
+    const tamperedScope = structuredClone(bundle);
+    (tamperedScope.task.scope as { budgetCapRaw: string }).budgetCapRaw = "999999999999";
+    expect(verifyTaskBundleExtras(tamperedScope).find((c) => c.id === "scope_hash")!.ok).toBe(false);
     const cert = bundle.certificates[0]!.typedData as TypedDataLike;
     expect((cert.message as { effectivePolicyHash: string }).effectivePolicyHash).toBe(bundle.effectivePolicy.effectivePolicyHash);
     void (bundle.evidence as EvidenceRecord[]);
@@ -250,31 +258,63 @@ describe("Y-05 / Y-06", () => {
   });
 });
 
-describe("K-09 改条件 = 新授权；D-088 停止语义；K-03 上下文不可达", () => {
-  it("K-09 改条件后 → AWAITING_AUTHORIZATION、新 conditionsHash；旧授权 PAUSED 且列出已取走未过期证书；旧签名再授权 → 422", async () => {
+describe("CV-D16 改计划条件不重签、范围锁定；D-088 停止语义；K-03 上下文不可达", () => {
+  it("CV-D16 改计划条件 → 授权不变（current 仍 true、状态不回 AWAITING_AUTHORIZATION）、新 conditionsHash；触碰硬约束 → 409 scope_locked；旧范围签名再授权 → 422 scope_hash_mismatch", async () => {
     env = (await envWithContext()).e;
-    const created = await api(env, "POST", "/v1/tasks", dcaBody({ mode: "LIVE" }));
-    const task = created.json["task"] as { id: string; conditions: ConditionSet };
+    const created = await api(env, "POST", "/v1/tasks", dcaBody({ mode: "LIVE", scope: { objective: "每个交易日买一点，别在开盘前后", hardConditions: [{ type: "session", allow: ["US_REGULAR"] }] } }));
+    expect(created.status, JSON.stringify(created.json)).toBe(201);
+    const task = created.json["task"] as { id: string; conditions: ConditionSet; scope: { hardConditions: unknown[] }; scopeHash: string };
+    expect(task.scope.hardConditions).toEqual([{ type: "session", allow: ["US_REGULAR"] }]);
     const { signature } = await authorize(env, task.id);
     const p = await api(env, "POST", `/v1/tasks/${task.id}/prepare-step`, {});
-    expect(p.status).toBe(200);
-    const changed = await api(env, "POST", `/v1/tasks/${task.id}/conditions`, { items: [{ type: "session", allow: ["US_REGULAR"] }, { type: "min_gap_trading_days", days: 2 }] });
+    expect(p.status, JSON.stringify(p.json)).toBe(200);
+    // 计划条件（间隔）可改：不需要新授权
+    const changed = await api(env, "POST", `/v1/tasks/${task.id}/conditions`, { items: [{ type: "min_gap_trading_days", days: 2 }] });
     expect(changed.status, JSON.stringify(changed.json)).toBe(200);
-    const t2 = changed.json["task"] as { status: string; conditions: ConditionSet };
-    expect(t2.status).toBe("AWAITING_AUTHORIZATION");
+    const t2 = changed.json["task"] as { status: string; conditions: ConditionSet; scopeHash: string };
+    expect(t2.status).not.toBe("AWAITING_AUTHORIZATION");
     expect(t2.conditions.hash).not.toBe(task.conditions.hash);
-    const old = (changed.json["mandates"] as Array<{ state: string; current: boolean; pulledUnexpiredSteps: number[]; revokeStatus: string }>)[0]!;
-    expect(old).toMatchObject({ state: "PAUSED", current: false, pulledUnexpiredSteps: [0], revokeStatus: "none" });
-    expect(String(changed.json["note"])).toMatch(/still execute/);
-    // 拿旧草案（旧 conditionsHash 的 effectivePolicyHash）+ 旧签名再授权 → 422 conditions_hash_mismatch；只给旧签名 → 签名对不上新草案同样 422
+    expect(t2.scopeHash).toBe(task.scopeHash);
+    expect(t2.conditions.items.find((c) => c.type === "min_gap_trading_days")).toMatchObject({ days: 2 });
+    expect(t2.conditions.items.find((c) => c.type === "session")).toMatchObject({ allow: ["US_REGULAR"] });
+    const same = (changed.json["mandates"] as Array<{ state: string; current: boolean; pulledUnexpiredSteps: number[] }>)[0]!;
+    expect(same).toMatchObject({ state: "ACTIVE", current: true, pulledUnexpiredSteps: [0] });
+    expect((changed.json["timeline"] as Array<{ type: string; note?: string }>).some((e) => e.type === "conditions_changed" && /authorization unchanged/.test(e.note ?? ""))).toBe(true);
+    // 硬约束（session）不能被计划条件覆盖
+    const locked = await api(env, "POST", `/v1/tasks/${task.id}/conditions`, { items: [{ type: "session", allow: ["US_REGULAR", "US_PRE", "US_POST"] }] });
+    expect(locked.status).toBe(409);
+    expect(locked.json["error"]).toBe("scope_locked");
+    // 篡改过的 mandate（别的 effectivePolicyHash）+ 原签名 → 422 scope_hash_mismatch
     const oldMandate = (created.json["mandateDraft"] as { mandate: Record<string, string> }).mandate;
-    const stale = await api(env, "POST", `/v1/tasks/${task.id}/authorize`, { signature, mandate: oldMandate });
-    expect(stale.status).toBe(422);
-    expect(JSON.stringify(stale.json["details"])).toMatch(/conditions_hash_mismatch/);
-    expect((await api(env, "POST", `/v1/tasks/${task.id}/authorize`, { signature })).status).toBe(422);
-    const { r: fresh } = await authorize(env, task.id);
-    expect(fresh.status, JSON.stringify(fresh.json)).toBe(201);
-    expect((fresh.json["mandates"] as Array<{ current: boolean }>).map((m) => m.current)).toEqual([false, true]);
+    const forged = await api(env, "POST", `/v1/tasks/${task.id}/authorize`, { signature, mandate: { ...oldMandate, effectivePolicyHash: "0x" + "ab".repeat(32) } });
+    expect(forged.status).toBe(422);
+    expect(JSON.stringify(forged.json["details"])).toMatch(/scope_hash_mismatch/);
+  });
+  it("CV-D16 范围：资产集合包住计划、总额/每笔/步数/期限 ≥ 计划；输出集 = 范围全部资产；issuance=agent 时 monitor 与 prepare-step 都不按计划签发；范围校验失败 → 400 invalid_scope", async () => {
+    env = (await envWithContext()).e;
+    const bad = await api(env, "POST", "/v1/tasks", dcaBody({ mode: "LIVE", scope: { budgetCapRaw: "100", perStepCapRaw: "50", trustTier: "nope" } }));
+    expect(bad.status).toBe(400);
+    expect(bad.json["error"]).toBe("invalid_scope");
+    const badPlan = await api(env, "POST", "/v1/tasks", dcaBody({ mode: "LIVE", scope: { budgetCapRaw: "150000000" } }));
+    expect(badPlan.status).toBe(400);
+    expect(JSON.stringify(badPlan.json["details"])).toMatch(/must_be_gte_plan_total/);
+    const created = await api(env, "POST", "/v1/tasks", dcaBody({ mode: "LIVE", scope: { objective: "分批建仓，最多 5 笔", budgetCapRaw: "500000000", perStepCapRaw: "100000000", maxSteps: 5, trustTier: "agent_data", issuance: "agent" } }));
+    expect(created.status, JSON.stringify(created.json)).toBe(201);
+    const task = created.json["task"] as { id: string; scope: Record<string, unknown> };
+    expect(task.scope).toMatchObject({ budgetCapRaw: "500000000", maxSteps: 5, trustTier: "agent_data", issuance: "agent" });
+    const draft = created.json["mandateDraft"] as { mandate: { budgetCap: string; maxSteps: string }; outputSet: string[] };
+    expect(draft.mandate).toMatchObject({ budgetCap: "500000000", maxSteps: "5" });
+    expect(draft.outputSet).toEqual([FIXTURE_STOCK.toLowerCase()]);
+    expect(String(created.json["scopeBoundary"])).toMatch(/does not constrain/);
+    const { r: auth } = await authorize(env, task.id);
+    expect(auth.status, JSON.stringify(auth.json)).toBe(201);
+    const p = await api(env, "POST", `/v1/tasks/${task.id}/prepare-step`, {});
+    expect(p.status).toBe(409);
+    expect(p.json["error"]).toBe("issuance_by_agent");
+    await monitorOnce(env.mandates, env.tasks);
+    const after = await api(env, "GET", `/v1/tasks/${task.id}`);
+    expect((after.json["task"] as { status: string }).status).not.toBe("STEP_PREPARED");
+    expect(((after.json["lastEvaluation"] as { mandate: { status: string; preparedStepIndex: number | null } }).mandate)).toMatchObject({ preparedStepIndex: null });
   });
   it("D-088 pause/resume/cancel：响应体写明只阻止后续签发、已取走证书仍可能可执行、彻底停止以链上撤销为准；PAUSED 仍评估不签发；cancel 有授权 → REVOKE_PENDING", async () => {
     env = (await envWithContext()).e;

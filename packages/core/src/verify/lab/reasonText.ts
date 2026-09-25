@@ -34,6 +34,10 @@ const T: Partial<Record<ReasonCode, BiText>> = {
   THESIS_EXPIRED: { en: "The thesis card passed its validUntil.", zh: "理由卡已过有效期。" },
   EXECUTOR_OFFLINE: { en: "No executor heartbeat in the last 3 minutes (informational; does not block issuance).", zh: "3 分钟内没有执行器心跳（信息项，不阻塞签发）。" },
   AWAITING_USER_SIGNATURE: { en: "Browser-wallet path: waiting for your signature (informational).", zh: "浏览器钱包路径：等待你签名（信息项）。" },
+  INTENT_OUT_OF_SCOPE: { en: "The agent's trade intent is outside the scope you signed.", zh: "agent 的交易意图超出了你签的范围。" },
+  DECISION_BASIS_NOT_ADMISSIBLE: { en: "The agent cited a basis your trust tier does not admit.", zh: "agent 引用了你的信任档位不采信的依据。" },
+  HARD_CONSTRAINT_BLOCK: { en: "A hard constraint in the signed scope is not satisfied.", zh: "签名里的硬约束未满足。" },
+  SELL_MANDATE_REQUIRED: { en: "Selling needs a separate sell authorization for that asset.", zh: "卖出需要按资产另签一份卖出授权。" },
   /* ---- 规划/报价层（对照与回放里会出现） ---- */
   QUOTE_UNAVAILABLE: { en: "No executable quote at this point in time.", zh: "该时点没有可成交报价。" },
   QUOTE_TOO_OLD: { en: "The quote is older than the policy allows.", zh: "报价超过策略允许的时效。" },

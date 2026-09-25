@@ -14,6 +14,11 @@ describe("V-24 · 请求体", () => {
   it("session_dca：params 带 inputAssetKey 与 perStepAmountRaw（按精度换 raw），不带 from/to", () => {
     const b = buildTaskBody(draft, OWNER, 6, "web-1");
     expect(b.params).toEqual({ inputAssetKey: USDG, outputAssetKey: AAPLX, steps: 3, perStepAmountRaw: "1000000", policyId: "QUOTE_ONLY" });
+    expect(b.scope).toBeUndefined();
+    // CV-D16：范围只发用户明确设置的项；资产集合包含主资产、去重排序
+    const withScope = buildTaskBody({ ...draft, objective: " 分批建仓 ", trustTier: "agent_data", issuance: "agent", allowSell: true, extraAssetKeys: [AAPLX.toUpperCase(), "eip155:196:0x9999999999999999999999999999999999999999"] }, OWNER, 6, "web-3");
+    expect(withScope.scope).toEqual({ objective: "分批建仓", outputAssetKeys: [AAPLX, "eip155:196:0x9999999999999999999999999999999999999999"].sort(), trustTier: "agent_data", issuance: "agent", allowSell: true });
+    expect(buildTaskBody({ ...draft, trustTier: "platform_only", issuance: "auto", allowSell: false }, OWNER, 6, "web-4").scope).toBeUndefined();
     expect(b.ownerAddress).toBe(OWNER);
     expect(b.mode).toBe("SIMULATION");
     expect(Object.keys(b.params)).not.toContain("from");

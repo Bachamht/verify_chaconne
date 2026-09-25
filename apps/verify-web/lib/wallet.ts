@@ -305,6 +305,12 @@ export async function approveExact(account: `0x${string}`, token: `0x${string}`,
   return hash;
 }
 
+/** EIP-191 personal_sign（登录消息 / 签发 API key 的消息）；不是交易 */
+export async function signMessage(account: `0x${string}`, message: string, opts: { signal?: AbortSignal } = {}): Promise<Hex> {
+  const wc = walletClient(account);
+  return guarded("sign", () => wc.signMessage({ message }), opts.signal);
+}
+
 export async function signTypedData(account: `0x${string}`, domain: TypedDataDomain, types: Record<string, Array<{ name: string; type: string }>>, primaryType: string, message: Record<string, unknown>, opts: { signal?: AbortSignal } = {}): Promise<Hex> {
   const wc = walletClient(account);
   return guarded("sign", () => wc.signTypedData({ domain, types, primaryType, message }), opts.signal);

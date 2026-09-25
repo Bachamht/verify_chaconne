@@ -17,6 +17,7 @@ const PLAYBOOK: Record<string, { en: string; zh: string }> = {
   discount_watch: { en: "Discount watch", zh: "折价观察" },
   target_sell: { en: "Target sell", zh: "目标价卖出" },
   portfolio_rebalance: { en: "Portfolio rebalance", zh: "组合再平衡" },
+  agent_goal: { en: "Agent task", zh: "Agent 任务" },
 };
 export function playbookTitle(id: string, locale: Locale): string {
   return PLAYBOOK[id]?.[locale] ?? id;
@@ -44,7 +45,7 @@ const find = (assets: AssetLike[], key: string | undefined) => (key ? assets.fin
 const short = (k: string) => (k.includes(":") ? `${k.split(":")[2]?.slice(0, 6)}…${k.slice(-4)}` : k);
 
 /** 标题：模板 · 股票符号 · 每步金额 × 步数（有 params）或 · 总额（只有 goal） */
-export function taskTitle(task: Pick<Task, "playbookId" | "goal">, params: Record<string, unknown> | null | undefined, assets: AssetLike[], locale: Locale): string {
+export function taskTitle(task: Pick<Task, "playbookId" | "goal" | "scope">, params: Record<string, unknown> | null | undefined, assets: AssetLike[], locale: Locale): string {
   const zh = locale === "zh";
   const sell = task.goal?.side === "sell";
   const stockKey = sell ? task.goal?.budget?.inputAssetKeys?.[0] : task.goal?.legs?.[0]?.outputAssetKey;
@@ -62,5 +63,7 @@ export function taskTitle(task: Pick<Task, "playbookId" | "goal">, params: Recor
   else if (one) amount = steps && steps > 1 ? `${formatAmount(one, dec, sym)} × ${steps} ${zh ? "步" : "step(s)"}` : formatAmount(one, dec, sym);
   else if (task.goal?.budget?.amountInRaw) amount = `${zh ? "共" : "total"} ${formatAmount(task.goal.budget.amountInRaw, dec, sym)}`;
   else amount = "";
+  // 目标式任务：标题就是目标本身
+  if (task.playbookId === "agent_goal" && task.scope?.objective) return task.scope.objective;
   return [playbookTitle(task.playbookId, locale), stockName, amount].filter(Boolean).join(" · ");
 }

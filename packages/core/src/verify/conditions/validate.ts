@@ -121,6 +121,9 @@ export function validateCondition(raw: unknown, index: number, mode: "LIVE" | "S
 }
 
 /** 校验整个集合（重复类型只允许 avoid_event_window / thesis_holds / cash_floor / target_* 各多条；其余类型唯一） */
+/** 同一条件集里可出现多次的类型（其余类型同类只留一项） */
+export const REPEATABLE_CONDITION_TYPES: ReadonlySet<ConditionType> = new Set<ConditionType>(["avoid_event_window", "thesis_holds", "cash_floor", "target_price_gte", "target_price_lte"]);
+
 export function validateConditionSet(raw: unknown, mode: "LIVE" | "SIMULATION"): ConditionSetResult {
   const errors: ConditionError[] = [];
   const o = (raw ?? {}) as Record<string, unknown>;
@@ -130,7 +133,7 @@ export function validateConditionSet(raw: unknown, mode: "LIVE" | "SIMULATION"):
   if (items.length > 32) errors.push({ index: -1, field: "items", code: "too_many_items" });
   const out: Condition[] = [];
   const seen = new Map<string, number>();
-  const REPEATABLE = new Set<ConditionType>(["avoid_event_window", "thesis_holds", "cash_floor", "target_price_gte", "target_price_lte"]);
+  const REPEATABLE = REPEATABLE_CONDITION_TYPES;
   items.forEach((it, i) => {
     const r = validateCondition(it, i, mode);
     if (!r.ok) {

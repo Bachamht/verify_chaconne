@@ -59,7 +59,7 @@ pnpm install
 VERIFY_SERVICE_URL=https://verify.chaconne.xyz node packages/verify-mcp/bin/chaconne-verify-mcp.mjs
 ```
 
-`VERIFY_API_KEY` is optional. Without it the server starts in **free read-only mode**: `list_supported_assets`, `get_verification_policy`, `get_products`, `get_market_context`, `get_events` and the three A2MCP tools `verify_once_free` / `plan_free` / `agent_tasks_free` work against the free endpoints; every tool that needs a key answers `{ status: "not_available", reason: "api_key_required" }` (`isError=false`) instead of failing. With a key (operator-issued; wallet-scoped keys also need `VERIFY_CALLER`) all 46 tools are live.
+`VERIFY_API_KEY` is required for everything beyond the read-only and free tools. Get one at **https://verify.chaconne.xyz/agent/keys**: connect your wallet, sign one message (no transaction), copy the key. The key is bound to that wallet, so tasks created on the site and through MCP are the same set, and you can revoke it there any time. Without a key, keyed tools answer `{ status: "not_available", reason: "missing_api_key" }` with the URL above.
 
 Machine-readable entry points on the service: `GET /pub/openapi.json`, `GET /pub/llms.txt`, `GET /pub/agent-card.json` (also `/openapi.json`, `/llms.txt`, `/.well-known/agent-card.json` on the web domain).
 
@@ -71,7 +71,7 @@ Machine-readable entry points on the service: `GET /pub/openapi.json`, `GET /pub
     "chaconne-verify": {
       "command": "node",
       "args": ["<path to the clone>/packages/verify-mcp/bin/chaconne-verify-mcp.mjs"],
-      "env": { "VERIFY_SERVICE_URL": "https://verify.chaconne.xyz", "VERIFY_API_KEY": "<key, optional>", "VERIFY_CALLER": "0x<your wallet, with a wallet-scoped key>" }
+      "env": { "VERIFY_SERVICE_URL": "https://verify.chaconne.xyz", "VERIFY_CALLER": "0x<your wallet>" }
     }
   }
 }
@@ -93,7 +93,7 @@ The process refuses to start if any `*PRIVATE_KEY*` / `MNEMONIC` variable is pre
 
 A2MCP transport: the service answers HTTP 200 for both `delivered` and `input_required` (missing parameters are described in the body, header `X-A2MCP-Status` mirrors it); paid tiers answer 402.
 
-## v6 · Chaconne Agent 工具（interfaces §11.8，23 个；合计 46 个）
+## v6 · Chaconne Agent 工具（interfaces §11.8 的 23 个 + CV-D16 批次 4 的 5 个；合计 51 个）
 
 `get_market_context` · `get_events` · `create_task` · `get_task` · `pause_task` / `resume_task` / `cancel_task` · `authorize_task` · `get_my_event_impacts` · `watch_thesis` · `add_thesis_review_item` · `explain_task_wait` · `compare_task_policies` · `replay_policy` · `preview_rebalance` · `create_rebalance_plan` · `get_budget_group` · `create_budget_group` · `get_portfolio` · `report_cost_override` · `register_webhook` · `link_telegram` · `executor_heartbeat`。
 
@@ -101,4 +101,6 @@ A2MCP transport: the service answers HTTP 200 for both `delivered` and `input_re
 - `pause_task` / `cancel_task` 的摘要复述 D-088：服务侧停止只阻止后续签发，已取走且未过期的证书仍可能可执行，彻底停止以链上 `revokeMandate` 确认为准。
 - `authorize_task` 只在 agent-wallet 模式代签 TradeMandate：钱包必须是 owner、链在 `AGENT_WALLET_CHAIN_IDS` 内、`budgetCap`（按 `inputDecimals`，默认 6）折美元不超过 `AGENT_WALLET_MAX_SPEND_USD`；否则返回 `budget_exceeds_agent_limit`，不签名不上送。无 agent-wallet 时可传浏览器钱包产出的 `signature`。
 - agent-wallet 模式下进程每 60 s 自动向 `POST /v1/mandates/:id/executor/heartbeat` 报在线（只针对本进程 `authorize_task` / `execute_next_step` 过的 mandate）；`executor_heartbeat` 可手动加入/移出。心跳不携带任何权限。
+- **CV-D16 · 目标式任务**：`create_task` 不传 `playbookId` = 目标任务（`agent_goal`）：只给 `scope`（目标、资产集合、总额、每笔上限）+ 可选 `strategy` 文本与 `watchEvents`；没有模板与计划条件，何时买 / 买哪个 / 买多少由 agent 决定。agent 的循环：`report_agent_status accepted`（接管，带 `agent.name`）→ 被唤醒（`get_task` 的 `agentTurn`；关注事件临近 / 到点 / 改期都会叫）→ `get_market_context` / `get_events` / 自己的数据 → `submit_trade_intent` 或 `report_agent_status`（declined / needs_evidence / plan_revised（`plan.text` / `strategy`）/ ended）→ 真实任务用 `execute_trade_intent` 发交易。「到点」只是预定时间已到，实际值要 agent 自己核实。
+- **CV-D16 · agent 自主决策（5 个）**：`submit_trade_intent`（意图 + 决策记录 → 四道核验 → 证书；422 = 被拒但记录保存）· `get_task_intents`（`withStep=true` 在证书有效期内再取 READY 体）· `withdraw_trade_intent` · `report_agent_status`（declined / needs_evidence / plan_revised / ended 都是正常结果）· `execute_trade_intent`（agent-wallet 模式：取意图的 READY 体 → 本地与链上核对 → 发送 executeStep）。签证书 ≠ 发交易。
 - 日志只走 stderr；stdout 是 JSON-RPC 通道。

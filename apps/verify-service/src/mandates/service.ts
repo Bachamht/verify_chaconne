@@ -51,6 +51,7 @@ import type { EvidenceProvider } from "../evidence/provider";
 import { newId } from "../ids";
 import { log } from "../log";
 import { certificateValidUntil, HttpError } from "../jobs/service";
+import { callerActsFor } from "../http/auth";
 import type { Orders } from "../payments/orders";
 import { PLANGUARD_ABI } from "../execution/planGuardAbi";
 import type { ReceiptAttempt, ReceiptStore } from "../execution/receipts";
@@ -85,8 +86,10 @@ export interface RegisterMandateBody {
   maxSlippageBps: number;
   maxPriceImpactBps: number | null;
   maxReferenceDeviationBps?: number | null;
-  /* v6 Lane B：授权承诺的条件集哈希（进 effectivePolicyHash 展开参数；K-10） */
+  /* v6 Lane B：授权承诺的绑定哈希（进 effectivePolicyHash 展开参数；K-10）。CV-D16：任务授权传 scopeHash */
   conditionsHash?: Bytes32;
+  /* CV-D16：买入授权的输出集 = 范围内全部允许资产（须包住 legs）；缺省 = legs */
+  outputAssetKeys?: string[];
 }
 
 /* ---- v6 Lane B：任务前置链的闸门（条件层在报价证据齐备后再算一次，不过则不签发） ---- */
@@ -120,6 +123,8 @@ export interface MandateJson {
   /* v6 Lane B */
   conditionsHash?: Bytes32 | null;
   taskId?: string | null;
+  /** CV-D16：范围允许的输出资产（买入）；缺省 = legs 的资产 */
+  outputAssetKeys?: string[];
 }
 
 /** 这些阻断原因意味着"等条件变化"，不是"授权本身不可行" */
@@ -212,8 +217,20 @@ export class MandatesService implements ReceiptStore {
     // 链上输入代币：买入 = 资金币种；卖出 = 被卖出的股票代币
     const chainInput = side === "sell" ? legTokens[0] : inEntry?.tokenAddress;
     if (chainInput && chainInput.toLowerCase() !== mandate.inputToken.toLowerCase()) errors.push({ field: "mandate.inputToken", code: "registry_mismatch" });
-    // 链上输出集：买入 = legs；卖出 = [资金币种]
-    const outputSet: EvmAddress[] = side === "sell" ? (inEntry ? [inEntry.tokenAddress] : []) : legTokens;
+    // 链上输出集：买入 = 范围资产集合（缺省 legs，给了必须包住 legs）；卖出 = [资金币种]
+    const scopeKeys = Array.isArray(b.outputAssetKeys) && b.outputAssetKeys.every((k) => typeof k === "string") ? [...new Set(b.outputAssetKeys.map((k) => k.toLowerCase()))].sort() : null;
+    if (b.outputAssetKeys !== undefined && b.outputAssetKeys !== null && !scopeKeys) errors.push({ field: "outputAssetKeys", code: "expected_asset_keys" });
+    let scopeTokens: EvmAddress[] | null = null;
+    if (scopeKeys && side === "buy") {
+      scopeTokens = [];
+      for (const k of scopeKeys) {
+        const e = findEntry(this.d.registry, k);
+        if (!e || e.role !== "stock_output") errors.push({ field: "outputAssetKeys", code: `asset_unsupported:${k}` });
+        else scopeTokens.push(e.tokenAddress);
+      }
+      for (const l of legs) if (!scopeKeys.includes(l.outputAssetKey)) errors.push({ field: "outputAssetKeys", code: `must_include_leg:${l.outputAssetKey}` });
+    }
+    const outputSet: EvmAddress[] = side === "sell" ? (inEntry ? [inEntry.tokenAddress] : []) : (scopeTokens ?? legTokens);
     if (outputSet.length > 0 && outputSetHash(outputSet).toLowerCase() !== mandate.outputSetHash.toLowerCase()) errors.push({ field: "mandate.outputSetHash", code: "mismatch" });
     const regHash = registryHash(this.d.registry);
     if (regHash.toLowerCase() !== mandate.registryHash.toLowerCase()) errors.push({ field: "mandate.registryHash", code: "registry_mismatch" });
@@ -243,7 +260,7 @@ export class MandatesService implements ReceiptStore {
     const nowDate = this.now();
     const priceUsd = sku === "monitor_window" ? this.d.cfg.PRODUCT_PRICE_MONITOR_WINDOW_USD : this.d.cfg.PRODUCT_PRICE_TASK_BUNDLE_USD;
     const free = priceUsd === "0" || Number(priceUsd) === 0;
-    const json: MandateJson = { mandate, domain, inputAssetKey: inEntry!.assetKey, legs, outputSet, side, sku, planId: typeof b.planId === "string" ? b.planId : null, jobId: typeof b.jobId === "string" ? b.jobId : null, conditionsHash, taskId: internal.taskId ?? null };
+    const json: MandateJson = { mandate, domain, inputAssetKey: inEntry!.assetKey, legs, outputSet, side, sku, planId: typeof b.planId === "string" ? b.planId : null, jobId: typeof b.jobId === "string" ? b.jobId : null, conditionsHash, taskId: internal.taskId ?? null, ...(scopeKeys && side === "buy" ? { outputAssetKeys: scopeKeys } : {}) };
     const [row] = await this.d.db
       .insert(verifyMandates)
       .values({
@@ -295,7 +312,7 @@ export class MandatesService implements ReceiptStore {
 
   async requireMandate(callerId: string, id: string): Promise<MandateRow> {
     const row = (await this.d.db.select().from(verifyMandates).where(eq(verifyMandates.id, id)).limit(1))[0];
-    if (!row || row.callerId !== callerId) throw new HttpError(404, "mandate_not_found");
+    if (!row || (row.callerId !== callerId && !callerActsFor(callerId, row.ownerAddress))) throw new HttpError(404, "mandate_not_found");
     return row;
   }
   async byId(id: string): Promise<MandateRow | null> {
@@ -306,6 +323,9 @@ export class MandatesService implements ReceiptStore {
   }
   async evaluations(mandateId: string, limit = 50): Promise<EvaluationRow[]> {
     return this.d.db.select().from(verifyMandateEvaluations).where(eq(verifyMandateEvaluations.mandateId, mandateId)).orderBy(desc(verifyMandateEvaluations.evaluatedAt)).limit(limit);
+  }
+  async evaluationById(id: string): Promise<EvaluationRow | null> {
+    return (await this.d.db.select().from(verifyMandateEvaluations).where(eq(verifyMandateEvaluations.id, id)).limit(1))[0] ?? null;
   }
   async steps(mandateId: string): Promise<StepRow[]> {
     return this.d.db.select().from(verifyMandateSteps).where(eq(verifyMandateSteps.mandateId, mandateId)).orderBy(asc(verifyMandateSteps.stepIndex));
@@ -574,31 +594,102 @@ export class MandatesService implements ReceiptStore {
         step: null,
       };
     }
-    if (evaluation.status === "READY" && step) {
-      if (!step.pulledAt) await this.d.db.update(verifyMandateSteps).set({ pulledAt: this.now(), updatedAt: this.now() }).where(eq(verifyMandateSteps.id, step.id));
-      const sv = this.stepView(step);
-      const sj = step.stepJson as { outputSet: EvmAddress[]; mandate: TradeMandate; mandateSignature: string };
-      return {
-        status: "READY" as const,
-        stepIndex: step.stepIndex,
-        typedData: sv.typedData,
-        step: sv.step,
-        stepDigest: sv.stepDigest,
-        certificate: sv.certificate,
-        certificateSignature: sv.certificateSignature,
-        attestationSigner: sv.attestationSigner,
-        routerCalldata: sv.routerCalldata,
-        outputSet: sj.outputSet,
-        planGuard: row.planGuardAddress,
-        validUntil: sv.validUntil,
-        mandate: sj.mandate,
-        mandateSignature: sj.mandateSignature,
-        evaluation: this.evalView(evaluation),
-        guardCall: { to: row.planGuardAddress, functionName: "executeStep", abi: PLANGUARD_ABI, args: { m: sj.mandate, mandateSig: sj.mandateSignature, outputSet: sj.outputSet, s: sv.step, c: sv.certificate, certSig: sv.certificateSignature, routerCalldata: sv.routerCalldata }, argOrder: ["m", "mandateSig", "outputSet", "s", "c", "certSig", "routerCalldata"], value: "0", gasHint: "650000" },
-        approval: { token: (row.mandateJson as MandateJson).mandate.inputToken, spender: row.planGuardAddress, amount: sv.step.amountIn, note: "执行者需确保 owner 已向 PlanGuard 授权 ≥ amountIn（一次授权 budgetCap 即可）" },
-      };
-    }
+    if (evaluation.status === "READY" && step) return this.pullStep(row, step, evaluation);
     return { status: evaluation.status, stepIndex: row.stepsDone, evaluation: this.evalView(evaluation), reasons: evaluation.reasonsJson, delta: evaluation.deltaJson, step: null };
+  }
+
+  /** 把一个已签发的 PREPARED 步骤交给执行者（标 pulledAt），返回 READY 体（guardCall / approval / 证书） */
+  async pullStep(row: MandateRow, step: StepRow, evaluation: EvaluationRow) {
+    if (!step.pulledAt) await this.d.db.update(verifyMandateSteps).set({ pulledAt: this.now(), updatedAt: this.now() }).where(eq(verifyMandateSteps.id, step.id));
+    const sv = this.stepView(step);
+    const sj = step.stepJson as { outputSet: EvmAddress[]; mandate: TradeMandate; mandateSignature: string };
+    return {
+      status: "READY" as const,
+      stepIndex: step.stepIndex,
+      typedData: sv.typedData,
+      step: sv.step,
+      stepDigest: sv.stepDigest,
+      certificate: sv.certificate,
+      certificateSignature: sv.certificateSignature,
+      attestationSigner: sv.attestationSigner,
+      routerCalldata: sv.routerCalldata,
+      outputSet: sj.outputSet,
+      planGuard: row.planGuardAddress,
+      validUntil: sv.validUntil,
+      mandate: sj.mandate,
+      mandateSignature: sj.mandateSignature,
+      evaluation: this.evalView(evaluation),
+      guardCall: { to: row.planGuardAddress, functionName: "executeStep", abi: PLANGUARD_ABI, args: { m: sj.mandate, mandateSig: sj.mandateSignature, outputSet: sj.outputSet, s: sv.step, c: sv.certificate, certSig: sv.certificateSignature, routerCalldata: sv.routerCalldata }, argOrder: ["m", "mandateSig", "outputSet", "s", "c", "certSig", "routerCalldata"], value: "0", gasHint: "650000" },
+      approval: { token: (row.mandateJson as MandateJson).mandate.inputToken, spender: row.planGuardAddress, amount: sv.step.amountIn, note: "执行者需确保 owner 已向 PlanGuard 授权 ≥ amountIn（一次授权 budgetCap 即可）" },
+    };
+  }
+
+  /**
+   * CV-D16 批次 2：按 agent 的交易意图签发一步（输出资产与金额由意图给出，不走 legs 计划）。
+   * 与 evaluate() 同一套取证 / 报告 / 状态规则 + 条件闸门（硬约束）；READY 且 ACTIVE 且 issue 才签发。
+   * 前提（资产在输出集内、金额 ≤ perStepCap、剩余额度、步数、期限）由调用方（IntentsService 的 scope 核验）先查；这里再兜一次底。
+   */
+  async issueIntentStep(row0: MandateRow, a: { outputAssetKey: string; amountIn: bigint; gate?: EvaluateOptions["gate"]; issue: boolean }): Promise<{ evaluation: EvaluationRow; step: StepRow | null; report: VerifyReport | null; evidence: EvidenceRecord[]; reasons: Reason[]; status: MandateEvalStatus }> {
+    const row = (await this.byId(row0.id)) ?? row0;
+    const nowDate = this.now();
+    const nowIso = nowDate.toISOString();
+    const json = row.mandateJson as MandateJson;
+    const policy = row.policySnapshot as { definition: EffectivePolicy["definition"]; params: EffectivePolicy["params"] };
+    const eff: EffectivePolicy = { definition: policy.definition, params: policy.params, policyDefinitionHash: row.policyDefinitionHash as `0x${string}`, effectivePolicyHash: row.effectivePolicyHash as `0x${string}` };
+    const outEntry = findEntry(this.d.registry, a.outputAssetKey);
+    const remaining = BigInt(row.budgetCap) - BigInt(row.spent);
+    const guardReasons: Reason[] = [];
+    if (json.side !== "buy") guardReasons.push({ code: "INTENT_OUT_OF_SCOPE", severity: "block", evidenceIds: [], detail: { field: "kind", note: "mandate is a sell authorization" } });
+    if (!outEntry || !json.outputSet.map((t) => t.toLowerCase()).includes(outEntry.tokenAddress.toLowerCase())) guardReasons.push({ code: "INTENT_OUT_OF_SCOPE", severity: "block", evidenceIds: [], detail: { field: "outputAssetKey", note: "not in the authorized output set" } });
+    if (a.amountIn <= 0n || a.amountIn > BigInt(json.mandate.perStepCap)) guardReasons.push({ code: "INTENT_OUT_OF_SCOPE", severity: "block", evidenceIds: [], detail: { field: "amountInRaw", note: `must be in (0, perStepCap=${json.mandate.perStepCap}]` } });
+    if (a.amountIn > remaining) guardReasons.push({ code: "INTENT_OUT_OF_SCOPE", severity: "block", evidenceIds: [], detail: { field: "amountInRaw", note: `exceeds remaining budget ${remaining}` } });
+    if (row.stepsDone >= row.maxSteps) guardReasons.push({ code: "INTENT_OUT_OF_SCOPE", severity: "block", evidenceIds: [], detail: { field: "maxSteps", note: `${row.stepsDone}/${row.maxSteps} steps done` } });
+    const withinWindow = nowDate.getTime() >= row.validFrom.getTime() && nowDate.getTime() <= row.deadline.getTime();
+    if (!withinWindow) guardReasons.push({ code: "INTENT_OUT_OF_SCOPE", severity: "block", evidenceIds: [], detail: { field: "deadline", note: "outside the mandate's validity window" } });
+    if (guardReasons.length > 0) {
+      const [evaluation] = await this.d.db.insert(verifyMandateEvaluations).values({ id: newId("evl"), mandateId: row.id, evaluatedAt: nowDate, status: "BLOCKED", reportJson: null, reportHash: null, evidenceJson: [], reasonsJson: guardReasons, deltaJson: null, preparedStepIndex: null }).returning();
+      return { evaluation: evaluation!, step: null, report: null, evidence: [], reasons: guardReasons, status: "BLOCKED" };
+    }
+    const job: NormalizedJob = { clientRequestId: `${row.id}:intent:${row.stepsDone}:${nowDate.getTime()}`, ownerAddress: row.ownerAddress as EvmAddress, recipientAddress: normalizeAddress(json.mandate.recipient), executionChainId: row.chainId, inputAssetKey: json.inputAssetKey, outputAssetKey: outEntry!.assetKey, amountInRaw: a.amountIn.toString(), mode: "exactIn", policyId: policy.definition.policyId, policyVersion: policy.definition.version, params: policy.params };
+    let collected: Awaited<ReturnType<EvidenceProvider["collect"]>>;
+    try {
+      collected = await this.d.evidence.collect(job, this.d.registry, nowIso, { executorContract: row.planGuardAddress as EvmAddress });
+    } catch (err) {
+      const reasons: Reason[] = [{ code: "QUOTE_UNAVAILABLE", severity: "block", evidenceIds: [], detail: { error: err instanceof Error ? err.message.slice(0, 200) : String(err) } }];
+      const [evaluation] = await this.d.db.insert(verifyMandateEvaluations).values({ id: newId("evl"), mandateId: row.id, evaluatedAt: nowDate, status: "WAIT", reportJson: null, reportHash: null, evidenceJson: [], reasonsJson: reasons, deltaJson: null, preparedStepIndex: null }).returning();
+      return { evaluation: evaluation!, step: null, report: null, evidence: [], reasons, status: "WAIT" };
+    }
+    const report = buildReport({ jobId: row.id, reportVersion: (await this.countEvaluations(row.id)) + 1, job, policy: eff, registry: this.d.registry, evidence: collected.evidence, evaluatedAt: nowIso });
+    let status: MandateEvalStatus;
+    if (report.executionEligible && collected.route) status = "READY";
+    else {
+      const blocks = report.reasons.filter((r) => r.severity === "block").map((r) => r.code);
+      status = blocks.length === 0 || blocks.every((c) => WAIT_CODES.has(c)) ? "WAIT" : blocks.some((c) => HARD_BLOCK_CODES.has(c) && !WAIT_CODES.has(c)) ? "BLOCKED" : "WAIT";
+    }
+    let reasons: Reason[] = report.reasons;
+    if (a.gate) {
+      const g = await a.gate({ report, evidence: collected.evidence, nowIso });
+      if (!g.ok) {
+        status = status === "BLOCKED" ? "BLOCKED" : "WAIT";
+        reasons = [...report.reasons, ...g.reasons];
+      }
+    }
+    const prev = await this.latestEvaluation(row.id);
+    const [evaluation] = await this.d.db.insert(verifyMandateEvaluations).values({ id: newId("evl"), mandateId: row.id, evaluatedAt: nowDate, status, reportJson: report, jobJson: job, reportHash: reportHash(report), evidenceJson: collected.evidence, reasonsJson: reasons, deltaJson: explainDelta((prev?.reportJson as VerifyReport | null) ?? null, report), preparedStepIndex: null }).returning();
+    let step: StepRow | null = null;
+    if (status === "READY" && row.state === "ACTIVE" && a.issue) {
+      const existing = (await this.d.db.select().from(verifyMandateSteps).where(and(eq(verifyMandateSteps.mandateId, row.id), eq(verifyMandateSteps.stepIndex, row.stepsDone))).limit(1))[0];
+      if (existing && (existing.state === "SUBMITTED" || existing.state === "REORG_PENDING" || existing.state === "CONFIRMED")) {
+        reasons = [...reasons, { code: "STEP_AWAITING_CONFIRMATION", severity: "info", evidenceIds: [], detail: { stepIndex: existing.stepIndex, txHash: existing.txHash, state: existing.state } }];
+        await this.d.db.update(verifyMandateEvaluations).set({ reasonsJson: reasons, status: "WAIT" }).where(eq(verifyMandateEvaluations.id, evaluation!.id));
+        return { evaluation: { ...evaluation!, status: "WAIT", reasonsJson: reasons }, step: null, report, evidence: collected.evidence, reasons, status: "WAIT" };
+      }
+      // 意图签发的步骤总是重签（agent 给的资产/金额可能与之前 PREPARED 的不同；同 index 的旧 PREPARED 作废）
+      step = await this.issueStep(row, evaluation!, { job, outputToken: outEntry!.tokenAddress, amountIn: a.amountIn }, collected.route!, report, collected.evidence);
+      await this.d.db.update(verifyMandateEvaluations).set({ preparedStepIndex: step.stepIndex }).where(eq(verifyMandateEvaluations.id, evaluation!.id));
+      evaluation!.preparedStepIndex = step.stepIndex;
+    }
+    return { evaluation: evaluation!, step, report, evidence: collected.evidence, reasons, status };
   }
 
   async recordSubmission(callerId: string, id: string, stepIndex: number, txHash: string): Promise<StepRow> {

@@ -10,6 +10,7 @@ import type { VerifyConfig } from "../config";
 import type { EvidenceProvider } from "../evidence/provider";
 import { newId } from "../ids";
 import { HttpError, type VerifyService } from "../jobs/service";
+import { callerActsFor } from "../http/auth";
 import type { MandatesService } from "../mandates/service";
 import type { Orders } from "../payments/orders";
 import type { PlanEngine } from "../plans/engine";
@@ -69,7 +70,7 @@ export class ClubService {
 
   async requireSimulation(callerId: string, id: string) {
     const row = (await this.d.db.select().from(verifySimulations).where(eq(verifySimulations.id, id)).limit(1))[0];
-    if (!row || row.callerId !== callerId) throw new HttpError(404, "simulation_not_found");
+    if (!row || (row.callerId !== callerId && !callerActsFor(callerId, row.ownerAddress))) throw new HttpError(404, "simulation_not_found");
     return this.simulationView(row, row.planJson as PlanReport);
   }
 
@@ -183,7 +184,7 @@ export class ClubService {
     if (kind === "plan") return (await this.d.plans.requirePlan(callerId, refId)).ownerAddress;
     if (kind === "mandate") return (await this.d.mandates.requireMandate(callerId, refId)).ownerAddress;
     const row = (await this.d.db.select().from(verifySimulations).where(eq(verifySimulations.id, refId)).limit(1))[0];
-    if (!row || row.callerId !== callerId) throw new HttpError(404, "simulation_not_found");
+    if (!row || (row.callerId !== callerId && !callerActsFor(callerId, row.ownerAddress))) throw new HttpError(404, "simulation_not_found");
     return row.ownerAddress;
   }
 
@@ -218,10 +219,13 @@ export class ClubService {
         ...base,
         evidenceMode: this.d.evidence.mode,
         status,
-        headline: title ?? headlineFor(status, outEntry?.displaySymbol ?? "stock", persona?.tone ?? "calm"),
-        headlineZh: title ?? headlineForZh(status, outEntry?.displaySymbol ?? "股票", persona?.tone ?? "calm"),
+        // 核验通过但没执行：说清「这只是一次核验」，不用「等条件回来」的战报口吻（用户反馈：公开页只剩两个哈希）
+        headline: title ?? (status === "waiting" && r?.executionEligible ? `Check passed for ${outEntry?.displaySymbol ?? "stock"}. Nothing executed yet.` : headlineFor(status, outEntry?.displaySymbol ?? "stock", persona?.tone ?? "calm")),
+        headlineZh: title ?? (status === "waiting" && r?.executionEligible ? `${outEntry?.displaySymbol ?? "股票"} 核验通过，尚未执行——这只是一次核验。` : headlineForZh(status, outEntry?.displaySymbol ?? "股票", persona?.tone ?? "calm")),
         goal: { side: j.side ?? "buy", input: inEntry?.displaySymbol ?? null, output: outEntry?.displaySymbol ?? null, amount: amount(j.amountInRaw, inEntry?.tokenDecimals ?? 6), policyId: j.policyId },
-        result: r ? { verdict: r.verdict, comparisonStatus: r.comparisonStatus, marketSession: r.marketSession, reasons: r.reasons.map((x) => x.code), reasonDetails: r.reasons.map((x) => ({ code: x.code, severity: x.severity })), completionBps: confirmed ? 10_000 : null, reportHash: latest!.reportHash, evidenceHash: r.evidenceHash, evaluatedAt: r.evaluatedAt, execution: confirmed ? { txHash: confirmed.txHash, received: privacy.amounts === "exact" ? (confirmed.receiptJson as { event?: { received?: string } } | null)?.event?.received ?? null : null } : null } : null,
+        result: r ? { verdict: r.verdict, comparisonStatus: r.comparisonStatus, marketSession: r.marketSession, reasons: r.reasons.map((x) => x.code), reasonDetails: r.reasons.map((x) => ({ code: x.code, severity: x.severity })), completionBps: confirmed ? 10_000 : null, reportHash: latest!.reportHash, evidenceHash: r.evidenceHash, evaluatedAt: r.evaluatedAt, execution: confirmed ? { txHash: confirmed.txHash, received: privacy.amounts === "exact" ? (confirmed.receiptJson as { event?: { received?: string } } | null)?.event?.received ?? null : null } : null,
+          // 公开页的「核验结果」：只放公开行情事实（参考价、偏差、冲击、时段、核验时间），金额仍按隐私设置
+          check: { executionEligible: r.executionEligible, marketSession: r.marketSession, comparisonStatus: r.comparisonStatus, evaluatedAt: r.evaluatedAt, policyId: j.policyId, reference: r.reference ? { kind: r.reference.kind, priceUsd: r.reference.priceUsd, deviationBps: r.reference.deviationBps, sourcePublishedAt: r.reference.sourcePublishedAt, tradingDate: r.reference.tradingDate } : null, executableUsdPerShare: r.normalizedQuote?.executableUsdPerShare ?? null, adverseImpactBps: r.normalizedQuote?.adverseImpactBps ?? null, quoteReceivedAt: r.normalizedQuote?.receivedAt ?? null } } : null,
         // publicBundleUrl：无需 key 的证据包（V-39）；bundleUrl 仍是 owner 用 key 读的路径
         verifier: { bundleUrl: `/v1/jobs/${share.refId}/bundle`, publicBundleUrl: `/pub/reports/${shareId}/bundle`, contractAddress: this.d.cfg.GUARD_ADDRESS || null },
       };

@@ -36,7 +36,7 @@ export function MyTasks() {
   );
 }
 
-function RecordsList({ account }: { account: string }) {
+export function RecordsList({ account }: { account: string }) {
   const { locale } = useI18n();
   const zh = locale === "zh";
   const [assets, setAssets] = useState<AssetEntry[]>([]);

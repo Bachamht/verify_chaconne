@@ -13,17 +13,16 @@ const COPY = {
     titleLead: "让 AI Agent，", titleEm: "按你的节奏交易。",
     lead: "把链上美股买入计划交给 AI Agent。",
     leadStrong: "你定预算和条件，它负责判断与等待。",
-    leadEnd: "先体验，再决定是否授权真实交易。",
     ctaTry: "免费体验一个任务", ctaAgent: "进入 Agent 工作区",
     reassurance: ["连接钱包即可", "无需自备 Agent", "模拟不用真实资金"],
     speech: "gm，先排个计划。", character: "Chaconne 紫色小指挥家",
-    exampleHeading: "AGENT 的计划", exampleTag: "预设示例 · 非实时",
-    exampleAsset: "苹果链上股票 · 分 3 次买入", exampleBudget: "示例总预算",
-    exampleBeats: ["第 1 次 · 10 USDG", "第 2 次", "第 3 次"],
-    exampleStatus: "示例：等待交易时段", exampleReason: "额度留着，条件到了再检查。",
+    exampleHeading: "AGENT 的一项任务", exampleTag: "示例 · 非实时",
+    exampleAsset: "目标：未来五个交易日，按 CPI 与利率预期在 AAPLx / NVDAx 里分配预算", exampleBudget: "签过的范围",
+    exampleBeats: ["第 1 轮 · CPI 前持币，要实际值", "第 2 轮 · CPI 温和，加仓 AAPLx 一笔", "第 3 轮 · 利率预期上移，下一笔减半"],
+    exampleStatus: "Agent 修订了计划：剩余预算分四笔，隔两个交易日", exampleReason: "每一笔都经四道核验才签证书；范围之外的意图会被拒。",
     pathLabel: "第一次体验，三步开始",
     path: [
-      { title: "选一个计划", copy: "从简单模板开始。" },
+      { title: "写一个目标", copy: "示例策略帮你开始，随便改。" },
       { title: "看看 Agent 怎么做", copy: "行动或等待，都有理由。" },
       { title: "决定是否运行", copy: "真实资金，最后才授权。" },
     ],
@@ -34,23 +33,17 @@ const COPY = {
     toolsCopy: "从单笔核验到任务诊断，随时进入完整功能。",
     groups: [
       { title: "管理 Agent 任务", links: [
-        { href: "/agent", label: "Agent 工作区", detail: "创建任务、检查影响、选择任务草案" },
+        { href: "/agent", label: "Agent 工作区", detail: "把目标交给 Agent、示例策略、我的 Agent 任务" },
         { href: "/agent/tasks", label: "我的任务", detail: "进度、授权与执行状态" },
         { href: "/agent/events", label: "事件日历", detail: "查看宏观事件与公司财报排期" },
         { href: "/agent/funds", label: "持仓与资金", detail: "查看持仓、余额与预算分组" },
         { href: "/agent/journal", label: "任务日志", detail: "回顾 Agent 做过的判断和动作" },
       ] },
-      { title: "规划与实验", links: [
-        { href: "/new", label: "单笔交易核验", detail: "手动配置金额、策略和交易边界" },
-        { href: "/plan", label: "交易规划", detail: "比较资产与预算，规划买入方案" },
-        { href: "/play", label: "角色试玩", detail: "选择角色，体验预设模拟题目" },
-        { href: "/agent/lab", label: "任务实验室", detail: "诊断等待、比较方案、回放条件" },
-      ] },
       { title: "证据与记录", links: [
-        { href: "/verify-bundle", label: "验证证据包", detail: "独立检查已有的核验证据" },
+        { href: "/verify-bundle", label: "验证决策记录", detail: "离线复算一项任务的目标、策略、意图、证书与成交" },
         { href: "/replay/AAPLx", label: "市场回放", detail: "从 AAPLx 开始回看历史证据" },
         { href: "/live", label: "公开核验板", detail: "浏览公开的核验记录" },
-        { href: "/me", label: "我的记录", detail: "这个钱包名下的任务、规划、核验与模拟" },
+        { href: "/developers", label: "开发者与 MCP", detail: "接入你的 Agent：工具、端点、单笔核验与规划的调试入口" },
       ] },
     ],
     protectionLabel: "每次交易之前", protectionTitle: "Agent 做判断，合约守边界。",
@@ -81,17 +74,16 @@ const COPY = {
     titleLead: "Let AI agents trade", titleEm: "to your tempo.",
     lead: "Give your tokenized stock plan to an AI agent.",
     leadStrong: "You set the budget and conditions. It checks when to act or wait.",
-    leadEnd: "Try a simulation before authorizing real trades.",
     ctaTry: "Try a task for free", ctaAgent: "Open agent workspace",
     reassurance: ["Just connect a wallet", "No agent setup", "Simulations use no real funds"],
     speech: "gm. Let's make a plan.", character: "Chaconne's purple conductor",
-    exampleHeading: "MY AGENT'S PLAN", exampleTag: "PRESET EXAMPLE · NOT LIVE",
-    exampleAsset: "Tokenized Apple stock · 3 purchases", exampleBudget: "Example total budget",
-    exampleBeats: ["Buy 1 · 10 USDG", "Buy 2", "Buy 3"],
-    exampleStatus: "Example: waiting for market hours", exampleReason: "Keep the budget. Check again when conditions allow.",
+    exampleHeading: "ONE TASK FOR MY AGENT", exampleTag: "EXAMPLE · NOT LIVE",
+    exampleAsset: "Goal: over five trading days, allocate the budget across AAPLx / NVDAx by how CPI and rate expectations land", exampleBudget: "Signed scope",
+    exampleBeats: ["Turn 1 · keep cash before CPI, ask for the print", "Turn 2 · CPI benign, add one tranche of AAPLx", "Turn 3 · rate expectations up, halve the next tranche"],
+    exampleStatus: "Agent revised the plan: four tranches left, two trading days apart", exampleReason: "Every tranche passes four checks before a certificate; intents outside the scope are rejected.",
     pathLabel: "Your first task in three steps",
     path: [
-      { title: "Choose a plan", copy: "Start with a simple template." },
+      { title: "Write a goal", copy: "Example strategies get you started; edit freely." },
       { title: "See what the agent does", copy: "A reason to act. A reason to wait." },
       { title: "Decide whether to run it", copy: "Authorize real funds only at the end." },
     ],
@@ -102,23 +94,16 @@ const COPY = {
     toolsCopy: "From a single trade check to task diagnosis, all the full workflows are here.",
     groups: [
       { title: "Manage agent tasks", links: [
-        { href: "/agent", label: "Agent workspace", detail: "Create tasks, check impact and explore drafts" },
+        { href: "/agent", label: "Agent workspace", detail: "Hand a goal to your agent, example strategies, my agent tasks" },
         { href: "/agent/tasks", label: "My tasks", detail: "Progress, authorizations and execution status" },
         { href: "/agent/events", label: "Event calendar", detail: "Macro releases and company earnings" },
         { href: "/agent/funds", label: "Holdings and funds", detail: "Positions, balances and budget groups" },
         { href: "/agent/journal", label: "Task journal", detail: "Review the agent's decisions and actions" },
       ] },
-      { title: "Plan and experiment", links: [
-        { href: "/new", label: "Verify a trade", detail: "Set amounts, policies and trade boundaries" },
-        { href: "/plan", label: "Trade planner", detail: "Compare assets and budgets for a purchase" },
-        { href: "/play", label: "Character playground", detail: "Choose a character and a simulation scenario" },
-        { href: "/agent/lab", label: "Task lab", detail: "Diagnose waits, compare plans and replay conditions" },
-      ] },
       { title: "Evidence and history", links: [
-        { href: "/verify-bundle", label: "Verify an evidence bundle", detail: "Independently check existing trade evidence" },
+        { href: "/verify-bundle", label: "Verify a decision bundle", detail: "Re-check a task's goal, strategy, intents, certificates and fills offline" },
         { href: "/replay/AAPLx", label: "Market replay", detail: "Review historical evidence, starting with AAPLx" },
         { href: "/live", label: "Public verification board", detail: "Browse public verification records" },
-        { href: "/me", label: "My records", detail: "Tasks, plans, verifications and simulations under this wallet" },
       ] },
     ],
     protectionLabel: "BEFORE EVERY TRADE", protectionTitle: "The agent decides. The contract sets limits.",
@@ -157,7 +142,7 @@ export default function Home() {
         <div className="verify-hero-copy">
           <p className="verify-overline"><span aria-hidden="true" />{c.overline}</p>
           <h1 id="verify-hero-title">{c.titleLead}<br /><em>{c.titleEm}</em></h1>
-          <p className="verify-hero-lead">{c.lead}<br /><strong>{c.leadStrong}</strong><br />{c.leadEnd}</p>
+          <p className="verify-hero-lead">{c.lead}<br /><strong>{c.leadStrong}</strong><br /></p>
           <Link href="/start" className="verify-primary">{c.ctaTry}<ArrowUpRight size={18} aria-hidden="true" /></Link>
           <ul className="verify-reassurance">{c.reassurance.map((item) => <li key={item}><Check size={12} aria-hidden="true" />{item}</li>)}</ul>
           <Link href="/agent" className="verify-text-link">{c.ctaAgent}<ArrowRight size={15} aria-hidden="true" /></Link>

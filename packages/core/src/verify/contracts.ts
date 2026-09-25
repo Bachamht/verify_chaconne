@@ -408,6 +408,15 @@ export const REASON_CODES = [
   "EXECUTOR_OFFLINE",
   /** 信息项：浏览器钱包路径等待用户签名 */
   "AWAITING_USER_SIGNATURE",
+  /* ---- CV-D16 批次 2：agent 交易意图的四道核验 ---- */
+  /** 意图超出签名范围（资产不在集合 / 金额超每笔上限 / 超总额 / 超步数 / 过期 / 未允许卖出） */
+  "INTENT_OUT_OF_SCOPE",
+  /** 决策记录引用了信任档位不允许采信的依据（如 platform_only 下引用 agent 研究结论） */
+  "DECISION_BASIS_NOT_ADMISSIBLE",
+  /** 签名里的硬约束未满足（与计划条件无关） */
+  "HARD_CONSTRAINT_BLOCK",
+  /** 范围允许卖出，但卖出需按资产另签卖出授权，本意图不签发 */
+  "SELL_MANDATE_REQUIRED",
 ] as const;
 export type ReasonCode = (typeof REASON_CODES)[number];
 
@@ -915,7 +924,8 @@ export const TASK_STATUSES = ["DRAFT", "AWAITING_AUTHORIZATION", "ACTIVE", "WAIT
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 /** online = 3 分钟内有心跳；awaiting_signature = 浏览器钱包路径；offline = 都没有 */
 export type ExecutorPresence = "online" | "awaiting_signature" | "offline";
-export const PLAYBOOK_IDS = ["session_dca", "event_aware_accumulate", "discount_watch", "target_sell", "portfolio_rebalance"] as const;
+/** agent_goal（CV-D16 批次 6）：目标式任务——没有模板，只有范围与目标；agent 自己的策略决定何时、买哪个、买多少 */
+export const PLAYBOOK_IDS = ["session_dca", "event_aware_accumulate", "discount_watch", "target_sell", "portfolio_rebalance", "agent_goal"] as const;
 export type PlaybookId = (typeof PLAYBOOK_IDS)[number];
 export interface Blocker {
   code: ReasonCode;
@@ -932,6 +942,12 @@ export interface Task {
   playbookId: PlaybookId;
   goal: PlanGoal;
   conditions: ConditionSet;
+  /** 授权范围（CV-D16，scope/1）；旧任务缺省。类型见 tasks/scope.ts */
+  scope?: import("./tasks/scope").TaskScope;
+  /** 签名绑定的哈希（= effectivePolicyHash 展开参数 conditionsHash 的取值） */
+  scopeHash?: Bytes32;
+  /** 简报（批次 6，签名之外可改）：策略文本与版本、关注的事件、接管的 agent、示例来源 */
+  brief?: import("./tasks/agentTurn").TaskBrief;
   mandateIds: string[];
   thesisId?: string;
   budgetGroupId?: string;
@@ -1039,7 +1055,7 @@ export interface ReplayRun {
 }
 
 /* ---------- §1.9 通知事件 ---------- */
-export const NOTIFICATION_TYPES = ["task.status_changed", "task.step_ready", "task.step_confirmed", "task.step_reverted", "task.blocked", "event.revised", "event.released", "thesis.invalidated", "thesis.unknown", "budget.conflict", "budget.released", "task.expiring", "recap.ready"] as const;
+export const NOTIFICATION_TYPES = ["task.status_changed", "task.step_ready", "task.step_confirmed", "task.step_reverted", "task.blocked", "event.revised", "event.released", "thesis.invalidated", "thesis.unknown", "budget.conflict", "budget.released", "task.expiring", "recap.ready", "task.intent_certified", "task.intent_rejected", "task.agent_turn", "task.agent_status"] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 /** 载荷只含 id、类型、版本、摘要与链接；不含任何签名、证书、calldata（D-087：通知不携带权限） */
 export interface NotificationPayload {

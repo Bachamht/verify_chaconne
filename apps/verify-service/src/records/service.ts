@@ -3,7 +3,7 @@
  * 只做只读汇总，字段是各表已有的公开摘要（不含证据、签名、原始请求）；详情仍走各自的 GET /v1/<kind>/:id。
  * 鉴权与组合页一致：assertOwner（受信代理的 x-verify-caller 直接通过；API key 调用方须此前为该 owner 登记过记录）。
  */
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import type { Db } from "@chaconne/db";
 import { verifyJobs, verifyMandates, verifyPlans, verifySimulations, verifyTasks } from "@chaconne/db";
 
@@ -52,11 +52,13 @@ function goalSummary(goal: unknown): Pick<RecordItem, "side" | "policyId" | "inp
 
 export async function listRecords(db: Db, owner: string): Promise<RecordItem[]> {
   const o = owner.toLowerCase();
-  const [tasks, mandates, plans, jobs, sims] = await Promise.all([
+  const [tasks, mandatesAll, archived, plans, jobs, sims] = await Promise.all([
     db.select({ id: verifyTasks.id, createdAt: verifyTasks.createdAt, status: verifyTasks.status, mode: verifyTasks.mode, playbookId: verifyTasks.playbookId, paramsJson: verifyTasks.paramsJson, goalJson: verifyTasks.goalJson })
-      .from(verifyTasks).where(eq(verifyTasks.ownerAddress, o)).orderBy(desc(verifyTasks.createdAt)).limit(LIMIT),
+      .from(verifyTasks).where(and(eq(verifyTasks.ownerAddress, o), isNull(verifyTasks.archivedAt))).orderBy(desc(verifyTasks.createdAt)).limit(LIMIT),
     db.select({ id: verifyMandates.id, createdAt: verifyMandates.createdAt, state: verifyMandates.state, taskId: verifyMandates.taskId, stepsDone: verifyMandates.stepsDone, maxSteps: verifyMandates.maxSteps, budgetCap: verifyMandates.budgetCap, spent: verifyMandates.spent, deadline: verifyMandates.deadline, mandateJson: verifyMandates.mandateJson })
       .from(verifyMandates).where(eq(verifyMandates.ownerAddress, o)).orderBy(desc(verifyMandates.createdAt)).limit(LIMIT),
+    // 已归档（用户删除）的任务：其授权计划一并从列表隐藏，详情页仍可按 id 读（CV-D16 batch 7）
+    db.select({ id: verifyTasks.id }).from(verifyTasks).where(and(eq(verifyTasks.ownerAddress, o), isNotNull(verifyTasks.archivedAt))),
     db.select({ id: verifyPlans.id, createdAt: verifyPlans.createdAt, goalJson: verifyPlans.goalJson })
       .from(verifyPlans).where(eq(verifyPlans.ownerAddress, o)).orderBy(desc(verifyPlans.createdAt)).limit(LIMIT),
     db.select({ id: verifyJobs.id, createdAt: verifyJobs.createdAt, jobJson: verifyJobs.jobJson })
@@ -64,6 +66,8 @@ export async function listRecords(db: Db, owner: string): Promise<RecordItem[]> 
     db.select({ id: verifySimulations.id, createdAt: verifySimulations.createdAt, personaId: verifySimulations.personaId, goalJson: verifySimulations.goalJson })
       .from(verifySimulations).where(eq(verifySimulations.ownerAddress, o)).orderBy(desc(verifySimulations.createdAt)).limit(LIMIT),
   ]);
+  const archivedIds = new Set(archived.map((r) => r.id));
+  const mandates = mandatesAll.filter((r) => !r.taskId || !archivedIds.has(r.taskId));
   const items: RecordItem[] = [
     ...tasks.map((r): RecordItem => ({ kind: "task", id: r.id, createdAt: iso(r.createdAt), status: r.status, mode: r.mode, playbookId: r.playbookId, params: obj(r.paramsJson), ...goalSummary(r.goalJson) })),
     ...mandates.map((r): RecordItem => {

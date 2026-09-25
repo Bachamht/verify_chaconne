@@ -161,7 +161,6 @@ export function EventCard({ item, owner, highlighted, tasksReady, assets = [] }:
         <p className="text-[11px] text-fg-3">{c("no_exec")}</p>
         {result && <ActionOutcome result={result} event={ev} onWholeDay={() => void run("wait_by_rule", { wholeDayIfDayPrecision: true })} onIgnore={() => void run("keep_plan")} />}
       </div>
-      <details><summary className="cursor-pointer text-[11px] text-fg-3">{c("dev_view")}</summary><p className="mono mt-1 break-all text-[11px] text-fg-3">{ev.id} · {ev.source} · {ev.firstKnownAt}{impact.tasks.length ? ` · ${impact.tasks.map((t) => t.taskId).join(", ")}` : ""}</p></details>
     </article>
   );
 }

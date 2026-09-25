@@ -25,7 +25,7 @@ export interface HttpResult<T = unknown> {
   paid?: X402Challenge | null;
 }
 
-/** 免 key 端点（V-40）：没有 VERIFY_API_KEY 时只有这些会真正发请求；其它路径直接回 api_key_required（不打 401 上游） */
+/** 免 key 端点（V-40）；开放模式下已不再据此拦截，保留给调用方判断 */
 export const FREE_PATH_RE = /^\/(healthz|pub\/|a2mcp\/|openapi\.json|llms\.txt|\.well-known\/|v1\/(assets|policies|products|playbooks|context|events)(\/|\?|$))/;
 export const API_KEY_REQUIRED = "api_key_required";
 
@@ -39,19 +39,17 @@ export class VerifyClient {
     return this.o.payer ?? null;
   }
 
-  /** 是否配置了 API key（无 key = 只读免费模式） */
+  /** 是否配置了 API key（开放模式下可无 key） */
   get hasApiKey(): boolean {
     return !!this.o.apiKey;
   }
 
-  async call<T = unknown>(method: "GET" | "POST" | "PUT", path: string, body?: unknown, extraHeaders: Record<string, string> = {}, opts: { autoPay?: boolean; auth?: boolean } = {}): Promise<HttpResult<T>> {
+  async call<T = unknown>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown, extraHeaders: Record<string, string> = {}, opts: { autoPay?: boolean; auth?: boolean } = {}): Promise<HttpResult<T>> {
     const headers: Record<string, string> = { "content-type": "application/json", accept: "application/json", ...extraHeaders };
     const auth = opts.auth ?? true;
     const normalizedPath = `/${path.replace(/^\//, "")}`;
-    if (auth && !this.o.apiKey && !FREE_PATH_RE.test(normalizedPath)) {
-      // 只读免费模式：需要 key 的端点不发请求，直接给结构化原因（工具层映射成 not_available）
-      return { status: 401, body: { error: API_KEY_REQUIRED, message: `${method} ${normalizedPath} needs VERIFY_API_KEY (operator-issued). This MCP server is running in free read-only mode; free tools: get_market_context, get_events, list_supported_assets, get_verification_policy, get_products, verify_once_free, plan_free, agent_tasks_free.` } as T, paymentRequired: null, paymentResponse: null, paid: null };
-    }
+    // 没有 VERIFY_API_KEY 也照常发请求：免 key 端点正常；需 key 的端点回 401 missing_api_key（带拿 key 的地址），工具层映射成 not_available
+    void normalizedPath;
     if (auth && this.o.apiKey) headers["x-api-key"] = this.o.apiKey;
     if (auth && this.o.caller) headers["x-verify-caller"] = this.o.caller;
     const url = `${this.o.baseUrl.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;

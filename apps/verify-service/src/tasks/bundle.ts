@@ -7,7 +7,7 @@
 import { bundleHash as computeBundleHash, type EvidenceBundle, type EvidenceRecord, type TaskEvidenceBundle, type ConditionEvaluationRecord, type ConditionSet, type EffectivePolicy, type PlanGoal } from "@chaconne/core/verify";
 import { buildMandateBundle, type BundleDeps } from "../bundle/bundle";
 import { HttpError } from "../jobs/service";
-import type { TasksService } from "./service";
+import { bindingHashOf, type TasksService } from "./service";
 import type { ThesesService } from "../theses/service";
 import { policyWithConditions } from "../mandates/service";
 import { findPolicy, resolveParams, registryHash } from "@chaconne/core/verify";
@@ -36,7 +36,7 @@ export async function buildTaskBundle(d: TaskBundleDeps, callerId: string, taskI
   let mandateId: string | null = null;
   for (const id of current) {
     const m = await d.mandates.byId(id);
-    if (m && m.conditionsHash === row.conditionsHash) {
+    if (m && m.conditionsHash === bindingHashOf(row)) {
       mandateId = m.id;
       break;
     }
@@ -52,7 +52,7 @@ export async function buildTaskBundle(d: TaskBundleDeps, callerId: string, taskI
     const def = findPolicy(goal.policyId, goal.policyVersion)!;
     const resolved = resolveParams(def, { maxSlippageBps: goal.maxSlippageBps, maxPriceImpactBps: goal.maxPriceImpactBps, maxReferenceDeviationBps: goal.policyId === "QUOTE_ONLY" ? null : (goal.maxReferenceDeviationBps ?? null) });
     if (!resolved.ok) throw new HttpError(400, "policy_param_out_of_range");
-    const policy: EffectivePolicy = policyWithConditions(def, resolved.params, row.conditionsHash as `0x${string}`);
+    const policy: EffectivePolicy = policyWithConditions(def, resolved.params, bindingHashOf(row));
     base = {
       schemaVersion: "1",
       kind: "mandate",
@@ -75,7 +75,9 @@ export async function buildTaskBundle(d: TaskBundleDeps, callerId: string, taskI
       bill: { serviceFees: [], principal: [], gas: [], selfPayment: false },
     };
   }
-  const merged = { ...base, id: taskId, evidence: [...base.evidence, ...extraEvidence], task, conditions, conditionEvaluations, thesis };
+  // CV-D16 批次 7：agent 的过程也进包（简报 / 轮次 / 意图 / 时间线），bundleHash 覆盖全部键
+  const intents = await d.tasks.intents.list(callerId, taskId);
+  const merged = { ...base, id: taskId, evidence: [...base.evidence, ...extraEvidence], task, conditions, conditionEvaluations, thesis, brief: (row.briefJson as TaskEvidenceBundle["brief"]) ?? null, agentTurn: (row.agentTurnJson as TaskEvidenceBundle["agentTurn"]) ?? null, agentIntents: intents, timeline: row.timelineJson as TaskEvidenceBundle["timeline"] };
   const h = computeBundleHash(merged);
   return { ...merged, bundleHash: h, bundleSignature: await d.signer.signBundleHash(h) };
 }

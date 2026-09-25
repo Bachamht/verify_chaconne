@@ -32,14 +32,16 @@ describe("O-01 · 开发者页文档", () => {
 describe("导航与路由", () => {
   it("Header 以 /agent 为首入口，旧 Verify 路由（/new /plan /play /me /live /developers /verify-bundle）全部保留；行情比价入口保留", () => {
     const src = read("components/Header.tsx");
-    for (const h of ["/agent", "/agent/tasks", "/agent/events", "/agent/journal", "/agent/funds", "/agent/lab", "/new", "/plan", "/play", "/me", "/live", "/developers", "/verify-bundle"]) expect(src).toContain(`href: "${h}"`);
+    // 批次 7：/new /plan /play /agent/lab /me 撤出导航（路由保留；/play /lab /me 转向），开发者页留调试入口
+    for (const h of ["/agent", "/agent/tasks", "/agent/events", "/agent/journal", "/agent/funds", "/live", "/developers", "/verify-bundle", "/replay/AAPLx"]) expect(src).toContain(`href: "${h}"`);
+    for (const h of ["/new", "/plan", "/play", "/agent/lab", "/me"]) expect(src).not.toContain(`href: "${h}"`);
     expect(src).toContain("verify-switch");
     expect(src).toContain("行情比价");
   });
   it("V-47：只有一套导航——页头 5 主项 + 工具下拉 + 开发者；子导航 pill 删除；投屏模式在页脚且带说明；/me 改名", () => {
     const header = read("components/Header.tsx");
     expect(header).toMatch(/NAV_MAIN[\s\S]*"\/agent\/journal"/);
-    expect(header).toMatch(/NAV_TOOLS[\s\S]*"\/me"/);
+    expect(header).toMatch(/NAV_TOOLS[\s\S]*"\/verify-bundle"/);
     expect(header).not.toContain("demo_mode");
     expect(read("components/agent/shared.tsx")).not.toContain("ag-subnav");
     const footer = read("components/Footer.tsx");
@@ -53,7 +55,7 @@ describe("导航与路由", () => {
     for (const p of ["v1/context", "v1/events", "v1/event-impacts", "v1/tasks", "v1/theses", "v1/budget-groups", "v1/portfolio", "v1/notify", "v1/replays", "v1/rebalance", "v1/recaps", "v1/missions"]) expect(src).toContain(p);
   });
   it("入口与示例任务（条件不含金额/钱包；不再默认限制美股常规时段）", () => {
-    expect(ENTRIES.map((e) => e.id)).toEqual(["buy", "wait", "compare"]);
+    expect(ENTRIES.map((e) => e.id)).toEqual(["goal", "buy", "wait", "compare"]);
     expect(new Set(SAMPLES.map((s) => s.id)).size).toBe(SAMPLES.length);
     for (const s of SAMPLES) expect(s.conditions.some((c) => c.type === "session")).toBe(false);
     for (const s of SAMPLES) {

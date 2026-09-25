@@ -1,13 +1,14 @@
 /**
  * 服务端代理：/api/verify/<path> → VERIFY_SERVICE_URL/<path>
  * - 注入 x-api-key（浏览器永远拿不到）；
- * - x-verify-caller = 任务 owner 地址：请求里明确写了地址（?owner= / 组合路径 / body）就按它，否则用 cookie 记住的；
- *   建任务等路径成功后把 body 地址写进 cookie，占位地址不覆盖已记住的真实地址（规则见 lib/proxyOwner.ts）；
+ * - x-verify-caller = 任务 owner 地址：必须是钱包登录会话里的地址（FIX-175，/api/session）；请求里写别的真实地址 → 401 wallet_signin_required，
+ *   浏览器端 api() 自动弹登录签名再重试；占位地址（无钱包模拟）免登录，只有它还经 cookie 记住（规则见 lib/proxyOwner.ts）；
  * - 透传 x402 头（PAYMENT-SIGNATURE / PAYMENT-REQUIRED / PAYMENT-RESPONSE）。
  */
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { ownerFromBody, resolveCaller } from "@/lib/proxyOwner";
+import { SESSION_COOKIE, sessionAddress, sessionSecret } from "@/lib/sessionToken";
 
 const SERVICE = process.env["VERIFY_SERVICE_URL"] ?? "http://127.0.0.1:8790";
 const KEY = process.env["VERIFY_WEB_API_KEY"] ?? "";
@@ -29,7 +30,7 @@ const ALLOWED = new RegExp(
       "v1/context",
       "v1/events(/[A-Za-z0-9_.:-]+/revisions)?",
       "v1/event-impacts",
-      "v1/tasks(/[A-Za-z0-9_]+(/(pause|resume|cancel|authorize|prepare-step|explain-wait|compare-policies))?)?",
+      "v1/tasks(/[A-Za-z0-9_]+(/(pause|resume|cancel|authorize|prepare-step|explain-wait|compare-policies|conditions|agent-status|brief|bundle|intents(/[A-Za-z0-9_]+(/withdraw)?)?))?)?",
       "v1/theses(/[A-Za-z0-9_]+(/review-items)?)?",
       "v1/budget-groups(/[A-Za-z0-9_]+(/allocations)?)?",
       "v1/portfolio/0x[0-9a-fA-F]{40}(/cost-overrides)?",
@@ -40,6 +41,8 @@ const ALLOWED = new RegExp(
       "v1/missions",
       /* 钱包账户化：按 owner 列出该钱包的全部记录（任务 / 授权 / 规划 / 核验 / 模拟） */
       "v1/records",
+      /* FIX-175：钱包签发的 Agent API key（签发 / 列出 / 吊销） */
+      "v1/keys(/[A-Za-z0-9_]+)?",
       /* Lane D 的动作与覆盖端点、Lane C 的执行器端点（F 的名单漏了这三条） */
       "v1/event-impacts/actions",
       "v1/events/earnings/coverage",
@@ -61,12 +64,15 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
   const jar = await cookies();
   let bodyText: string | undefined;
   if (req.method === "POST" || req.method === "PUT") bodyText = await req.text();
-  const { caller: owner, persist } = resolveCaller({
+  const secret = sessionSecret();
+  const { caller: owner, persist, denied } = resolveCaller({
+    sessionOwner: secret ? sessionAddress(jar.get(SESSION_COOKIE)?.value, secret, Date.now()) : null,
     cookieOwner: jar.get(COOKIE)?.value,
     queryOwner: url.searchParams.get("owner"),
     pathOwner: /^v1\/portfolio\/(0x[0-9a-fA-F]{40})/.exec(joined)?.[1],
     bodyOwner: bodyText !== undefined ? ownerFromBody(bodyText) : null,
   }, { ownerSetter: OWNER_SETTERS.has(joined) });
+  if (denied) return NextResponse.json({ error: "wallet_signin_required", address: denied, message: "Sign in with this wallet first (one signature, no transaction)." }, { status: 401, headers: { "cache-control": "private, no-store" } });
   const headers: Record<string, string> = { "content-type": "application/json", "x-api-key": KEY };
   if (owner) headers["x-verify-caller"] = owner;
   const ps = req.headers.get("payment-signature");
@@ -93,4 +99,5 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
 export const GET = proxy;
 export const POST = proxy;
 export const PUT = proxy;
+export const DELETE = proxy;
 export const dynamic = "force-dynamic";

@@ -26,6 +26,15 @@ import { englishMessage, translateDetails } from "./errors";
 /** V-42：同一 (owner, 标的, 金额, 策略) 在 60 s 内复用同一 job（不重复打上游、不重复建库存）；显式 clientRequestId 的幂等语义不变 */
 export const A2MCP_REUSE_WINDOW_MS = 60_000;
 
+/**
+ * 调用方没给 clientRequestId 时的自动幂等键（FIX-178）：参数哈希 + 60 s 时间窗。
+ * 此前只哈希参数 → 同参数永远命中第一次建的 job（幂等表按 caller+clientRequestId 查库，没有时限），
+ * Agent「交易前再核验一次」拿回的是几天前的报告。现在同参数只在同一分钟内复用，过了就重新采证。
+ */
+export function autoClientRequestId(rest: Record<string, unknown>, nowMs: number): string {
+  return `auto-${hashCanonical({ ...rest, window: Math.floor(nowMs / A2MCP_REUSE_WINDOW_MS) }).slice(2, 34)}`;
+}
+
 export const A2MCP_PATH = "/a2mcp/verify";
 
 export const A2MCP_INPUT_SCHEMA = {
@@ -105,13 +114,13 @@ export function createA2mcpHandler(d: { cfg: VerifyConfig; service: VerifyServic
       maxPriceImpactBps: parsed.maxPriceImpactBps,
       maxReferenceDeviationBps: parsed.maxReferenceDeviationBps,
     };
+    const nowMs = now().getTime();
     if (!normalized.clientRequestId) {
       const { clientRequestId: _omit, ...rest } = normalized;
-      normalized.clientRequestId = `auto-${hashCanonical(rest).slice(2, 34)}`;
+      normalized.clientRequestId = autoClientRequestId(rest, nowMs);
     }
     // V-42：60 s 内同一 (owner, 标的, 金额, 策略) 复用同一 job（只在调用方没给 clientRequestId 时；给了就按它的幂等语义）
     const reuseKey = `${callerId}|${owner.toLowerCase()}|${parsed.outputAssetKey}|${parsed.amountInRaw}|${parsed.policyId}`;
-    const nowMs = now().getTime();
     for (const [k, v] of recent) if (nowMs - v.at > A2MCP_REUSE_WINDOW_MS) recent.delete(k);
     const hit = !parsed.clientRequestId ? recent.get(reuseKey) : undefined;
     let created: { body: { jobId: string; evidenceMode: string } };
@@ -153,7 +162,9 @@ export function createA2mcpHandler(d: { cfg: VerifyConfig; service: VerifyServic
       const r = delivered.report;
       const ref = r.reference;
       // URL 放句尾且后面不接标点（V-39：此前 URL 与句号粘在一起，Agent 会把句号当 URL 的一部分）
-      const recheck = publicUrl ? ` Evidence is immutable and re-checkable without a key at ${publicUrl}` : ` Evidence is immutable; status (API key required): ${base}/v1/jobs/${jobId}`;
+      const ownerPageUrl = `${base}/jobs/${jobId}`;
+      // V-39：URL 放句尾且后面不接标点；FIX-178：先告诉钱包主人在网站哪里看（ownerPageUrl 字段给精确地址）
+      const recheck = ` The owner sees this report on the website under My tasks & records with wallet ${owner.toLowerCase()} connected.${publicUrl ? ` Evidence is immutable and re-checkable without a key at ${publicUrl}` : ` Evidence is immutable; status (API key required): ${base}/v1/jobs/${jobId}`}`;
       const summary = `${r.verdict.toUpperCase()} under ${normalized.policyId}: ${r.executionEligible ? "this purchase is eligible for execution" : "not eligible"} (market ${r.marketSession}${ref ? `, reference ${ref.kind} $${ref.priceUsd}${ref.deviationBps !== null ? `, executable price ${ref.deviationBps > 0 ? "+" : ""}${(ref.deviationBps / 100).toFixed(2)}% vs reference` : ""}` : ""}${r.normalizedQuote?.adverseImpactBps !== null && r.normalizedQuote?.adverseImpactBps !== undefined ? `, price impact ${r.normalizedQuote.adverseImpactBps} bps` : ""}).${r.reasons.length ? " Reasons: " + r.reasons.map((x) => x.code).join(", ") + "." : ""} Report hash ${delivered.reportHash.slice(0, 10)}….${recheck}`;
       return {
         ok: true,
@@ -163,7 +174,9 @@ export function createA2mcpHandler(d: { cfg: VerifyConfig; service: VerifyServic
         service: "Chaconne Verify / StockProof",
         jobId,
         statusUrl: `${base}/v1/jobs/${jobId}`,
-        statusUrlAuth: "x-api-key (owner-scoped); use publicUrl for key-less re-checks",
+        /** 钱包主人在网站看这份报告的位置（需连接 ownerAddress 那个钱包并登录；FIX-178） */
+        ownerPageUrl,
+        statusUrlAuth: "owner-scoped: the owner wallet sees it with x-verify-caller: <ownerAddress> (or on the website with that wallet connected); use publicUrl for key-less re-checks",
         publicUrl,
         publicBundleUrl: share ? `${base}/pub/reports/${share.shareId}/bundle` : null,
         publicPageUrl: share ? `${base}/r/${share.shareId}` : null,

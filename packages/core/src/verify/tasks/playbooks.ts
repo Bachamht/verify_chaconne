@@ -204,9 +204,27 @@ export function isPlaybookId(x: unknown): x is PlaybookId {
   return typeof x === "string" && (PLAYBOOK_IDS as readonly string[]).includes(x);
 }
 
+/**
+ * 目标式任务的内置「模板」（CV-D16 批次 6）：没有条件、没有计划——agent 自己的策略决定何时、买哪个、买多少；
+ * 平台只提供数据、范围内的核验与可核对的交付。参数由授权范围合成（服务端），不进目录文件。
+ */
+export const AGENT_GOAL_PLAYBOOK: PlaybookDefinition = {
+  id: "agent_goal",
+  name: { en: "Goal task (agent's own strategy)", zh: "目标任务（agent 自己的策略）" },
+  description: { en: "No template and no plan conditions: you hand the agent an objective and a signed scope (assets, budget, per-step cap, steps, deadline, hard constraints). The agent decides when, which asset and how much, submits trade intents with its decision record, and Chaconne verifies each one before issuing a step certificate. The example playbooks are only examples of strategies.", zh: "没有模板、没有计划条件：你把目标和签过的范围（资产集合、总额、每笔上限、步数、期限、硬约束）交给 agent，它用自己的策略决定何时、买哪个、买多少，提交交易意图和决策记录，Chaconne 逐笔核验后才签步骤证书。示例模板只是策略示例。" },
+  side: "buy",
+  implementedBy: "lane_b",
+  params: { steps: { type: "integer", min: 1, max: 1000, required: true }, perStepAmountRaw: { type: "raw_amount", required: true } },
+  conditions: [],
+  requiredConditionTypes: [],
+  simulationAllowed: true,
+};
+
 export function validatePlaybookCatalog(raw: unknown): { ok: true; catalog: PlaybookCatalog } | { ok: false; errors: string[] } {
   const errors: string[] = [];
-  const o = (raw ?? {}) as Record<string, unknown>;
+  const o0 = (raw ?? {}) as Record<string, unknown>;
+  // agent_goal 是内置的，目录文件可以不写
+  const o: Record<string, unknown> = typeof o0["playbooks"] === "object" && o0["playbooks"] !== null && !("agent_goal" in (o0["playbooks"] as object)) ? { ...o0, playbooks: { ...(o0["playbooks"] as object), agent_goal: AGENT_GOAL_PLAYBOOK } } : o0;
   if (typeof o["version"] !== "string" || !/^playbooks\/\d+\.\d+\.\d+$/.test(o["version"])) errors.push("version");
   const pbs = o["playbooks"];
   if (typeof pbs !== "object" || pbs === null) errors.push("playbooks");
@@ -221,7 +239,7 @@ export function validatePlaybookCatalog(raw: unknown): { ok: true; catalog: Play
     }
   }
   if (errors.length) return { ok: false, errors };
-  return { ok: true, catalog: raw as PlaybookCatalog };
+  return { ok: true, catalog: o as unknown as PlaybookCatalog };
 }
 
 export type { EventKind as PlaybookEventKind };

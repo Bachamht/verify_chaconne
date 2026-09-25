@@ -10,8 +10,8 @@
  *   prepare_guard_trade       POST /v1/jobs/:id/prepare-execution （返回 typed data / 证书 / Guard 调用参数，不签名）
  *   get_execution_status      GET  /v1/jobs/:id + 链上回执核实（可选 RPC）
  * 返回内容一律 structuredContent + 文本摘要；上游错误 isError=true 并保留状态码，不吞错。
- * v2 工具见 toolsV2.ts（13 个），v6 工具见 toolsV6.ts（23 个，interfaces §11.8），免 key 工具见 toolsFree.ts（3 个，V-40）；共 46 个。
- * 无 VERIFY_API_KEY：照常启动；免费端点的工具正常工作，需 key 的工具回 { status: "not_available", reason: "api_key_required" }（不是错误、不伪装）。
+ * v2 工具见 toolsV2.ts（13 个），v6 工具见 toolsV6.ts（28 个：interfaces §11.8 的 23 个 + CV-D16 批次 4 的 5 个），免 key 工具见 toolsFree.ts（3 个，V-40）；共 51 个。
+ * 无 VERIFY_API_KEY：照常启动，只有只读 / 免 key 工具可用；其余回 not_available(missing_api_key) 并附拿 key 的地址（网站 /agent/keys，钱包签名签发，FIX-175）。
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import type { AssetEntry } from "@/lib/assets";
+import { GoalTaskForm } from "../tasks/GoalTaskForm";
 import { TaskForm } from "../tasks/TaskForm";
 import type { TaskDraft } from "../tasks/taskDraft";
 import type { EntryId } from "./entries";
@@ -26,6 +27,7 @@ export function WaitEntry({ taskId }: { taskId?: string }) {
 }
 
 export function EntryPanel({ entry, assets, assetsSource, onRetryAssets, preset, taskId }: { entry: EntryId; assets: AssetEntry[]; assetsSource?: "live" | "cache" | "none"; onRetryAssets?: () => void; preset?: Partial<TaskDraft>; taskId?: string }) {
+  if (entry === "goal") return <GoalTaskForm assets={assets} assetsSource={assetsSource} onRetryAssets={onRetryAssets} />;
   if (entry === "buy") return <TaskForm assets={assets} assetsSource={assetsSource} onRetryAssets={onRetryAssets} preset={preset} />;
   if (entry === "wait") return <WaitEntry taskId={taskId} />;
   return <CompareEntry taskId={taskId} />;

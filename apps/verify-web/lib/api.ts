@@ -13,11 +13,13 @@ export interface AssetsResponse {
   assets: Array<{ assetKey: string; tokenAddress: string; tokenDecimals: number; displaySymbol: string; underlyingId: string; role: "stable_input" | "stock_output"; executionAllowed: boolean }>;
 }
 
+import { ensureSignedIn } from "./session";
+
 export const API_TIMEOUT_MS = 30_000;
 /** 超过这个时间页面显示「还在加载 · 重试」 */
 export const API_SLOW_MS = 10_000;
 
-export async function api<T>(method: string, path: string, body?: unknown, headers: Record<string, string> = {}, opts: { timeoutMs?: number; credentials?: RequestCredentials } = {}): Promise<{ status: number; data: T; headers: Headers }> {
+export async function api<T>(method: string, path: string, body?: unknown, headers: Record<string, string> = {}, opts: { timeoutMs?: number; credentials?: RequestCredentials; noSignIn?: boolean } = {}): Promise<{ status: number; data: T; headers: Headers }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? API_TIMEOUT_MS);
   let res: Response;
@@ -42,6 +44,12 @@ export async function api<T>(method: string, path: string, body?: unknown, heade
     data = text ? JSON.parse(text) : null;
   } catch {
     data = { error: "invalid_json", raw: text };
+  }
+  // FIX-175：代理要求钱包先登录（签一条消息）→ 自动登录一次再重试；拒签 / 没连钱包 → 401 wallet_signin_rejected
+  if (res.status === 401 && (data as { error?: string } | null)?.error === "wallet_signin_required" && !opts.noSignIn) {
+    const ok = await ensureSignedIn();
+    if (ok) return api<T>(method, path, body, headers, { ...opts, noSignIn: true });
+    return { status: 401, data: { error: "wallet_signin_rejected" } as T, headers: res.headers };
   }
   return { status: res.status, data: data as T, headers: res.headers };
 }

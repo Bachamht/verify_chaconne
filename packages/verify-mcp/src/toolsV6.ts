@@ -10,9 +10,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Hex } from "viem";
 import { EIP712_TYPES_V2 } from "@chaconne/core/verify";
+import { executePreparedStep } from "./toolsV2";
 import type { VerifyClient, HttpResult } from "./client";
 import type { ExecutorHeartbeat } from "./heartbeat";
-import { ADDR, ASSET_KEY, fail, fromHttp, ok, type ToolResult } from "./toolUtil";
+import { ADDR, ASSET_KEY, UINT, fail, fromHttp, ok, type ToolResult } from "./toolUtil";
 import type { AgentWallet } from "./wallet";
 
 export const TOOL_NAMES_V6 = [
@@ -39,6 +40,12 @@ export const TOOL_NAMES_V6 = [
   "register_webhook",
   "link_telegram",
   "executor_heartbeat",
+  /* CV-D16 批次 4：agent 自主决策 */
+  "submit_trade_intent",
+  "get_task_intents",
+  "withdraw_trade_intent",
+  "report_agent_status",
+  "execute_trade_intent",
 ] as const;
 
 export interface V6Deps {
@@ -85,6 +92,19 @@ const taskSummary = (b: Record<string, unknown>) => {
 };
 
 const CONDITION = z.object({ type: z.string() }).passthrough().describe("Condition item (core contracts §1.3): session | avoid_event_window | earnings_window | not_in_fed_blackout | max_vix | max_move | premium_bps_lte | min_gap_trading_days | max_steps_per_trading_day | require_cross_asset_confirmation | target_price_gte | target_price_lte | tracked_cost_pnl_pct_gte | cash_floor | thesis_holds");
+/** CV-D16 授权范围（全部可缺省：缺省 = 计划本身） */
+const SCOPE = z.object({
+  objective: z.string().min(1).max(500).optional().describe("plain-language objective for the agent"),
+  outputAssetKeys: z.array(ASSET_KEY).min(1).max(8).optional().describe("assets the agent may buy; must include params.outputAssetKey"),
+  budgetCapRaw: UINT.optional().describe("total budget (raw); >= plan total"),
+  perStepCapRaw: UINT.optional().describe("per-step cap (raw); >= plan per-step, <= budgetCapRaw"),
+  maxSteps: z.number().int().min(1).max(1000).optional(),
+  deadline: z.string().optional().describe("ISO; >= plan deadline"),
+  allowSell: z.boolean().optional(),
+  trustTier: z.enum(["platform_only", "agent_data", "agent_research"]).optional(),
+  issuance: z.enum(["auto", "agent"]).optional().describe("auto = platform issues by plan conditions; agent = only on agent-submitted trade intents"),
+  hardConditions: z.array(CONDITION).max(8).optional().describe("signed hard constraints (condition DSL); plan conditions cannot override them"),
+});
 const CONDITIONS = z.object({ version: z.literal("conditions/1").default("conditions/1"), items: z.array(CONDITION).min(1) });
 const TYPED = z.object({ domain: z.record(z.string(), z.unknown()), types: z.record(z.string(), z.unknown()), primaryType: z.string(), message: z.record(z.string(), z.unknown()) });
 const PLAYBOOK = z.enum(["session_dca", "event_aware_accumulate", "discount_watch", "target_sell", "portfolio_rebalance"]);
@@ -122,9 +142,9 @@ export function registerV6Tools(server: McpServer, d: V6Deps): void {
   server.registerTool(
     "create_task",
     {
-      title: "Create a task from a playbook",
-      description: "POST /v1/tasks. Builds a continuous task (session_dca / event_aware_accumulate / discount_watch / target_sell / portfolio_rebalance) with machine-checkable conditions. Returns the task (ALL blockers, nextCheckAt, executorPresence), a TradeMandate draft to sign (mode=LIVE), a thesis draft and the budget-group allocation result. mode=SIMULATION is usable immediately and never signs or executes anything. Conditions with premium_bps_lte on official_close / close_last_tick are refused for LIVE (simulation only).",
-      inputSchema: { clientRequestId: z.string().min(1).max(128), ownerAddress: ADDR, playbookId: PLAYBOOK, params: z.record(z.string(), z.unknown()).describe("playbook parameters, e.g. { steps, perStepAmountRaw, inputAssetKey, outputAssetKey }"), conditions: CONDITIONS, mode: z.enum(["SIMULATION", "LIVE"]).default("SIMULATION"), thesis: z.record(z.string(), z.unknown()).optional(), budgetGroupId: z.string().optional() },
+      title: "Create a task: a goal task (agent's own strategy) or a fixed-automation playbook",
+      description: "POST /v1/tasks. GOAL TASK (omit playbookId): hand the agent an objective, an optional strategy text and a signed scope; no template, no plan conditions — the agent decides when / which asset / how much and submits trade intents (submit_trade_intent); it is woken on watched events (report via report_agent_status). TEMPLATE TASK (playbookId): fixed automation (session_dca / event_aware_accumulate / discount_watch / target_sell / portfolio_rebalance) with machine-checkable conditions the platform issues by itself. Returns the task (ALL blockers, nextCheckAt, executorPresence), a TradeMandate draft to sign (mode=LIVE), a thesis draft and the budget-group allocation result. mode=SIMULATION is usable immediately and never signs or executes anything. Conditions with premium_bps_lte on official_close / close_last_tick are refused for LIVE (simulation only). `scope` (CV-D16) is what the owner signs: allowed assets, total budget, per-step cap, steps, deadline, allowSell, trustTier, issuance and hard constraints; it defaults to the plan itself and must contain the plan. Plan conditions can change later without a new signature; the scope cannot. PlanGuard enforces the scope only for steps that go through the contract.",
+      inputSchema: { clientRequestId: z.string().min(1).max(128), ownerAddress: ADDR, playbookId: PLAYBOOK.optional().describe("omit for a GOAL TASK (agent_goal): no template, no plan conditions — params are synthesized from `scope`; you decide when, which asset and how much and submit trade intents"), params: z.record(z.string(), z.unknown()).optional().describe("playbook parameters (template tasks), e.g. { steps, perStepAmountRaw, inputAssetKey, outputAssetKey }; for goal tasks only policyId / maxPriceImpactBps / maxSlippageBps pass through"), conditions: CONDITIONS.optional(), mode: z.enum(["SIMULATION", "LIVE"]).default("SIMULATION"), thesis: z.record(z.string(), z.unknown()).optional(), budgetGroupId: z.string().optional(), scope: SCOPE.optional().describe("REQUIRED for a goal task: objective, outputAssetKeys, budgetCapRaw, perStepCapRaw (+ optional maxSteps, deadline, trustTier default agent_data, hardConditions)"), strategy: z.string().max(4000).optional().describe("the strategy text the agent applies (outside the signature; versioned)"), watchEvents: z.object({ kinds: z.array(EVENT_KIND).max(8) }).optional().describe("event kinds that wake the agent (default MACRO_TIER1, EARNINGS, FED_SPEECH for agent-issued tasks)"), exampleId: z.string().max(64).optional() },
     },
     async (a) => call(c, "POST /v1/tasks", "POST", "/v1/tasks", a, (b) => `${taskSummary(b)}${b["mandateDraft"] ? "; mandateDraft ready to sign (authorize_task)" : ""}`),
   );
@@ -258,6 +278,95 @@ export function registerV6Tools(server: McpServer, d: V6Deps): void {
       const r = await d.heartbeat.beat(a.mandateId);
       if (r.notAvailable) return { ...notAvailable("POST /v1/mandates/:id/executor/heartbeat", { status: r.status, body: null, paymentRequired: null, paymentResponse: null }), structuredContent: { status: "not_available", endpoint: "POST /v1/mandates/:id/executor/heartbeat", httpStatus: r.status, watching: d.heartbeat.watching } };
       return ok(`heartbeat ${a.mandateId} → ${r.status}; watching ${d.heartbeat.watching.length} mandate(s) every 60 s`, { status: r.status, watching: d.heartbeat.watching });
+    },
+  );
+
+  /* ---------------- CV-D16 批次 4：agent 自主决策（意图 / 状态 / 执行） ---------------- */
+
+  const DECISION = z.object({
+    rationale: z.string().min(1).max(2000).describe("why now, why this asset, why this amount"),
+    claims: z.array(z.object({ kind: z.enum(["platform_fact", "agent_data", "agent_research"]), text: z.string().min(1).max(500), source: z.object({ evidenceId: z.string().optional(), url: z.string().max(500).optional(), name: z.string().max(100).optional() }).optional(), observedAt: z.string().optional() })).max(32).default([]).describe("each basis, classified: platform_fact needs source.evidenceId from Chaconne evidence; agent_data / agent_research are recorded as unverified and only admitted by the task's trustTier"),
+    alternatives: z.array(z.string().max(500)).max(8).optional(),
+    revisionOf: z.string().optional().describe("previous intent id this revises"),
+  });
+  const intentSummary = (b: Record<string, unknown>): string => {
+    const it = b["intent"] as { id?: string; status?: string; checks?: Array<{ id: string; ok: boolean; reasons: Array<{ code: string }> }>; step?: { stepIndex?: number } | null } | undefined;
+    const failed = (it?.checks ?? []).filter((c) => !c.ok).map((c) => `${c.id}${c.reasons.length ? `(${[...new Set(c.reasons.map((r) => r.code))].join(",")})` : ""}`);
+    return `intent ${String(it?.id)} ${String(it?.status)}${it?.step ? ` → step ${it.step.stepIndex} certificate issued (guardCall included; signing a certificate is not sending a transaction — execute it with execute_trade_intent or your wallet)` : ""}${failed.length ? `; failed checks: ${failed.join("; ")}` : ""}; task ${String(b["taskStatus"])}`;
+  };
+
+  server.registerTool(
+    "submit_trade_intent",
+    {
+      title: "Submit a trade intent with your decision record (CV-D16)",
+      description: "POST /v1/tasks/:id/intents. You propose WHAT to buy and HOW MUCH inside the task's signed scope, plus a decision record (rationale + classified claims). Chaconne runs four checks — facts (which claims the trust tier admits; platform_fact claims are matched to evidence ids), scope (asset set, per-step cap, remaining budget, steps, deadline, allowSell, signed hard constraints), execution (same engine as the toolbox: route / quote / price impact / reference by the task policy) and binding (certificate ↔ mandate ↔ task) — and only then signs a step certificate (LIVE) or reports `simulated` (SIMULATION). Any failed check → HTTP 422 with the intent recorded as `rejected` and every reason listed; the decision record is never a pass. Plan conditions do not block an intent; deviations are recorded as planDeviations. A certificate lives ~120 s: execute it right away (execute_trade_intent in agent-wallet mode).",
+      inputSchema: { taskId: z.string().min(1), clientRequestId: z.string().min(1).max(128), kind: z.enum(["buy", "sell"]).default("buy"), outputAssetKey: ASSET_KEY, amountInRaw: UINT.describe("input-token raw amount (≤ scope.perStepCapRaw)"), decision: DECISION },
+    },
+    async (a) => {
+      const r = await c.call<Record<string, unknown>>("POST", `/v1/tasks/${a.taskId}/intents`, { clientRequestId: a.clientRequestId, kind: a.kind, outputAssetKey: a.outputAssetKey, amountInRaw: a.amountInRaw, decision: a.decision });
+      if (isNotAvailable(r)) return notAvailable("POST /v1/tasks/:id/intents", r);
+      if (r.status === 422 && r.body["intent"]) return ok(intentSummary(r.body), { ...r.body, httpStatus: 422 });
+      if (r.status !== 200 && r.status !== 201) return fromHttp(r, () => "");
+      const mid = (r.body["intent"] as { step?: { mandateId?: string } | null } | undefined)?.step?.mandateId;
+      if (mid) d.heartbeat?.watch(mid);
+      return ok(intentSummary(r.body), { ...r.body, httpStatus: r.status });
+    },
+  );
+
+  server.registerTool(
+    "get_task_intents",
+    { title: "List a task's trade intents (or one intent, optionally with its live certificate)", description: "GET /v1/tasks/:id/intents, or GET /v1/tasks/:id/intents/:intentId (with `withStep=true` the response carries the READY body again while the step certificate is still PREPARED and unexpired). Shows every intent's decision record, claim triage (platform_verified / platform_unknown_evidence / agent_provided_unverified / not_admissible), the four checks with reasons, planDeviations and the issued step.", inputSchema: { taskId: z.string().min(1), intentId: z.string().optional(), withStep: z.boolean().default(false) } },
+    async (a) => a.intentId
+      ? call(c, "GET /v1/tasks/:id/intents/:intentId", "GET", `/v1/tasks/${a.taskId}/intents/${a.intentId}${a.withStep ? "?step=1" : ""}`, undefined, (b) => `intent ${String(b["id"])} ${String(b["status"])}${b["ready"] ? " (certificate still valid; READY body attached)" : ""}`)
+      : call(c, "GET /v1/tasks/:id/intents", "GET", `/v1/tasks/${a.taskId}/intents`, undefined, (b) => { const list = (b["intents"] as Array<{ status: string }> | undefined) ?? []; return `${list.length} intent(s): ${["certified", "simulated", "rejected", "withdrawn"].map((k) => `${k} ${list.filter((x) => x.status === k).length}`).join(", ")}`; }),
+  );
+
+  server.registerTool(
+    "withdraw_trade_intent",
+    { title: "Withdraw a trade intent", description: "POST /v1/tasks/:id/intents/:intentId/withdraw. Voids the step certificate server-side if it was not submitted. " + D088_NOTE, inputSchema: { taskId: z.string().min(1), intentId: z.string().min(1) } },
+    async (a) => call(c, "POST /v1/tasks/:id/intents/:intentId/withdraw", "POST", `/v1/tasks/${a.taskId}/intents/${a.intentId}/withdraw`, {}, (b) => `intent ${a.intentId} withdrawn${b["stepVoided"] ? "; pending certificate voided" : ""}; task ${String(b["taskStatus"])} — ${D088_NOTE}`),
+  );
+
+  server.registerTool(
+    "report_agent_status",
+    {
+      title: "Take over a task or report your status (accepted / declined / needs evidence / plan revised / ended)",
+      description: "POST /v1/tasks/:id/agent-status. First call `accepted` with your agent name to take the task over (the owner sees who is handling it and your last response time). When the task wakes you (agentTurn.state=awaiting_agent: conditions clear, blockers changed, step confirmed) and you decide NOT to submit an intent, say so — all four are normal outcomes and are recorded on the task timeline and sent to the owner: `declined` (not now, with why), `needs_evidence` (what you want to see), `plan_revised` (new plan conditions — outside the signed scope, so no re-signing; touching a signed hard constraint is refused with scope_locked), `ended` (you are done: the task is paused service-side; the owner cancels / revokes on-chain). Silence past agentTurn.respondBy is recorded as no_response and nothing happens.",
+      inputSchema: { taskId: z.string().min(1), status: z.enum(["accepted", "declined", "needs_evidence", "plan_revised", "ended"]), note: z.string().min(1).max(1000), agent: z.object({ name: z.string().min(1).max(100) }).optional().describe("who you are; REQUIRED for accepted (take over the task), recommended on every report"), requestedEvidence: z.array(z.string().max(300)).max(8).optional(), plan: z.object({ conditions: z.array(CONDITION).min(1).optional(), text: z.string().max(2000).optional().describe("your current plan in plain words: what to research, which assets, how to use the remaining budget") }).optional().describe("plan_revised needs conditions, text or strategy"), strategy: z.string().max(4000).optional().describe("revised strategy text (kept as a new version)") },
+    },
+    async (a) => call(c, "POST /v1/tasks/:id/agent-status", "POST", `/v1/tasks/${a.taskId}/agent-status`, { status: a.status, note: a.note, agent: a.agent, requestedEvidence: a.requestedEvidence, plan: a.plan, strategy: a.strategy }, (b) => `agent ${a.status} recorded (turn ${String((b["agentTurn"] as { version?: number } | undefined)?.version ?? "?")}); task ${String((b["task"] as { status?: string } | undefined)?.status)}${b["note"] ? ` — ${String(b["note"])}` : ""}`),
+  );
+
+  server.registerTool(
+    "execute_trade_intent",
+    {
+      title: "Execute a certified trade intent (agent-wallet mode)",
+      description: "Fetches the intent with its live READY body (GET /v1/tasks/:id/intents/:intentId?step=1), runs the same local and on-chain checks as execute_next_step (mandate digest, step index vs PlanGuard.mandateState, per-step cap, validity, output set, chain allowlist), pre-approves perStepCap, sends PlanGuard.executeStep and reports the tx hash. Refuses without agent-wallet mode, or when the certificate has expired (submit a new intent). Signing a certificate never sends a transaction by itself — this tool does.",
+      inputSchema: { taskId: z.string().min(1), intentId: z.string().min(1), dryRun: z.boolean().default(false) },
+    },
+    async (a) => {
+      if (!d.wallet) return fail("agent_wallet_disabled", "execute_trade_intent needs agent-wallet mode (AGENT_WALLET_PRIVATE_KEY + AGENT_WALLET_MAX_SPEND_USD + AGENT_WALLET_CHAIN_IDS). Otherwise execute the guardCall from submit_trade_intent with the owner's wallet.");
+      const r = await c.call<Record<string, unknown>>("GET", `/v1/tasks/${a.taskId}/intents/${a.intentId}?step=1`);
+      if (isNotAvailable(r)) return notAvailable("GET /v1/tasks/:id/intents/:intentId", r);
+      if (r.status !== 200) return fromHttp(r, () => "");
+      const ready = r.body["ready"] as Record<string, unknown> | null | undefined;
+      const st = r.body["step"] as { mandateId?: string; stepIndex?: number } | null | undefined;
+      if (r.body["status"] !== "certified" || !st?.mandateId) return fail("intent_not_certified", `intent ${a.intentId} is ${String(r.body["status"])}; only a certified intent can be executed`, { intent: r.body });
+      if (!ready || ready["status"] !== "READY") return fail("certificate_expired", "the step certificate is no longer valid (≈120 s TTL); submit a new intent", { intent: r.body });
+      const mandate = ready["mandate"] as Record<string, unknown>;
+      const typed = ready["typedData"] as { domain: Record<string, unknown> } | undefined;
+      const domain = { ...(typed?.domain ?? {}), verifyingContract: String(ready["planGuard"] ?? (typed?.domain as { verifyingContract?: string } | undefined)?.verifyingContract ?? "") };
+      let preApprove: { approveTxHash: Hex | null; allowance: string; error?: string } | null = null;
+      const chainId = Number((domain as { chainId?: number })["chainId"] ?? 0);
+      if (!a.dryRun && chainId && d.wallet.allowsChain(chainId) && String(mandate["owner"]).toLowerCase() === d.wallet.address.toLowerCase()) {
+        try {
+          const pa = await d.wallet.ensureAllowance({ chainId, token: mandate["inputToken"] as Hex, owner: mandate["owner"] as Hex, spender: domain.verifyingContract as Hex, minAmount: BigInt(String(mandate["perStepCap"])) });
+          preApprove = { approveTxHash: pa.approveTxHash, allowance: pa.allowance.toString() };
+        } catch (e) {
+          preApprove = { approveTxHash: null, allowance: "unknown", error: e instanceof Error ? e.message.slice(0, 200) : String(e) };
+        }
+      }
+      return executePreparedStep({ wallet: d.wallet, chainId, heartbeat: d.heartbeat }, c, ready, { mandateId: st.mandateId, mandate: { domain, message: mandate }, mandateSignature: String(ready["mandateSignature"] ?? ""), outputSet: (ready["outputSet"] as string[] | undefined) ?? [], expectedStepIndex: st.stepIndex, dryRun: a.dryRun }, preApprove);
     },
   );
 }

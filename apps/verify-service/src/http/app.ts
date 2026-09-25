@@ -4,12 +4,13 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { POLICIES, policyDefinitionHash, registryHash } from "@chaconne/core/verify";
 import type { VerifyConfig } from "../config";
-import { apiKeyAuth, callerOf, freeRateLimiter } from "./auth";
+import { apiKeyAuth, callerActsFor, callerOf, freeRateLimiter, isOperator } from "./auth";
 import { errorBody } from "./errors";
 import type { Paywall } from "./paywall";
 import { HttpError, type VerifyService } from "../jobs/service";
 import { UpstreamEvidenceError } from "../evidence/live";
-import { A2MCP_PATH, createA2mcpHandler } from "./a2mcp";
+import { A2MCP_PATH, createA2mcpHandler, publicBase } from "./a2mcp";
+import type { ApiKeysService } from "../keys/service";
 import { A2MCP_MONITOR_PATH, A2MCP_PLAN_PATH, createA2mcpMonitorHandler, createA2mcpPlanHandler } from "./a2mcpPlan";
 import { log } from "../log";
 import type { PlansService } from "../plans/service";
@@ -50,6 +51,8 @@ export interface AppDeps {
   service: VerifyService;
   paywall: Paywall;
   health: () => Record<string, unknown>;
+  /** 钱包签发的 API key（FIX-175）；未装配时 /v1/keys 回 404 */
+  keys?: ApiKeysService;
   /* v2 */
   plans?: PlansService;
   mandates?: MandatesService;
@@ -89,7 +92,7 @@ export function createApp(d: AppDeps) {
   const validKeys = new Set(d.cfg.apiKeys.map((e) => e.key));
 
   /* ---------- V-42：免 key 端点按 IP 限流（带合法 API key 的请求走各自的调用方限频，不计 IP 桶） ---------- */
-  app.use(["/v1/assets", "/v1/policies", "/v1/products", "/v1/playbooks", "/v1/context", "/v1/events", "/a2mcp", "/pub", "/healthz", "/openapi.json", "/llms.txt", "/.well-known"], freeRateLimiter({ perMin: d.cfg.FREE_RATE_LIMIT_PER_MIN, validKeys, now: () => now().getTime() }));
+  app.use(["/v1/assets", "/v1/policies", "/v1/products", "/v1/playbooks", "/v1/context", "/v1/events", "/a2mcp", "/pub", "/healthz", "/openapi.json", "/llms.txt", "/.well-known", "/v1/keys"], freeRateLimiter({ perMin: d.cfg.FREE_RATE_LIMIT_PER_MIN, validKeys, now: () => now().getTime() }));
 
   /* ---------- V-41：/a2mcp/* 响应头 X-A2MCP-Status 镜像正文 status（正文不变，仍是 200-only 传输；OKX 客户端只认 200/402） ---------- */
   app.use("/a2mcp", (_req, res, next) => {
@@ -202,7 +205,8 @@ export function createApp(d: AppDeps) {
   });
 
   /* ---------- 需调用方身份 ---------- */
-  const auth = apiKeyAuth(d.cfg.apiKeys, d.cfg.RATE_LIMIT_PER_MIN);
+  const keysUrl = `${publicBase(d.cfg)}/agent/keys`;
+  const auth = apiKeyAuth(d.cfg.apiKeys, d.cfg.RATE_LIMIT_PER_MIN, { open: d.cfg.authOpen, resolve: d.keys ? (k) => d.keys!.resolve(k) : undefined, keysUrl });
   const wrap = (fn: (req: Request, res: Response) => Promise<void>) => (req: Request, res: Response, next: NextFunction) => {
     fn(req, res).catch(next);
   };
@@ -222,6 +226,36 @@ export function createApp(d: AppDeps) {
     wrap(async (req, res) => {
       const job = await d.service.requireJob(callerOf(res), String(req.params["id"]));
       res.json(await d.service.view(job));
+    }),
+  );
+
+  /* ---------- FIX-175：钱包签发的 API key。签发不走 key 鉴权（钱包签名就是凭证）；列出 / 吊销要求调用方代表该钱包 ---------- */
+  app.post(
+    "/v1/keys",
+    wrap(async (req, res) => {
+      if (!d.keys) throw new HttpError(404, "not_ready", "API keys are not enabled on this deployment");
+      res.setHeader("Cache-Control", "private, no-store");
+      const issued = await d.keys.issue(req.body);
+      res.status(201).json({ ...issued, keysUrl, usage: { header: "x-api-key", mcp: { VERIFY_SERVICE_URL: publicBase(d.cfg), VERIFY_API_KEY: issued.apiKey } } });
+    }),
+  );
+  app.get(
+    "/v1/keys",
+    auth,
+    wrap(async (req, res) => {
+      if (!d.keys) throw new HttpError(404, "not_ready", "API keys are not enabled on this deployment");
+      const owner = typeof req.query["owner"] === "string" ? req.query["owner"].toLowerCase() : "";
+      if (!/^0x[0-9a-f]{40}$/.test(owner)) throw new HttpError(400, "invalid_owner", "owner 须为 EVM 地址");
+      if (!callerActsFor(callerOf(res), owner)) throw new HttpError(403, "owner_forbidden", "only the wallet itself (website session or its own key) can list its keys");
+      res.json({ owner, keys: await d.keys.list(owner) });
+    }),
+  );
+  app.delete(
+    "/v1/keys/:id",
+    auth,
+    wrap(async (req, res) => {
+      if (!d.keys) throw new HttpError(404, "not_ready", "API keys are not enabled on this deployment");
+      res.json(await d.keys.revoke(callerOf(res), String(req.params["id"])));
     }),
   );
 
@@ -627,6 +661,63 @@ export function createApp(d: AppDeps) {
           res.json(await tasks.view(await tasks.requireTask(callerOf(res), String(req.params["id"]))));
         }),
       );
+      // CV-D16 批次 2：agent 交易意图 + 决策记录 → 四道核验 → 步骤证书
+      app.post(
+        "/v1/tasks/:id/intents",
+        auth,
+        wrap(async (req, res) => {
+          const r = await tasks.intents.submit(callerOf(res), String(req.params["id"]), req.body);
+          res.status(r.httpStatus).json(r.body);
+        }),
+      );
+      app.get(
+        "/v1/tasks/:id/intents",
+        auth,
+        wrap(async (req, res) => {
+          res.json({ intents: await tasks.intents.list(callerOf(res), String(req.params["id"])) });
+        }),
+      );
+      app.get(
+        "/v1/tasks/:id/intents/:intentId",
+        auth,
+        wrap(async (req, res) => {
+          res.json(await tasks.intents.get(callerOf(res), String(req.params["id"]), String(req.params["intentId"]), req.query["step"] === "1"));
+        }),
+      );
+      app.post(
+        "/v1/tasks/:id/intents/:intentId/withdraw",
+        auth,
+        wrap(async (req, res) => {
+          res.json(await tasks.intents.withdraw(callerOf(res), String(req.params["id"]), String(req.params["intentId"])));
+        }),
+      );
+      // 批次 7：用户删除 = 归档（运行中的先取消）
+      app.delete(
+        "/v1/tasks/:id",
+        auth,
+        wrap(async (req, res) => {
+          const { row, cancelled, note } = await tasks.archive(callerOf(res), String(req.params["id"]));
+          res.json({ ...(await tasks.view(row)), archived: true, cancelled, note, stopSemantics: STOP_SEMANTICS_NOTE });
+        }),
+      );
+      // CV-D16 批次 6：owner 改简报（策略文本 / 关注的事件；签名之外）
+      app.post(
+        "/v1/tasks/:id/brief",
+        auth,
+        wrap(async (req, res) => {
+          const row = await tasks.updateBrief(callerOf(res), String(req.params["id"]), req.body);
+          res.json({ ...(await tasks.view(row)), note: "brief updated; the signed scope is unchanged" });
+        }),
+      );
+      // CV-D16 批次 3：agent 回报状态（declined / needs_evidence / plan_revised / ended 都是正常结果）
+      app.post(
+        "/v1/tasks/:id/agent-status",
+        auth,
+        wrap(async (req, res) => {
+          const { row, turn, note } = await tasks.reportAgentStatus(callerOf(res), String(req.params["id"]), req.body);
+          res.json({ ...(await tasks.view(row)), agentTurn: turn, note, stopSemantics: STOP_SEMANTICS_NOTE });
+        }),
+      );
       for (const action of ["pause", "resume", "cancel"] as const) {
         app.post(
           `/v1/tasks/:id/${action}`,
@@ -815,7 +906,7 @@ export function createApp(d: AppDeps) {
       "/v1/events/earnings/ingest",
       auth,
       wrap(async (_req, res) => {
-        if (/(0x[0-9a-f]{40})$/.test(callerOf(res))) throw new HttpError(403, "operator_only");
+        if (!isOperator(res)) throw new HttpError(403, "operator_only");
         if (!laneD.ingestor) throw new HttpError(503, "earnings_source_unavailable", "未配置 FINNHUB_API_KEY");
         const s = await laneD.ingestor.ingestAll();
         res.json({ ...s, runs: s.runs.map((r) => ({ symbol: r.symbol, underlyingId: r.underlyingId, httpStatus: r.httpStatus, ok: r.ok, rowCount: r.rowCount, receivedAt: r.receivedAt, eventIds: r.eventIds })) });

@@ -33,6 +33,7 @@ import type { VerifyConfig } from "../config";
 import type { AttestationSigner } from "../attestation/signer";
 import type { EvidenceProvider } from "../evidence/provider";
 import { GUARD_ABI } from "../execution/guardAbi";
+import { callerActsFor } from "../http/auth";
 import { newId } from "../ids";
 import { log } from "../log";
 import { Orders, type OrderRow } from "../payments/orders";
@@ -214,10 +215,10 @@ export class VerifyService {
     );
   }
 
-  /** 任务所有权校验：非本调用方 → 404（不泄漏存在性）。 */
+  /** 任务所有权校验：非本调用方且不代表该 owner 钱包 → 404（不泄漏存在性）。 */
   async requireJob(callerId: string, jobId: string): Promise<JobRow> {
     const row = (await this.d.db.select().from(verifyJobs).where(eq(verifyJobs.id, jobId)).limit(1))[0];
-    if (!row || row.callerId !== callerId) throw new HttpError(404, "job_not_found");
+    if (!row || (row.callerId !== callerId && !callerActsFor(callerId, row.ownerAddress))) throw new HttpError(404, "job_not_found");
     return row;
   }
 

@@ -36,6 +36,7 @@ export async function startFakeService(opts: FakeOptions = {}): Promise<{ url: s
   const paidJobs = new Set<string>();
   const v6 = opts.v6 ?? true;
   const tasks = new Map<string, Record<string, unknown>>();
+  const intents = new Map<string, Record<string, unknown>>();
   const drafts = new Map<string, Record<string, unknown>>();
   const heartbeats: Array<{ mandateId: string; at: number }> = [];
   const theses = new Map<string, Record<string, unknown>>();
@@ -184,6 +185,37 @@ export async function startFakeService(opts: FakeOptions = {}): Promise<{ url: s
         return json(201, { task, mandateDraft, thesisDraft: null, budgetAllocation: null });
       }
       if (path.startsWith("/v1/tasks?")) return json(200, { tasks: [...tasks.values()] });
+      // CV-D16：交易意图 / agent 状态
+      m = /^\/v1\/tasks\/([^/?]+)\/intents(?:\/([^/?]+))?(\/withdraw)?(?:\?step=1)?$/.exec(path);
+      if (m) {
+        const t = tasks.get(m[1]!);
+        if (!t) return json(404, { error: "task_not_found" });
+        if (!m[2] && method === "POST") {
+          const b = body as { clientRequestId: string; outputAssetKey: string; amountInRaw: string; decision?: { claims?: Array<{ kind: string }> } };
+          const id = `int_${b.clientRequestId}`;
+          const research = (b.decision?.claims ?? []).some((c) => c.kind === "agent_research");
+          const status = research ? "rejected" : "certified";
+          const intent = { id, taskId: m[1], clientRequestId: b.clientRequestId, kind: "buy", outputAssetKey: b.outputAssetKey, amountInRaw: b.amountInRaw, decision: b.decision, triage: [], checks: [{ id: "facts", ok: !research, reasons: research ? [{ code: "DECISION_BASIS_NOT_ADMISSIBLE", severity: "block", evidenceIds: [], detail: {} }] : [], detail: {} }, { id: "scope", ok: true, reasons: [], detail: {} }, { id: "execution", ok: !research, reasons: [], detail: {} }, { id: "binding", ok: !research, reasons: [], detail: {} }], status, step: research ? null : { mandateId: `mnd_task_${m[1]}`, stepIndex: 0, validUntil: "2999-01-01T00:00:00Z" }, planDeviations: [], createdAt: "2026-09-18T15:00:00Z", updatedAt: "2026-09-18T15:00:00Z" };
+          intents.set(id, intent);
+          if (research) return json(422, { intent, taskId: m[1], taskStatus: t["status"] });
+          return json(201, { intent, taskId: m[1], taskStatus: "STEP_PREPARED", status: "READY", stepIndex: 0, guardCall: { functionName: "executeStep" }, certificate: { effectivePolicyHash: "0x" + "12".repeat(32) } });
+        }
+        if (!m[2]) return json(200, { intents: [...intents.values()].filter((i) => i["taskId"] === m![1]) });
+        const it = intents.get(m[2]);
+        if (!it) return json(404, { error: "intent_not_found" });
+        if (m[3]) { it["status"] = "withdrawn"; return json(200, { intent: it, taskId: m[1], taskStatus: "ACTIVE", stepVoided: true }); }
+        return json(200, { ...it, ...(path.endsWith("?step=1") && it["status"] === "certified" ? { ready: { status: "READY", stepIndex: 0 } } : {}) });
+      }
+      m = /^\/v1\/tasks\/([^/?]+)\/agent-status$/.exec(path);
+      if (m && method === "POST") {
+        const t = tasks.get(m[1]!);
+        if (!t) return json(404, { error: "task_not_found" });
+        const b = body as { status: string; note?: string; plan?: { conditions?: unknown[] } };
+        if (b.status === "plan_revised" && b.plan?.conditions?.some((c) => (c as { type?: string }).type === "session")) return json(409, { error: "scope_locked" });
+        if (b.status === "ended") t["status"] = "PAUSED";
+        if (b.status === "accepted" && !(body as { agent?: { name?: string } }).agent?.name) return json(400, { error: "invalid_request", details: [{ field: "agent.name", code: "required_for_accepted" }] });
+        return json(200, { task: { ...t, brief: b.status === "accepted" ? { agent: { name: (body as { agent: { name: string } }).agent.name } } : undefined }, agentTurn: { version: 1, state: b.status === "accepted" ? "awaiting_agent" : b.status, response: b }, note: b.status === "ended" ? "task paused service-side" : "recorded" });
+      }
       m = /^\/v1\/tasks\/([^/?]+)\/(pause|resume|cancel|authorize|prepare-step|explain-wait|compare-policies)$/.exec(path);
       if (m) {
         const t = tasks.get(m[1]!);

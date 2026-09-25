@@ -17,6 +17,14 @@ const CSP = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // 批次 7：老入口转向（服务端 308，不经过客户端）；路由文件保留只作兜底
+  async redirects() {
+    return [
+      { source: "/play", destination: "/start", permanent: false },
+      { source: "/agent/lab", destination: "/agent/tasks", permanent: false },
+      { source: "/me", destination: "/agent/tasks", permanent: false },
+    ];
+  },
   output: "standalone",
   // 零空窗发版（同主站 FIX-150）：旁路构建到 NEXT_DIST_DIR 再切目录，避免原地构建那 ~2 分钟 chunk 404
   distDir: process.env["NEXT_DIST_DIR"] || ".next",

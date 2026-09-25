@@ -22,9 +22,9 @@ export function fromHttp(r: HttpResult, summaryOk: (b: Record<string, unknown>) 
       isError: false,
     };
   }
-  if (r.status === 401 && body["error"] === API_KEY_REQUIRED) {
-    // 免 key 模式下的需 key 工具：不是错误，也不是数据（V-40）
-    return { content: [{ type: "text", text: `not_available: ${String(body["message"])}` }], structuredContent: { status: "not_available", reason: API_KEY_REQUIRED, message: body["message"] }, isError: false };
+  if (r.status === 401 && (body["error"] === API_KEY_REQUIRED || body["error"] === "missing_api_key")) {
+    // 服务要求 key 而本进程没有：不是错误，也不是数据（V-40）。服务的 message / keysUrl 告诉用户去网站用钱包签名签发（FIX-175）
+    return { content: [{ type: "text", text: `not_available: ${String(body["message"] ?? "this service requires VERIFY_API_KEY")}` }], structuredContent: { status: "not_available", reason: String(body["error"]), message: body["message"] ?? null, keysUrl: body["keysUrl"] ?? null }, isError: false };
   }
   if (r.status >= 200 && r.status < 300) {
     const data: Record<string, unknown> = { status: r.status, ...body };

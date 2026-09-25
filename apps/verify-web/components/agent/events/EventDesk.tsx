@@ -73,9 +73,11 @@ export function EventDesk() {
         {d && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-fg-2">
             <span>{c("holdings")}:</span>
-            <Pill tone={d.holdings.status === "ok" ? "ok" : "warn"}>{d.holdings.status === "ok" ? `${d.holdings.count}${d.holdings.asOf ? ` · ${c("as_of")} ${fmtLocal(d.holdings.asOf, locale)}` : ""}` : `${c("unavailable")}${d.holdings.note ? ` · ${d.holdings.note}` : ""}`}</Pill>
+            <Pill tone={d.holdings.status === "ok" ? "ok" : "warn"}>{d.holdings.status === "ok" ? String(d.holdings.count) : c("unavailable")}</Pill>
+            {d.holdings.status === "ok" && d.holdings.asOf ? <span className="text-fg-3">{c("as_of")} {fmtLocal(d.holdings.asOf, locale)}</span> : d.holdings.note ? <span className="min-w-0 text-fg-3 [overflow-wrap:anywhere]">{d.holdings.note}</span> : null}
             <span>{c("tasks")}:</span>
-            <Pill tone={d.tasks.status === "ok" ? "ok" : "warn"}>{d.tasks.status === "ok" ? String(d.tasks.count) : `${c("not_ready")}${d.tasks.note ? ` · ${d.tasks.note}` : ""}`}</Pill>
+            <Pill tone={d.tasks.status === "ok" ? "ok" : "warn"}>{d.tasks.status === "ok" ? String(d.tasks.count) : c("not_ready")}</Pill>
+            {d.tasks.status !== "ok" && d.tasks.note ? <span className="min-w-0 text-fg-3 [overflow-wrap:anywhere]">{d.tasks.note}</span> : null}
             <span className="ml-auto">{c("generated")} {fmtLocal(d.generatedAt, locale)} {tzLabel()}</span>
           </div>
         )}

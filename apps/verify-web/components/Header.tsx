@@ -48,21 +48,20 @@ export const NAV_MAIN: readonly NavItem[] = [
   { href: "/start", label: { zh: "开始体验", en: "Get started" } },
   { href: "/agent", label: { zh: "完整工作区", en: "Workspace" } },
 ] as const;
+/* 批次 7：围绕一项持续的 Agent 任务只留三层——任务 / 上下文（事件、资金、日志）/ 核验（决策记录、回放、公开板）。
+ * 老的单笔核验 /new、规划 /plan、试玩 /play、实验 /agent/lab、我的记录 /me 撤出普通用户入口：路由保留（旧链接可开，/play /lab /me 转向），
+ * 单笔核验与规划留给开发者页当调试入口，能力仍由 Agent 在意图核验里调用。 */
 export const NAV_WORKSPACE: readonly NavItem[] = [
-  { href: "/agent/tasks", label: { zh: "我的任务", en: "My tasks" } },
+  { href: "/agent/tasks", label: { zh: "我的任务与记录", en: "My tasks & records" } },
   { href: "/agent/events", key: "nav_agent_events" },
   { href: "/agent/funds", key: "nav_agent_funds" },
   { href: "/agent/journal", key: "nav_agent_journal" },
-  { href: "/agent/lab", key: "nav_agent_lab" },
 ] as const;
 export const NAV_TOOLS: readonly NavItem[] = [
-  { href: "/new", key: "nav_new" },
-  { href: "/plan", key: "nav_plan" },
-  { href: "/play", key: "nav_play" },
+  { href: "/agent/keys", label: { zh: "Agent 接入 key", en: "Agent API keys" } },
   { href: "/verify-bundle", key: "nav_verify_bundle" },
   { href: "/replay/AAPLx", key: "replay_h" },
   { href: "/live", key: "nav_live" },
-  { href: "/me", key: "nav_me" },
 ] as const;
 export const NAV_DEV: NavItem = { href: "/developers", key: "nav_dev" };
 
@@ -99,7 +98,7 @@ export function Header() {
   const label = (item: NavItem) => item.label ? item.label[locale] : t(item.key);
   const groups = [
     { id: "workspace", title: locale === "zh" ? "管理与探索" : "Manage & explore", items: NAV_WORKSPACE },
-    { id: "tools", title: locale === "zh" ? "单次工具与记录" : "Tools & records", items: NAV_TOOLS },
+    { id: "tools", title: locale === "zh" ? "核验与记录" : "Verification & records", items: NAV_TOOLS },
   ];
   const toolsLabel = locale === "zh" ? "全部工具" : "All tools";
   const toolActive = [...NAV_WORKSPACE, ...NAV_TOOLS].some((n) => active(n.href));

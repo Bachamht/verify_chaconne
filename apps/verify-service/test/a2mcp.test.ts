@@ -141,6 +141,13 @@ describe("POST /a2mcp/verify", () => {
     expect(r2.json["jobId"]).toBe(r1.json["jobId"]);
     const r3 = await call(env, { ...params, amountInRaw: "50000000" });
     expect(r3.json["jobId"]).not.toBe(r1.json["jobId"]);
+    // FIX-178：过了 60 s 窗口，同参数要重新采证、建新 job（此前自动幂等键没有时限，永远返回第一次的旧报告）
+    env.setNow(new Date(Date.parse(env.cfgNow()) + 2 * 60_000).toISOString());
+    const r4 = await call(env, params);
+    expect(r4.status).toBe(200);
+    expect(r4.json["jobId"]).not.toBe(r1.json["jobId"]);
+    expect(String(r4.json["ownerPageUrl"])).toMatch(new RegExp(`/jobs/${String(r4.json["jobId"])}$`));
+    expect(String(r4.json["summary"])).toContain("My tasks & records");
   });
 
   it("收费：→ 402 + PAYMENT-REQUIRED（x402 闸门复用）", async () => {
@@ -169,8 +176,8 @@ describe("V-39 A2MCP 建的 job 调用方免 key 可回查", () => {
     expect(r.json["publicBundleUrl"]).toBe(`${r.json["publicUrl"]}/bundle`);
     expect(String(r.json["summary"])).toMatch(/re-checkable without a key at http:\/\/test\/pub\/reports\/shr_[0-9a-f]+$/);
     expect((r.json["discovery"] as { openapi: string }).openapi).toBe("http://test/pub/openapi.json");
-    // 无 key：/v1/jobs/:id 仍 401（owner 私有），公开战报与证据包 200
-    expect((await fetch(`${env.url}/v1/jobs/${jobId}`)).status).toBe(401);
+    // 无 key：/v1/jobs/:id 仍是私有的（缺省 401；开放模式下按匿名调用方 → 403/404），公开战报与证据包 200
+    expect([401, 403, 404]).toContain((await fetch(`${env.url}/v1/jobs/${jobId}`)).status);
     const pub = await fetch(env.url + new URL(String(r.json["publicUrl"])).pathname);
     expect(pub.status).toBe(200);
     const card = (await pub.json()) as { kind: string; result: { reportHash: string }; verifier: { publicBundleUrl: string }; goal: { amount: string } };
@@ -190,6 +197,27 @@ describe("V-39 A2MCP 建的 job 调用方免 key 可回查", () => {
     expect(again.json["shareId"]).toBe(r.json["shareId"]);
     // 不存在 / 未公开的分享 → 404
     expect((await fetch(`${env.url}/pub/reports/shr_nope/bundle`)).status).toBe(404);
+  });
+});
+
+describe("FIX-174 记录按钱包归属：A2MCP 建的 job，owner 钱包在网页 / MCP 能打开", () => {
+  it("网页代理（通配 key + x-verify-caller = owner）读 /v1/jobs/:id → 200；别的钱包 → 404；/v1/records?owner= 列出该 job", async () => {
+    env = await createTestEnv({ extraKeys: "vk_web_test:web:*" });
+    const r = await call(env, params);
+    expect(r.json["status"]).toBe("delivered");
+    const jobId = r.json["jobId"] as string;
+    const owner = params.ownerAddress;
+    const web = (h: Record<string, string>) => ({ "x-api-key": "vk_web_test", ...h });
+    const asOwner = await fetch(`${env.url}/v1/jobs/${jobId}`, { headers: web({ "x-verify-caller": owner }) });
+    expect(asOwner.status).toBe(200);
+    expect(((await asOwner.json()) as { jobId: string }).jobId).toBe(jobId);
+    expect((await fetch(`${env.url}/v1/jobs/${jobId}/report`, { headers: web({ "x-verify-caller": owner }) })).status).toBe(200);
+    const other = await fetch(`${env.url}/v1/jobs/${jobId}`, { headers: web({ "x-verify-caller": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }) });
+    expect(other.status).toBe(404);
+    const rec = await fetch(`${env.url}/v1/records?owner=${owner}`, { headers: web({ "x-verify-caller": owner }) });
+    expect(rec.status).toBe(200);
+    const items = ((await rec.json()) as { items: Array<{ kind: string; id: string }> }).items;
+    expect(items.some((i) => i.kind === "job" && i.id === jobId)).toBe(true);
   });
 });
 

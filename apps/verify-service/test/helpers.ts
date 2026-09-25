@@ -32,6 +32,7 @@ import { ContextService } from "../src/context/service";
 import { parseKeyring } from "../src/context/keys";
 import { ThesesService } from "../src/theses/service";
 import { TasksService } from "../src/tasks/service";
+import { ApiKeysService } from "../src/keys/service";
 import { loadPlaybooks } from "../src/tasks/playbooks";
 import type { BudgetCoordinator } from "../src/tasks/budget";
 import { FanoutTaskNotifier } from "../src/tasks/notify";
@@ -208,6 +209,7 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
   const facilitator = new ObservedFacilitator(new MockFacilitatorClient(cfg.PAYMENT_NETWORK, control));
   const orders = new Orders({ db, now, entitlement: { maxRefreshes: cfg.ENTITLEMENT_MAX_REFRESHES, windowSeconds: cfg.ENTITLEMENT_WINDOW_SECONDS } });
   const service = new VerifyService({ db, cfg, registry, evidence, signer, orders, now });
+  const keys = new ApiKeysService({ db, now });
   const paywall = createPaywall(cfg, facilitator, orders);
   await paywall.initialize();
   const engine = new CorePlanEngine();
@@ -246,7 +248,7 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
     ? new LabService({ db, cfg, registry, evaluator: laneBConditionEvaluator(), taskReader: taskReaderForLaneE(tasks), archive: new DbReplayArchive(db), now })
     : new LabService({ db, cfg, registry, evaluator: opts.labEvaluator ?? createReferenceEvaluator(), taskReader: labTasks, archive: labArchive, now });
   const recaps = new RecapsService({ sources: dbRecapSources(db, () => "FIXTURE", opts.recapHooks ?? {}), store: new MemoryRecapStore(), now });
-  const app = createApp({ cfg, service, paywall, plans, mandates, club, signer, market: opts.market ?? null, context, crowsnest, events, tasks, theses, playbooks, laneD, budget, portfolio, rebalance, notify, lab, recaps, agentHooks: opts.agentHooks, now, health: opts.health ?? (() => ({})) });
+  const app = createApp({ cfg, service, keys, paywall, plans, mandates, club, signer, market: opts.market ?? null, context, crowsnest, events, tasks, theses, playbooks, laneD, budget, portfolio, rebalance, notify, lab, recaps, agentHooks: opts.agentHooks, now, health: opts.health ?? (() => ({})) });
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((r) => server.once("listening", () => r()));
   const { port } = server.address() as AddressInfo;

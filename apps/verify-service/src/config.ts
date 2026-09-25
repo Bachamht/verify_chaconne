@@ -41,6 +41,9 @@ const Env = z.object({
 
   /** 逗号分隔 "key:callerId" */
   VERIFY_API_KEYS: z.string().optional().default(""),
+  /** 开放模式（缺省关；2026-09-26 起 key 必须带——用户在网站 /agent/keys 用钱包签名自助签发，FIX-175）。设 true 时没带 key 的请求按 x-verify-caller
+   *  当调用方（web:<地址>），没带地址按 anon:<ip>；只用于本地演示。 */
+  VERIFY_AUTH_OPEN: z.enum(["true", "false"]).optional().default("false"),
   RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).optional().default(60),
   /** 免 key 端点（/v1/assets|policies|products|playbooks|context|events、/a2mcp/*、/pub/*、/healthz）按 IP 限流（V-42）；带合法 API key 的请求不计 */
   FREE_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).optional().default(30),
@@ -175,6 +178,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     agentC3: e.AGENT_C3_ENABLED === "true",
     agentC7: e.AGENT_C7_ENABLED === "true",
     apiKeys: parseApiKeys(e.VERIFY_API_KEYS),
+    authOpen: e.VERIFY_AUTH_OPEN === "true",
     selfPaymentAddresses: new Set(e.DEMO_SELF_PAYMENT_ADDRESSES.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean)),
     /* v6 */
     agentC9Enabled: e.AGENT_C9_ENABLED === "true",

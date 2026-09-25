@@ -402,6 +402,16 @@ export const verifyTasks = pgTable(
     goalJson: jsonb("goal_json").notNull(), // PlanGoal
     conditionsJson: jsonb("conditions_json").notNull(), // ConditionSet
     conditionsHash: text("conditions_hash").notNull(),
+    /** 授权范围（scope/1，CV-D16）：目标 / 资产集合 / 总额 / 每笔上限 / 期限 / 允许卖出 / 信任档位 / 签发方式 / 硬约束 */
+    scopeJson: jsonb("scope_json"), // TaskScope
+    /** scopeHash = 签名折入的绑定哈希（effectivePolicyHash 展开参数 conditionsHash 的取值）；旧任务 null = 折的是 conditions_hash */
+    scopeHash: text("scope_hash"),
+    /** 唤醒通路（CV-D16 批次 3）：当前轮次 AgentTurn（只对 scope.issuance=agent 的任务） */
+    agentTurnJson: jsonb("agent_turn_json"),
+    /** 任务简报（批次 6，签名之外可改）：TaskBrief = 策略文本（带版本历史）+ 关注的事件 + 接管的 agent + 示例来源 */
+    briefJson: jsonb("brief_json"),
+    /** 用户删除（归档）：列表与记录里不再出现，详情仍可打开（授权 / 证书 / 回执不销毁） */
+    archivedAt: ts("archived_at"),
     mode: text("mode").notNull(), // LIVE | SIMULATION
     status: text("status").notNull(), // TaskStatus
     mandateIds: jsonb("mandate_ids").notNull().$type<string[]>(),
@@ -426,6 +436,32 @@ export const verifyTasks = pgTable(
     updatedAt: ts("updated_at").notNull(),
   },
   (t) => [unique("verify_tasks_caller_req_uq").on(t.callerId, t.clientRequestId), index("verify_tasks_owner_idx").on(t.ownerAddress), index("verify_tasks_status_idx").on(t.status, t.nextCheckAt)],
+);
+
+/* ---------- agent 交易意图（CV-D16 批次 2）：意图 + 决策记录 + 四道核验结果；certified 的意图指向签发的步骤 ---------- */
+export const verifyTaskIntents = pgTable(
+  "verify_task_intents",
+  {
+    id: text("id").primaryKey(), // int_<hex>
+    taskId: text("task_id").notNull(),
+    callerId: text("caller_id").notNull(),
+    ownerAddress: text("owner_address").notNull(),
+    clientRequestId: text("client_request_id").notNull(),
+    kind: text("kind").notNull(), // buy | sell
+    outputAssetKey: text("output_asset_key").notNull(),
+    amountInRaw: text("amount_in_raw").notNull(),
+    decisionJson: jsonb("decision_json").notNull(), // DecisionRecord（agent 原样提交）
+    triageJson: jsonb("triage_json").notNull(), // ClaimTriage[]
+    checksJson: jsonb("checks_json").notNull(), // IntentCheck[]
+    planDeviationsJson: jsonb("plan_deviations_json").notNull(), // Reason[]（计划条件偏离，信息项）
+    status: text("status").notNull(), // IntentStatus
+    stepJson: jsonb("step_json"), // { mandateId, stepIndex, validUntil }
+    /** 本次核验用到的证据 id（决策记录里 platform_fact 的核对范围） */
+    evidenceIdsJson: jsonb("evidence_ids_json").notNull(),
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [unique("verify_task_intents_task_req_uq").on(t.taskId, t.clientRequestId), index("verify_task_intents_task_idx").on(t.taskId, t.createdAt)],
 );
 
 /* ---------- 任务阻塞快照：阻塞集合变化才写一行（含可复算的求值输入） ---------- */
@@ -841,4 +877,22 @@ export const verifyMissions = pgTable(
     createdAt: ts("created_at").notNull(),
   },
   (t) => [index("verify_missions_owner_idx").on(t.ownerAddress, t.createdAt)],
+);
+
+/** 钱包绑定的 API key（FIX-175）：只存哈希；nonce 唯一 = 签名不能重放；revoked_at 非空即失效 */
+export const verifyApiKeys = pgTable(
+  "verify_api_keys",
+  {
+    id: text("id").primaryKey(), // key_<hex>
+    keyHash: text("key_hash").notNull(), // sha256(hex) of the raw key
+    ownerAddress: text("owner_address").notNull(),
+    label: text("label").notNull(),
+    /** 列表里认 key 用的片段（前 8 + 后 4 位），不是 key 本身 */
+    hint: text("hint").notNull(),
+    nonce: text("nonce").notNull(),
+    createdAt: ts("created_at").notNull(),
+    lastUsedAt: ts("last_used_at"),
+    revokedAt: ts("revoked_at"),
+  },
+  (t) => [unique("verify_api_keys_hash_uq").on(t.keyHash), unique("verify_api_keys_nonce_uq").on(t.nonce), index("verify_api_keys_owner_idx").on(t.ownerAddress)],
 );

@@ -10,6 +10,7 @@ import type { EvidenceProvider } from "../evidence/provider";
 import { newId } from "../ids";
 import { log } from "../log";
 import { HttpError, type VerifyService } from "../jobs/service";
+import { callerActsFor } from "../http/auth";
 import type { Orders } from "../payments/orders";
 import type { PlanEngine } from "./engine";
 import { validatePlanGoal } from "./validate";
@@ -127,7 +128,7 @@ export class PlansService {
 
   async requirePlan(callerId: string, planId: string): Promise<PlanRow> {
     const row = (await this.d.db.select().from(verifyPlans).where(eq(verifyPlans.id, planId)).limit(1))[0];
-    if (!row || row.callerId !== callerId) throw new HttpError(404, "plan_not_found");
+    if (!row || (row.callerId !== callerId && !callerActsFor(callerId, row.ownerAddress))) throw new HttpError(404, "plan_not_found");
     return row;
   }
 

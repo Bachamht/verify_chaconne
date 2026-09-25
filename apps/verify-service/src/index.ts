@@ -35,6 +35,7 @@ import { ContextService } from "./context/service";
 import { startContextPoller } from "./context/poller";
 import { ThesesService } from "./theses/service";
 import { TasksService } from "./tasks/service";
+import { ApiKeysService } from "./keys/service";
 import { loadPlaybooks } from "./tasks/playbooks";
 import { FullReserveBudgetCoordinator } from "./tasks/budget";
 import { NoopTaskNotifier } from "./tasks/notify";
@@ -90,6 +91,7 @@ async function main(): Promise<void> {
   const orders = new Orders({ db, now: () => new Date(), entitlement: { maxRefreshes: cfg.ENTITLEMENT_MAX_REFRESHES, windowSeconds: cfg.ENTITLEMENT_WINDOW_SECONDS } });
   const facilitator = createFacilitator(cfg);
   const service = new VerifyService({ db, cfg, registry, evidence, signer, orders });
+  const keys = new ApiKeysService({ db, now: () => new Date() });
   const paywall = createPaywall(cfg, facilitator, orders);
   const engine = new CorePlanEngine(live ? liveQuoteLadder(live) : undefined);
   const plans = new PlansService({ db, cfg, registry, evidence, engine, orders, jobs: service });
@@ -142,6 +144,7 @@ async function main(): Promise<void> {
   const app = createApp({
     cfg,
     service,
+    keys,
     paywall,
     plans,
     mandates,

@@ -113,11 +113,11 @@
     "okxAiListingStatusFields": "listed = platform shows the service as live/approved; applied = a listing request was submitted (platform id recorded); directCallable = the endpoint answers the A2MCP 200/402 contract when called directly; paidSuccess = at least one real x402 settlement succeeded against it (tx recorded). None of these implies another (upstream §6).",
     "verifyStockProof": {
       "endpoint": "https://verify.chaconne.xyz/a2mcp/verify",
-      "listed": false,
+      "listed": true,
       "applied": true,
       "directCallable": true,
       "paidSuccess": true,
-      "notes": "applied: ASP #13803 service 40806 resubmitted 2026-09-21T07:04Z (see okxAi.listing); directCallable: reviewerEvidence.after_fix 200 delivered; paidSuccess: x402Evidence.settlements[0] tx 0x9a13…bccf on eip155:1952."
+      "notes": "applied: ASP #13803 service 40806; listed: approved 2026-09-24T01:48Z (Listed, eligible for task recommendations); listing text updated and resubmitted 2026-09-25T15:5xZ, re-review pending at export time; directCallable: reviewerEvidence.after_fix 200 delivered; paidSuccess: x402Evidence.settlements[0] tx 0x9a13…bccf on eip155:1952."
     },
     "verifyPlanMonitor": {
       "endpoints": [
@@ -134,10 +134,10 @@
       "endpoint": "https://verify.chaconne.xyz/a2mcp/agent-tasks",
       "freeContext": "https://verify.chaconne.xyz/v1/context?tier=agent",
       "listed": false,
-      "applied": false,
+      "applied": true,
       "directCallable": false,
       "paidSuccess": false,
-      "notes": "v6 Lane F draft (asp-service-plan.json agentTasksService). Not submitted (wait for #13803, D-085). directCallable becomes true only after the devday-2026 deploy that includes this endpoint; price 0 during review."
+      "notes": "v6 Lane F draft (asp-service-plan.json agentTasksService). Not submitted (wait for #13803, D-085). directCallable becomes true only after the devday-2026 deploy that includes this endpoint; price 0 during review. applied: added to ASP #13803 as service 41061 \"Agent Task Drafts\" (free) and submitted for review 2026-09-25T15:5xZ; not yet listed."
     }
   },
   "toolchain": {

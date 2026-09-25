@@ -2,8 +2,8 @@ import type { ConditionItemResult } from "@chaconne/core/verify";
 import type { CreateTaskBody, TaskCreated } from "@/lib/api-v2";
 import type { AssetEntry } from "@/lib/assets";
 import { humanToRaw } from "@/lib/format";
-import { buildTaskBody, type DraftHandoff } from "../agent/tasks/taskDraft";
-import type { SamplePlaybook } from "../agent/home/entries";
+import type { ComplexTask } from "../agent/home/entries";
+import type { GoalDraft } from "../agent/tasks/taskDraft";
 
 export interface SimulationTask extends TaskCreated {
   lastEvaluation?: {
@@ -30,22 +30,37 @@ export function splitSimulationBudget(human: string, decimals: number, steps: nu
   return { requestedRaw: requested, perStepRaw: per.toString(), totalRaw: total.toString(), remainderRaw: (BigInt(requested) - total).toString(), perStepHuman };
 }
 
-/** 钱包账户化：owner 必须是已连接的钱包地址；没有就不构造请求 */
-export function buildSimulationRequest(sample: SamplePlaybook, stock: AssetEntry, stable: AssetEntry, totalHuman: string, owner: string | null, clientRequestId: string): CreateTaskBody | null {
-  const amount = splitSimulationBudget(totalHuman, stable.tokenDecimals, sample.steps);
-  if (!amount || stock.role !== "stock_output" || !stock.executionAllowed || stable.role !== "stable_input") return null;
+/**
+ * 体验用的目标式任务请求（SIMULATION，不传 playbookId）：范围 = 允许的资产、总额、每笔上限（总额 / 笔数）、笔数、期限；
+ * 策略文本与关注的事件随任务；钱包账户化：owner 必须是已连接的钱包，否则不构造。
+ */
+export function buildGoalRequest(task: ComplexTask, stocks: AssetEntry[], stable: AssetEntry, totalHuman: string, owner: string | null, clientRequestId: string, locale: "en" | "zh"): CreateTaskBody | null {
+  const amount = splitSimulationBudget(totalHuman, stable.tokenDecimals, task.steps);
+  const allowed = stocks.filter((s) => s.role === "stock_output" && s.executionAllowed);
+  if (!amount || allowed.length === 0 || allowed.length !== stocks.length || stable.role !== "stable_input") return null;
   if (!owner || !/^0x[0-9a-fA-F]{40}$/.test(owner)) return null;
-  const effectiveOwner = owner;
-  return buildTaskBody({
-    playbookId: sample.playbookId,
-    outputAssetKey: stock.assetKey,
-    inputAssetKey: stable.assetKey,
-    steps: sample.steps,
-    perStepHuman: amount.perStepHuman,
+  const deadline = new Date(Date.now() + task.days * 86_400_000).toISOString();
+  return {
+    clientRequestId,
+    ownerAddress: owner.toLowerCase(),
     mode: "SIMULATION",
-    conditions: sample.conditions,
-    maxPremiumBps: sample.conditions.find((c) => c.type === "premium_bps_lte")?.value ?? 30,
-  }, effectiveOwner, stable.tokenDecimals, clientRequestId);
+    strategy: task.strategy[locale],
+    exampleId: task.id,
+    watchEvents: { kinds: task.watch },
+    params: { policyId: "QUOTE_ONLY", maxPriceImpactBps: 100 },
+    scope: {
+      objective: task.objective[locale],
+      inputAssetKey: stable.assetKey,
+      outputAssetKeys: allowed.map((s) => s.assetKey),
+      budgetCapRaw: amount.totalRaw,
+      perStepCapRaw: amount.perStepRaw,
+      maxSteps: task.steps,
+      deadline,
+      trustTier: task.trustTier,
+      issuance: "agent",
+      ...(task.regularSessionOnly ? { hardConditions: [{ type: "session", allow: ["US_REGULAR"] }] } : {}),
+    },
+  };
 }
 
 export type SimulationDecision = "ready" | "waiting" | "stopped" | "unknown";
@@ -60,13 +75,23 @@ export function simulationDecision(view: SimulationTask): SimulationDecision {
   return "unknown";
 }
 
-/** Copy only the user's original plan; never carry a generated thesis id into LIVE. */
-export function liveDraftFromSimulation(request: CreateTaskBody): DraftHandoff {
+/** 「准备真实运行」：把同一份目标、策略与范围交给 /agent 的目标表单（人类单位；不带 owner 与请求编号） */
+export function liveGoalDraft(request: CreateTaskBody, task: ComplexTask, stable: AssetEntry, totalHuman: string): GoalDraft | null {
+  const amount = splitSimulationBudget(totalHuman, stable.tokenDecimals, task.steps);
+  if (!amount || !request.scope) return null;
   return {
-    playbookId: request.playbookId,
-    mode: "LIVE",
-    params: { ...request.params },
-    conditions: { items: request.conditions.items.filter((item) => item.type !== "thesis_holds").map((item) => ({ ...item })) },
+    objective: String(request.scope.objective ?? ""),
+    strategy: request.strategy ?? "",
+    assetKeys: [...(request.scope.outputAssetKeys ?? [])],
+    inputAssetKey: stable.assetKey,
+    totalHuman,
+    perStepHuman: amount.perStepHuman,
+    maxSteps: task.steps,
+    days: task.days,
+    trustTier: task.trustTier,
+    watch: [...task.watch],
+    regularOnly: !!task.regularSessionOnly,
+    exampleId: task.id,
   };
 }
 

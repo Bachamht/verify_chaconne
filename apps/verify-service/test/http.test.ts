@@ -29,6 +29,7 @@ describe("公开接口与鉴权", () => {
     expect(p.status).toBe(200);
     expect((p.json["policies"] as unknown[]).length).toBe(6); // 三策略 × v1.0.0 + v1.1.0（CV-D06）
     const missing = await fetch(env.url + "/v1/jobs", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    // key 必须带（FIX-175；开放模式只在 VERIFY_AUTH_OPEN=true 时）
     expect(missing.status).toBe(401);
     const bad = await api(env, "POST", "/v1/jobs", jobBody(), {}, "vk_wrong");
     expect(bad.status).toBe(403);

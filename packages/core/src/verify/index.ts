@@ -4,6 +4,7 @@ export * from "./amounts";
 export * from "./canonical";
 export * from "./policy";
 export * from "./registry";
+export * from "./apiKeys";
 export * from "./eip712";
 export * from "./evaluate";
 export * from "./report";

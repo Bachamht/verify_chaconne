@@ -12,6 +12,7 @@ import { tx } from "@/lib/i18n.execute";
 import { EXPLORER, short } from "@/lib/wallet";
 import { MAIN_SITE_URL } from "@/lib/productSwitch";
 import { jobsV2 } from "@/lib/api-v2";
+import { useAccount } from "@/lib/useAccount";
 import { BillPanel } from "@/components/BillPanel";
 import { ShareSettings } from "@/components/ShareSettings";
 import type { Bill } from "@chaconne/core/verify";
@@ -95,26 +96,29 @@ export function JobClient({ jobId }: { jobId: string }) {
     api<AssetsResponse>("GET", "v1/assets").then((r) => r.status === 200 && Array.isArray(r.data?.assets) && setAssets(r.data.assets)).catch(() => undefined);
   }, []);
 
+  /** 已连接钱包就按它当调用方（?owner= → 代理写 x-verify-caller）：Agent 经 MCP / A2MCP 为这个钱包建的核验，网页才能打开（FIX-174） */
+  const account = useAccount();
+  const ownerQ = account ? `?owner=${account.toLowerCase()}` : "";
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
     try {
-      const j = await api<JobView>("GET", `v1/jobs/${jobId}`);
+      const j = await api<JobView>("GET", `v1/jobs/${jobId}${ownerQ}`);
       setStatus(j.status);
       if (j.status !== 200) return;
       setJob(j.data);
-      const r = await api<ReportResponse | { error: string }>("GET", `v1/jobs/${jobId}/report`);
+      const r = await api<ReportResponse | { error: string }>("GET", `v1/jobs/${jobId}/report${ownerQ}`);
       if (r.status === 200) setRep(r.data as ReportResponse);
       else if (r.status === 402) setRep(null);
       else setLoadError(true);
-      const b = await jobsV2.bill(jobId);
+      const b = await jobsV2.bill(jobId, account);
       setBill(b.status === 200 ? b.data : null);
     } catch {
       setLoadError(true);
     } finally {
       setLoading(false);
     }
-  }, [jobId]);
+  }, [jobId, ownerQ, account]);
 
   useEffect(() => {
     void load();
@@ -124,7 +128,7 @@ export function JobClient({ jobId }: { jobId: string }) {
   if (loadError && !job) return <EmptyState title={t("err_generic")} description={t("err_p")} primary={{ onClick: () => void load(), label: zh ? "重试" : "Try again" }} secondary={{ href: "/me", label: t("nav_me") }} />;
   if (status && status !== 200)
     return status === 404 ? (
-      <EmptyState title={t("task_nf_h")} description={t("task_nf_p")} primary={{ href: "/me", label: t("nav_me") }} secondary={{ href: "/new", label: t("nav_new") }} />
+      <EmptyState title={t("task_nf_h")} description={account ? t("task_nf_p") : (zh ? "这条核验只对它所属的钱包可见。先在右上角连接创建它的钱包（Agent 替你核验时填的那个地址），再打开这个链接。" : "This verification is only visible to the wallet it belongs to. Connect the wallet the agent verified for (the address it used), then open this link again.")} primary={{ href: "/agent/tasks", label: t("nav_me") }} secondary={{ href: "/agent", label: t("nav_new") }} />
     ) : (
       <EmptyState title={`${t("err_generic")} ${status}`} description={t("err_p")} primary={{ href: "/", label: t("nf_home") }} />
     );

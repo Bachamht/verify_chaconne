@@ -4,7 +4,7 @@
  *  O-03 上架状态四字段分别记录（deployments.json）；O-01 免费档 /v1/context 的文档见 verify-web developers 页测试。
  *  O-04 / O-05 是集成阶段的转录（MCP Agent 自驱 + X Layer 回执可追溯），这里只留占位说明，不伪装通过。
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { EventImpact } from "@chaconne/core/verify";
@@ -111,14 +111,17 @@ describe("O-02 · POST /a2mcp/agent-tasks", () => {
 
 describe("O-03 · 上架状态分别记录", () => {
   it("deployments.json 的三个 A2MCP 服务各有 listed / applied / directCallable / paidSuccess 四个布尔字段，且互不推导", () => {
-    const d = JSON.parse(readFileSync(join(__dirname, "..", "..", "..", "docs", "devday-2026", "deployments.json"), "utf8")) as { services: Record<string, Record<string, unknown>> };
+    // 私有单仓在 docs/devday-2026/，公开快照在 docs/
+    const docFile = (name: string) => [join(__dirname, "..", "..", "..", "docs", "devday-2026", name), join(__dirname, "..", "..", "..", "docs", name)].find((f) => existsSync(f))!;
+    const d = JSON.parse(readFileSync(docFile("deployments.json"), "utf8")) as { services: Record<string, Record<string, unknown>> };
     for (const k of ["verifyStockProof", "verifyPlanMonitor", "verifyAgentTasks"]) {
       const s = d.services[k]!;
       for (const f of ["listed", "applied", "directCallable", "paidSuccess"]) expect(typeof s[f], `${k}.${f}`).toBe("boolean");
     }
-    expect(d.services["verifyAgentTasks"]!["applied"]).toBe(false); // 等 #13803（D-085）
-    expect(d.services["verifyStockProof"]!["listed"]).toBe(false); // 申请中 ≠ 已上线
-    const plan = JSON.parse(readFileSync(join(__dirname, "..", "..", "..", "docs", "devday-2026", "asp-service-plan.json"), "utf8")) as { agentTasksService: { service: Record<string, unknown> } };
+    expect(d.services["verifyAgentTasks"]!["applied"]).toBe(true); // 2026-09-26 作为 #13803 的第二项服务提交审核
+    expect(d.services["verifyAgentTasks"]!["listed"]).toBe(false); // 已提交 ≠ 已上线
+    expect(d.services["verifyStockProof"]!["listed"]).toBe(true); // 2026-09-24 上架通过
+    const plan = JSON.parse(readFileSync(docFile("asp-service-plan.json"), "utf8")) as { agentTasksService: { service: Record<string, unknown> } };
     for (const f of ["whatItIs", "whatYouGet", "whatNoResultMeans", "limits"]) expect(plan.agentTasksService.service).toHaveProperty(f);
   });
   it.todo("O-04 MCP Agent 自驱转录（建任务→等待→执行→证据包→验证）— 集成阶段由 Lane I 用 scripts/e2eAgentTask.ts 产出");

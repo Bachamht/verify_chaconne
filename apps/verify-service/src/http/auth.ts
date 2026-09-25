@@ -5,6 +5,19 @@
 import type { NextFunction, Request, Response } from "express";
 import type { ApiKeyEntry } from "../config";
 
+/**
+ * 调用方是否代表该 owner 地址（钱包账户化的两条无需查库的规则）：
+ *   1. 受信代理 / 开放模式细分出的 callerId 以 `:<owner>` 结尾（`web:0x…`、`a2mcp:owner:0x…`）；
+ *   2. 调用方本身就是该地址。
+ * 记录按钱包归属：同一钱包经网页、MCP（VERIFY_CALLER）、A2MCP 免 key 端点建的记录，互相都能读（FIX-174）。
+ */
+export function callerActsFor(callerId: string, owner: string | null | undefined): boolean {
+  if (!owner) return false;
+  const o = owner.toLowerCase();
+  const c = callerId.toLowerCase();
+  return c === o || c.endsWith(`:${o}`);
+}
+
 /** 调用方 ID 存在 res.locals（不做全局类型增强，避免与 express 类型版本耦合） */
 export function callerOf(res: Response): string {
   const id = res.locals["callerId"];
@@ -82,20 +95,75 @@ export function resetRateLimits(): void {
   buckets.clear();
 }
 
-export function apiKeyAuth(entries: ApiKeyEntry[], perMin: number) {
+/** 运营者判定：只有配置表里的、非地址绑定的 key 调用方算运营者；开放模式（无 key）的调用方永远不是 */
+export function isOperator(res: Response): boolean {
+  return res.locals["authKind"] === "key" && !/(0x[0-9a-f]{40})$/.test(String(res.locals["callerId"] ?? ""));
+}
+
+export interface ApiKeyAuthOptions {
+  /** 开放模式（缺省关）：没带 key 也放行，按 x-verify-caller 当调用方 */
+  open?: boolean;
+  /** 钱包签发的 key（库里查哈希；FIX-175）：配置表里没有的 key 才走这里 */
+  resolve?: (key: string) => Promise<{ callerId: string } | null>;
+  /** 401 里告诉调用方去哪拿 key（网站的 /agent/keys） */
+  keysUrl?: string;
+}
+
+export function apiKeyAuth(entries: ApiKeyEntry[], perMin: number, opts: ApiKeyAuthOptions = {}) {
   const byKey = new Map(entries.map((e) => [e.key, e.callerId]));
+  const admit = (res: Response, callerId: string, next: NextFunction): void => {
+    if (!rateLimit(`caller:${callerId}`, perMin, 60_000)) {
+      res.setHeader("Retry-After", "60");
+      res.status(429).json({ error: "rate_limited", message: `Rate limit exceeded for this caller (${perMin}/min). Retry after 60 s.`, retryAfterSeconds: 60 });
+      return;
+    }
+    res.locals["callerId"] = callerId;
+    res.locals["authKind"] = "key";
+    next();
+  };
   return (req: Request, res: Response, next: NextFunction): void => {
     const header = req.header("x-api-key") || req.header("authorization")?.replace(/^Bearer\s+/i, "") || "";
     const key = header.trim();
     res.setHeader("Cache-Control", "private, no-store");
-    res.setHeader("Vary", "x-api-key, authorization");
+    res.setHeader("Vary", "x-api-key, authorization, x-verify-caller");
     if (!key) {
-      res.status(401).json({ error: "missing_api_key" });
+      if (!opts.open) {
+        res.status(401).json({
+          error: "missing_api_key",
+          message: `This endpoint needs an API key. Get one for your wallet${opts.keysUrl ? ` at ${opts.keysUrl}` : ""} (connect the wallet, sign one message, copy the key) and send it as x-api-key. Free endpoints (/v1/assets, /v1/context, /a2mcp/*, /pub/*) need none.`,
+          keysUrl: opts.keysUrl ?? null,
+        });
+        return;
+      }
+      // 开放模式：x-verify-caller 给了钱包地址 → 与网页同一命名空间 web:<地址>（网页与 MCP 看到同一批任务）；没给 → anon:<ip>
+      const sub = (req.header("x-verify-caller") ?? "").trim().toLowerCase();
+      const callerId = /^0x[0-9a-f]{40}$/.test(sub) ? `web:${sub}` : `anon:${req.ip ?? "unknown"}`;
+      if (!rateLimit(`caller:${callerId}`, perMin, 60_000)) {
+        res.setHeader("Retry-After", "60");
+        res.status(429).json({ error: "rate_limited", message: `Rate limit exceeded for this caller (${perMin}/min). Retry after 60 s.`, retryAfterSeconds: 60 });
+        return;
+      }
+      res.locals["callerId"] = callerId;
+      res.locals["authKind"] = "open";
+      next();
       return;
     }
     let callerId = byKey.get(key);
     if (!callerId) {
-      res.status(403).json({ error: "invalid_api_key" });
+      if (!opts.resolve) {
+        res.status(403).json({ error: "invalid_api_key" });
+        return;
+      }
+      opts
+        .resolve(key)
+        .then((hit) => {
+          if (!hit) {
+            res.status(403).json({ error: "invalid_api_key", message: `Unknown or revoked key. Issue a new one${opts.keysUrl ? ` at ${opts.keysUrl}` : ""}.`, keysUrl: opts.keysUrl ?? null });
+            return;
+          }
+          admit(res, hit.callerId, next);
+        })
+        .catch(next);
       return;
     }
     // 通配调用方（如 "web*"）：受信代理按终端用户钱包地址细分 callerId（任务按地址隔离，I-01）
@@ -113,6 +181,7 @@ export function apiKeyAuth(entries: ApiKeyEntry[], perMin: number) {
       return;
     }
     res.locals["callerId"] = callerId;
+    res.locals["authKind"] = "key";
     next();
   };
 }

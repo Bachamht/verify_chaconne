@@ -10,16 +10,19 @@ afterEach(async () => {
 
 
 describe("V-28 错误方法 → 405 + Allow", () => {
-  it("POST /v1/tasks/:id/explain-wait → 405 Allow: GET, HEAD, OPTIONS；DELETE /v1/tasks/:id → 405 列出 GET；未知路径仍 404", async () => {
+  it("POST /v1/tasks/:id/explain-wait → 405 Allow: GET, HEAD, OPTIONS；PATCH /v1/tasks/:id → 405 列出 GET 与 DELETE；未知路径仍 404", async () => {
     env = await createTestEnv();
     const r = await api(env, "POST", "/v1/tasks/tsk_x/explain-wait", {});
     expect(r.status).toBe(405);
     expect(r.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
     expect(r.json["error"]).toBe("method_not_allowed");
     expect(r.json["allow"]).toEqual(["GET", "HEAD", "OPTIONS"]);
-    const del = await api(env, "DELETE", "/v1/tasks/tsk_x");
+    // 批次 7：DELETE /v1/tasks/:id 成了真实方法（删除 = 归档）；错误方法改用 PATCH 检查
+    const del = await api(env, "PATCH", "/v1/tasks/tsk_x");
     expect(del.status).toBe(405);
     expect(del.headers.get("allow")).toContain("GET");
+    expect(del.headers.get("allow")).toContain("DELETE");
+    expect((await api(env, "DELETE", "/v1/tasks/tsk_x")).status).toBe(403);
     const put = await api(env, "PUT", "/v1/assets");
     expect(put.status).toBe(405);
     expect((await api(env, "GET", "/v1/nope")).status).toBe(404);

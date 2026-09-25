@@ -24,6 +24,16 @@ const MCP_TOOLS: Array<[string, string[]]> = [
   ["free · no key (read-only)", ["verify_once_free", "plan_free", "agent_tasks_free"]],
 ];
 
+/** 批次 7：单笔核验与规划从普通用户入口撤下，只在这里留调试入口 */
+function DebugTools({ zh }: { zh: boolean }) {
+  return (
+    <p className="text-sm">
+      {zh ? "调试入口（Agent 提交意图时会自动调用同一套核验与规划能力，普通用户不需要单独进入）：" : "Debug entries (the agent calls the same verification and planning when it submits an intent; end users do not need them):"}{" "}
+      <Link className="underline" href="/new">{zh ? "单笔核验" : "Single verification"}</Link> · <Link className="underline" href="/plan">{zh ? "规划器" : "Planner"}</Link> · <Link className="underline" href="/verify-bundle">{zh ? "验证决策记录" : "Verify a decision bundle"}</Link>
+    </p>
+  );
+}
+
 /** V-45：路径列可换行（此前 whitespace-nowrap 把长路径截断）、说明列必填、表格可横向滚动 */
 function Tbl({ rows, zh }: { rows: Array<[string, string]>; zh: boolean }) {
   return (
@@ -101,12 +111,13 @@ export default function DevelopersPage() {
         <nav className="mt-2 flex flex-wrap gap-1.5 lg:flex-col lg:gap-0.5" aria-label={zh ? "开发者页目录" : "Developers page contents"}>
           {SECTIONS.map((x) => <a key={x.id} href={`#${x.id}`} className="rounded-md px-2 py-1 text-xs text-fg-2 ring-1 ring-line hover:bg-surface-2 hover:text-fg-1 lg:ring-0">{zh ? x.zh : x.en}</a>)}
         </nav>
-        <p className="mt-3 hidden text-[11px] text-fg-3 lg:block">{zh ? "免 key：/v1/context · /v1/assets · /v1/policies · /a2mcp/* · /pub/* · /openapi.json · /llms.txt · /.well-known/agent-card.json。其它 REST 需要 x-api-key。" : "No key: /v1/context · /v1/assets · /v1/policies · /a2mcp/* · /pub/* · /openapi.json · /llms.txt · /.well-known/agent-card.json. Other REST calls need x-api-key."}</p>
+        <p className="mt-3 hidden text-[11px] text-fg-3 lg:block">{zh ? <>写操作与私密读取需要 key：在 <a className="underline" href="/agent/keys">Agent 接入 key</a> 用钱包签一条消息生成，请求头 x-api-key。</> : <>Writes and private reads need a key: issue one with a wallet signature under <a className="underline" href="/agent/keys">Agent API keys</a>, send it as x-api-key.</>}</p>
       </aside>
     <div className="min-w-0 space-y-5">
       <h1 className="text-2xl font-bold">{t("dev_h")}</h1>
       <p className="text-sm text-fg-2">{zh ? "机器可读的入口：" : "Machine-readable entry points: "}<a className="mono underline" href="/openapi.json">/openapi.json</a> · <a className="mono underline" href="/llms.txt">/llms.txt</a> · <a className="mono underline" href="/.well-known/agent-card.json">/.well-known/agent-card.json</a>{zh ? "（描述全部端点、哪些免 key、怎么调用）。" : " (every endpoint, which ones need no key, how to call)."}</p>
 
+      <Card title={zh ? "调试入口" : "Debug entries"}><DebugTools zh={zh} /></Card>
       <Card title={<span id="free" className="scroll-mt-24">{zh ? "免 key：GET /v1/context（agent 档）· /v1/assets · /v1/policies" : "No key needed: GET /v1/context (agent tier) · /v1/assets · /v1/policies"}</span>}>
         <p className="text-sm text-neutral-300">{zh ? "任何 Agent 都可以免费读市场上下文的 agent 档：只含派生字段（时段、事件、窗口、静默期、曲线形态、漂移判定）与官方公开源数值；私有研究不导出。字段不在档位时整个字段标 unavailable（note=not_in_tier），绝不省略键。响应带 crowsnest Ed25519 签名与 provenance.mode（live / backfill / sample）——只有 live 才能参与 LIVE 判定。" : "Any agent can read the agent tier of the market context for free: derived fields only (session, events, windows, blackout, curve shape, drift verdict) plus official public-source values; private research is never exported. Fields outside the tier are whole-field unavailable (note=not_in_tier), never omitted. Responses carry the crowsnest Ed25519 signature and provenance.mode (live / backfill / sample); only live may take part in a LIVE decision."}</p>
         <pre className="mono mt-3 overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`# no API key needed
@@ -162,17 +173,17 @@ curl "${SERVICE}/v1/context?tier=agent&assetKey=eip155:196:0x9d275685dc284c8eb1c
         <p className="mt-2 text-xs text-fg-3">{zh ? "两个合约均 Sourcify 精确匹配；EIP-712 domain：ChaconneVerifyGuard v1 / ChaconneVerifyPlanGuard v1。当前 signer 与 epoch 也可从 GET /healthz 读取。" : "Both contracts are Sourcify exact matches; EIP-712 domains: ChaconneVerifyGuard v1 / ChaconneVerifyPlanGuard v1. The current signer and epoch are also exposed by GET /healthz."}</p>
       </Card>
 
-      <Card title={<span id="v1" className="scroll-mt-24">{zh ? "HTTP API · 核验（v1）· 需 key" : "HTTP API · verification (v1) · key required"}</span>}>
+      <Card title={<span id="v1" className="scroll-mt-24">{zh ? "HTTP API · 核验（v1）" : "HTTP API · verification (v1)"}</span>}>
         <Tbl rows={v1} zh={zh} />
-        <pre className="mono mt-3 overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`# key required (x-api-key or Authorization: Bearer)
+        <pre className="mono mt-3 overflow-auto rounded-lg bg-surface-0 p-3 text-xs">{`# x-api-key: issue one at /agent/keys (wallet signature); the key is bound to that wallet
 curl -X POST ${SERVICE}/v1/jobs -H "x-api-key: <your key>" -H "Content-Type: application/json" -d '{
   "clientRequestId": "my-1", "ownerAddress": "0xYourWallet",
   "inputAssetKey": "eip155:196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8", "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
   "amountInRaw": "5000000", "policyId": "REFERENCE_CONTEXT", "maxSlippageBps": 50, "maxPriceImpactBps": 100, "maxReferenceDeviationBps": 300 }'`}</pre>
       </Card>
-      <Card title={<span id="v5" className="scroll-mt-24">{zh ? "HTTP API · 规划、授权计划、模拟、战报（v5）· 需 key" : "HTTP API · plans, mandates, simulations, reports (v5) · key required"}</span>}>
+      <Card title={<span id="v5" className="scroll-mt-24">{zh ? "HTTP API · 规划、授权计划、模拟、战报（v5）" : "HTTP API · plans, mandates, simulations, reports (v5)"}</span>}>
         <Tbl rows={v2} zh={zh} />
-        <p className="mt-2 text-xs text-fg-3">{zh ? "鉴权：x-api-key 或 Authorization: Bearer；A2MCP 端点、/pub/*、/v1/assets、/v1/policies 与 /v1/context?tier=agent 不需要 key。响应 private/no-store。API key 在 Dev Day 期间联系运营者获取。" : "Auth: x-api-key or Authorization: Bearer; A2MCP endpoints, /pub/*, /v1/assets, /v1/policies and /v1/context?tier=agent need no key. Responses are private/no-store. During Dev Day, ask the operator for an API key."}</p>
+        <p className="mt-2 text-xs text-fg-3">{zh ? <>鉴权：请求头 x-api-key。key 在 <a className="underline" href="/agent/keys">Agent 接入 key</a> 用钱包签一条消息自助生成，绑定那个钱包——用它建的任务与网站上同一钱包看到的是同一批；随时可吊销。免 key 端点：/v1/assets、/v1/policies、/v1/context（agent 档）、/v1/events、/a2mcp/*、/pub/*。响应 private/no-store。</> : <>Auth: send x-api-key. Issue a key with one wallet signature under <a className="underline" href="/agent/keys">Agent API keys</a>; it is bound to that wallet, so tasks it creates are the same set the site shows for that wallet; revoke any time. Key-free endpoints: /v1/assets, /v1/policies, /v1/context (agent tier), /v1/events, /a2mcp/*, /pub/*. Responses are private/no-store.</>}</p>
       </Card>
 
       <Card title={<span id="v6" className="scroll-mt-24">{zh ? "HTTP API · Agent（v6）· 需 key" : "HTTP API · agent (v6) · key required"}</span>}>
@@ -189,7 +200,7 @@ curl -X POST ${SERVICE}/v1/tasks -H "x-api-key: <your key>" -H "Content-Type: ap
       </Card>
 
       <Card title={<span id="mcp" className="scroll-mt-24">{zh ? "MCP 工具（verify-mcp，46 个）" : "MCP tools (verify-mcp, 46)"}</span>}>
-        <p className="text-sm text-neutral-300">{zh ? "VERIFY_API_KEY 可选：不给 key 时服务器以免 key 只读模式运行——只读工具（get_market_context / get_events / list_supported_assets / get_verification_policy / get_products）与三个免 key 工具 verify_once_free / plan_free / agent_tasks_free 都可用；建任务、授权、执行类工具需要 key。" : "VERIFY_API_KEY is optional: without it the server runs in free read-only mode — the read-only tools (get_market_context / get_events / list_supported_assets / get_verification_policy / get_products) and the three free tools verify_once_free / plan_free / agent_tasks_free all work; task, mandate and execution tools need a key."}</p>
+        <p className="text-sm text-neutral-300">{zh ? <>VERIFY_API_KEY：在 <a className="underline" href="/agent/keys">Agent 接入 key</a> 生成（钱包签名，绑定钱包）。不给 key 时只有只读工具（get_market_context / get_events / list_supported_assets / get_verification_policy / get_products）与三个免 key 工具 verify_once_free / plan_free / agent_tasks_free 可用；建任务、提交意图、授权、执行类工具需要 key。</> : <>VERIFY_API_KEY: issue it under <a className="underline" href="/agent/keys">Agent API keys</a> (wallet signature, bound to the wallet). Without it only the read-only tools (get_market_context / get_events / list_supported_assets / get_verification_policy / get_products) and the three free tools verify_once_free / plan_free / agent_tasks_free work; task, intent, mandate and execution tools need the key.</>}</p>
         <div className="mt-3 space-y-2 text-sm">
           {MCP_TOOLS.map(([group, names]) => (
             <div key={group}>
@@ -211,8 +222,8 @@ git clone https://github.com/Bachamht/verify_chaconne && cd verify_chaconne && p
 
 { "mcpServers": { "chaconne-verify": {
     "command": "node", "args": ["<path-to>/verify_chaconne/packages/verify-mcp/bin/chaconne-verify-mcp.mjs"],
-    "env": { "VERIFY_SERVICE_URL": "${SERVICE}" }                                   // free read-only mode
-    // "env": { "VERIFY_SERVICE_URL": "${SERVICE}", "VERIFY_API_KEY": "<your key>" }   // full tool set (optional)
+    "env": { "VERIFY_SERVICE_URL": "${SERVICE}", "VERIFY_API_KEY": "<key from /agent/keys>" }   // full tool set
+    // "env": { "VERIFY_SERVICE_URL": "${SERVICE}" }                                              // read-only + free tools only
 } } }`}</pre>
       </Card>
 

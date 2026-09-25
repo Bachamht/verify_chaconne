@@ -53,7 +53,8 @@ export function Pill({ children, tone = "neutral" }: { children: ReactNode; tone
     info: "bg-info/12 text-info",
     brand: "bg-brand-950/60 text-brand-300 ring-1 ring-line-brand",
   }[tone];
-  return <span className={`mono inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-[11px] font-medium ${cls}`}>{children}</span>;
+  // max-w-full + 截断：标签再长也只在自己的容器里省略，绝不把页面撑出横向滚动（长说明应放在标签旁边的普通文本里）
+  return <span className={`mono inline-flex h-5 max-w-full items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-full px-2 text-[11px] font-medium ${cls}`}>{children}</span>;
 }
 
 export function Json({ value }: { value: unknown }) {

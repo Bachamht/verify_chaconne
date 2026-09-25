@@ -44,8 +44,8 @@ async function connect(apiKey: string) {
 }
 const sc = (r: Awaited<ReturnType<Client["callTool"]>>) => r.structuredContent as Record<string, unknown>;
 
-describe("免 key 只读模式", () => {
-  it("无 VERIFY_API_KEY：服务器照常启动、46 个工具全部可见；免费工具正常调用且不带 x-api-key", async () => {
+describe("免 key 模式", () => {
+  it("无 VERIFY_API_KEY：服务器照常启动、51 个工具全部可见；免费工具正常调用且不带 x-api-key", async () => {
     const { client, b, close } = await connect("");
     const names = (await client.listTools()).tools.map((t) => t.name);
     expect(names.sort()).toEqual([...TOOL_NAMES].sort());
@@ -60,17 +60,14 @@ describe("免 key 只读模式", () => {
     await close();
   });
 
-  it("需 key 的工具 → not_available(api_key_required)，isError=false，且不打上游", async () => {
+  it("开放模式：没有 VERIFY_API_KEY 也照常打上游（不带 x-api-key）；上游若要求 key（401）→ not_available，isError=false", async () => {
     const { client, b, close } = await connect("");
     const before = b.seen.length;
-    for (const [name, args] of [["create_task", { clientRequestId: "x", ownerAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", playbookId: "session_dca", params: {}, conditions: { version: "conditions/1", items: [{ type: "session" }] } }], ["get_task", { taskId: "tsk_1" }], ["prepare_verification", { clientRequestId: "r", ownerAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", inputAssetKey: "eip155:196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8", outputAssetKey: "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a", amountInRaw: "1", policyId: "STRICT_LIVE", maxSlippageBps: 50 }], ["get_portfolio", { owner: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }]] as const) {
-      const r = await client.callTool({ name, arguments: args as Record<string, unknown> });
-      expect(r.isError, name).toBeFalsy();
-      expect(sc(r)["status"], name).toBe("not_available");
-      expect(sc(r)["reason"], name).toBe("api_key_required");
-      expect((r.content as Array<{ text: string }>)[0]!.text).toMatch(/VERIFY_API_KEY/);
-    }
-    expect(b.seen.length).toBe(before);
+    const r = await client.callTool({ name: "get_task", arguments: { taskId: "tsk_1" } });
+    expect(b.seen.length).toBe(before + 1);
+    expect("x-api-key" in b.seen[b.seen.length - 1]!.headers).toBe(false);
+    expect(r.isError).toBeFalsy();
+    expect(sc(r)["status"]).toBe("not_available");
     await close();
   });
 

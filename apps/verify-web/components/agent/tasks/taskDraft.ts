@@ -2,8 +2,8 @@
  * 任务草稿 → POST /v1/tasks 请求体（V-24）。纯函数，页面与测试共用。
  * 服务端必填：inputAssetKey（资金币种）+ perStepAmountRaw / amountRaw（每步金额，最小单位）——两处表单此前都漏了。
  */
-import type { Condition, PlaybookId } from "@chaconne/core/verify";
-import type { CreateTaskBody, TaskMode } from "@/lib/api-v2";
+import type { Condition, IssuanceMode, PlaybookId, TrustTier } from "@chaconne/core/verify";
+import type { TemplateTaskBody, TaskMode } from "@/lib/api-v2";
 import { humanToRaw } from "@/lib/format";
 
 export interface TaskDraft {
@@ -25,6 +25,17 @@ export interface TaskDraft {
   regularSessionOnly?: boolean;
   /** 草案里带的 owner（A2MCP 草案是完整的 POST /v1/tasks 请求体）；只在没连钱包时预填 */
   ownerAddress?: string;
+  /* ---- 授权范围（CV-D16）：签名只覆盖这些；模板参数与计划条件在签名之外 ---- */
+  /** 目标描述（人话）；缺省 = 模板标题 */
+  objective?: string;
+  /** 除主资产外还允许 agent 买入的资产（登记表 assetKey） */
+  extraAssetKeys?: string[];
+  /** 信任档位：agent 提交决策时能拿什么当依据 */
+  trustTier?: TrustTier;
+  /** 签发方式：auto = 平台按计划签发；agent = 只由 agent 提交交易意图后签发 */
+  issuance?: IssuanceMode;
+  /** 是否允许 agent 提出卖出（卖出仍需按资产另签授权） */
+  allowSell?: boolean;
 }
 export type DraftField = "outputAssetKey" | "inputAssetKey" | "steps" | "perStepAmountRaw" | "ownerAddress" | "maxPriceImpactBps";
 
@@ -44,12 +55,28 @@ export function validateDraft(d: TaskDraft, owner: string, decimals: number | nu
   return e;
 }
 
-export function buildTaskBody(d: TaskDraft, owner: string, decimals: number, clientRequestId: string): CreateTaskBody {
+export function buildTaskBody(d: TaskDraft, owner: string, decimals: number, clientRequestId: string): TemplateTaskBody {
   const raw = humanToRaw(d.perStepHuman, decimals) ?? "0";
   const params: Record<string, unknown> = { inputAssetKey: d.inputAssetKey.toLowerCase(), outputAssetKey: d.outputAssetKey.toLowerCase(), steps: d.steps, [amountParamOf(d.playbookId)]: raw, policyId: d.policyId ?? "QUOTE_ONLY" };
   if (d.maxPriceImpactBps !== undefined) params["maxPriceImpactBps"] = d.maxPriceImpactBps;
   if (d.playbookId === "discount_watch") params["maxPremiumBps"] = d.maxPremiumBps ?? 30;
-  return { clientRequestId, ownerAddress: owner.toLowerCase(), playbookId: d.playbookId, params, conditions: { version: "conditions/1", items: d.conditions }, mode: d.mode };
+  const body: TemplateTaskBody = { clientRequestId, ownerAddress: owner.toLowerCase(), playbookId: d.playbookId, params, conditions: { version: "conditions/1", items: d.conditions }, mode: d.mode };
+  const scope = scopeOfDraft(d);
+  if (scope) body.scope = scope;
+  return body;
+}
+
+/** 范围里只发用户明确设置的项；总额 / 每笔 / 步数 / 期限缺省由服务端按计划推导（范围 = 计划本身） */
+export function scopeOfDraft(d: TaskDraft): TemplateTaskBody["scope"] | null {
+  const scope: NonNullable<TemplateTaskBody["scope"]> = {};
+  const objective = d.objective?.trim();
+  if (objective) scope.objective = objective.slice(0, 500);
+  const extra = (d.extraAssetKeys ?? []).map((k) => k.toLowerCase()).filter((k) => k && k !== d.outputAssetKey.toLowerCase());
+  if (extra.length) scope.outputAssetKeys = [...new Set([d.outputAssetKey.toLowerCase(), ...extra])].sort();
+  if (d.trustTier && d.trustTier !== "platform_only") scope.trustTier = d.trustTier;
+  if (d.issuance && d.issuance !== "auto") scope.issuance = d.issuance;
+  if (d.allowSell) scope.allowSell = true;
+  return Object.keys(scope).length ? scope : null;
 }
 
 /** 默认每步金额（人类单位）：余额已知 → min(1, 余额/步数 截到 2 位)；余额未知 → 1 */
@@ -82,6 +109,8 @@ export interface DraftHandoff {
   ownerAddress?: string;
   /** A2MCP 草案可能标出缺什么（如 ["ownerAddress"]）；表单本来就会要求补 owner */
   missingForCreate?: string[];
+  /** 授权范围（CV-D16） */
+  scope?: { objective?: unknown; outputAssetKeys?: unknown[]; trustTier?: unknown; issuance?: unknown; allowSell?: unknown };
 }
 export function stashDraft(d: DraftHandoff): void {
   try {
@@ -115,6 +144,14 @@ export function presetFromDraft(d: DraftHandoff | null | undefined, decimalsOf: 
   if (typeof p["maxPremiumBps"] === "number") out.maxPremiumBps = p["maxPremiumBps"];
   if (p["policyId"] === "QUOTE_ONLY" || p["policyId"] === "REFERENCE_CONTEXT" || p["policyId"] === "STRICT_LIVE") out.policyId = p["policyId"];
   if (typeof p["maxPriceImpactBps"] === "number" && Number.isInteger(p["maxPriceImpactBps"])) out.maxPriceImpactBps = p["maxPriceImpactBps"];
+  const sc = d.scope;
+  if (sc && typeof sc === "object") {
+    if (typeof sc.objective === "string") out.objective = sc.objective;
+    if (sc.trustTier === "platform_only" || sc.trustTier === "agent_data" || sc.trustTier === "agent_research") out.trustTier = sc.trustTier;
+    if (sc.issuance === "auto" || sc.issuance === "agent") out.issuance = sc.issuance;
+    if (typeof sc.allowSell === "boolean") out.allowSell = sc.allowSell;
+    if (Array.isArray(sc.outputAssetKeys)) out.extraAssetKeys = sc.outputAssetKeys.filter((k): k is string => typeof k === "string");
+  }
   const raw = (p["perStepAmountRaw"] ?? p["amountRaw"]) as unknown;
   if (typeof raw === "string" && /^\d+$/.test(raw) && typeof p["inputAssetKey"] === "string") {
     const dec = decimalsOf(p["inputAssetKey"]);
@@ -128,4 +165,40 @@ export function presetFromDraft(d: DraftHandoff | null | undefined, decimalsOf: 
   const items = Array.isArray(d.conditions) ? d.conditions : Array.isArray(d.conditions?.items) ? d.conditions.items : null;
   if (items && items.length) { out.conditions = items; if (items.some((c) => c && typeof c === "object" && (c as { type?: string }).type === "session")) out.regularSessionOnly = true; }
   return out;
+}
+
+/** 目标式任务的会话内交接（/start 「准备真实运行」→ /agent 目标表单预填）：只在本浏览器 sessionStorage */
+export const GOAL_DRAFT_KEY = "verify_goal_draft_v1";
+export interface GoalDraft {
+  objective: string;
+  strategy: string;
+  assetKeys: string[];
+  inputAssetKey: string;
+  totalHuman: string;
+  perStepHuman: string;
+  maxSteps: number;
+  days: number;
+  trustTier: "platform_only" | "agent_data" | "agent_research";
+  watch: string[];
+  regularOnly: boolean;
+  exampleId?: string;
+}
+export function stashGoalDraft(d: GoalDraft): boolean {
+  try {
+    sessionStorage.setItem(GOAL_DRAFT_KEY, JSON.stringify(d));
+    return sessionStorage.getItem(GOAL_DRAFT_KEY) === JSON.stringify(d);
+  } catch {
+    return false;
+  }
+}
+export function takeGoalDraft(): GoalDraft | null {
+  try {
+    const raw = sessionStorage.getItem(GOAL_DRAFT_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(GOAL_DRAFT_KEY);
+    const d = JSON.parse(raw) as GoalDraft;
+    return d && typeof d === "object" && typeof d.objective === "string" ? d : null;
+  } catch {
+    return null;
+  }
 }

@@ -204,58 +204,7 @@ export function registerV2Tools(server: McpServer, d: V2Deps): void {
       }
       const prep = await c.call<Record<string, unknown>>("POST", `/v1/mandates/${a.mandateId}/prepare-step`);
       if (prep.status !== 200) return fromHttp(prep, () => "");
-      const p = prep.body;
-      if (p["status"] !== "READY") return ok(`not ready: ${String(p["status"])}${p["reasons"] ? ` (${JSON.stringify(p["reasons"]).slice(0, 300)})` : ""}`, { status: 200, ...p, executed: false });
-      const step = (p["step"] ?? (p["typedData"] as { message?: unknown } | undefined)?.message) as MandateStep | undefined;
-      const cert = p["certificate"] as StepCertificate | undefined;
-      const certSig = p["certificateSignature"] as Hex | undefined;
-      const calldata = p["routerCalldata"] as Hex | undefined;
-      const planGuard = (p["planGuard"] ?? (a.mandate.domain as { verifyingContract?: string })["verifyingContract"]) as Hex | undefined;
-      let outputSet: Hex[];
-      try {
-        outputSet = normalizeOutputSet((p["outputSet"] as string[] | undefined) ?? a.outputSet);
-      } catch (e) {
-        return fail("bad_output_set", e instanceof Error ? e.message : String(e));
-      }
-      if (!step || !cert || !certSig || !calldata || !planGuard) return fail("prepare_step_incomplete", "service response lacks step/certificate/calldata/planGuard", { response: p });
-      const chainId = Number((a.mandate.domain as { chainId?: number })["chainId"] ?? d.chainId);
-      const domain = makePlanGuardDomain(chainId, planGuard);
-      const md = mandateDigest(domain, a.mandate.message as unknown as TradeMandate);
-      const problems: string[] = [];
-      if (step.mandateDigest.toLowerCase() !== md.toLowerCase()) problems.push("step.mandateDigest ≠ local mandate digest");
-      if (a.expectedStepIndex !== undefined && Number(step.stepIndex) !== a.expectedStepIndex) problems.push(`stepIndex ${step.stepIndex} ≠ expected ${a.expectedStepIndex}`);
-      const m = a.mandate.message as Record<string, string>;
-      if (BigInt(step.amountIn) > BigInt(m["perStepCap"]!)) problems.push("amountIn > perStepCap");
-      if (BigInt(step.minAmountOut) <= 0n) problems.push("minAmountOut must be > 0");
-      const now = Math.floor(Date.now() / 1000);
-      if (Number(cert.validUntil) <= now) problems.push("certificate already expired");
-      if (Number(step.deadline) <= now) problems.push("step deadline already passed");
-      if (outputSetHash(outputSet) !== m["outputSetHash"]) problems.push("outputSet hash ≠ mandate.outputSetHash");
-      if (!outputSet.includes(step.outputToken.toLowerCase() as Hex)) problems.push("step.outputToken not in outputSet");
-      const sd = stepDigest(domain, step);
-      if (sd.toLowerCase() !== cert.stepDigest.toLowerCase()) problems.push("certificate.stepDigest ≠ recomputed step digest");
-      if (!d.wallet.allowsChain(chainId)) problems.push(`chain ${chainId} not allowed by AGENT_WALLET_CHAIN_IDS`);
-      if (problems.length) return fail("step_rejected_locally", problems.join("; "), { step, certificate: cert, executed: false });
-      // 链上步序：s.stepIndex 必须等于 mandateState(digest).steps（防止服务端与链上不同步导致 StepOutOfOrder / 重复执行）
-      let onchain: { steps: number; spent: string; revoked: boolean } | null = null;
-      try {
-        onchain = await d.wallet.reader.mandateSteps(chainId, planGuard, md);
-      } catch (e) {
-        return fail("chain_read_failed", `cannot read mandateState from PlanGuard ${planGuard}: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`, { executed: false });
-      }
-      if (onchain.revoked) return fail("mandate_revoked_onchain", "mandate is revoked on PlanGuard", { onchain, executed: false });
-      if (onchain.steps !== Number(step.stepIndex)) return fail("step_index_onchain_mismatch", `service step ${step.stepIndex} but PlanGuard expects ${onchain.steps} (spent ${onchain.spent}); refusing to send`, { onchain, executed: false });
-      if (a.dryRun) return ok(`dry run: step ${step.stepIndex} passes local + on-chain checks (amountIn ${step.amountIn}, minOut ${step.minAmountOut}); not sent`, { status: 200, executed: false, step, stepDigest: sd, certificate: cert, planGuard, chainId, onchain });
-      try {
-        const sent = await d.wallet.sendStep({ chainId, planGuard, mandate: m, mandateSignature: a.mandateSignature as Hex, outputSet, step: step as unknown as Record<string, string>, certificate: cert as unknown as Record<string, string>, certificateSignature: certSig, routerCalldata: calldata });
-        const sub = await c.call("POST", `/v1/mandates/${a.mandateId}/steps/${step.stepIndex}/submissions`, { txHash: sent.txHash });
-        d.heartbeat?.watch(a.mandateId);
-        const ev = sent.receipt?.event ?? null;
-        return ok(`step ${step.stepIndex} sent: ${sent.txHash}${sent.receipt ? ` → ${sent.receipt.status}${ev ? ` spent ${String(ev["spent"])} received ${String(ev["received"])} refunded ${String(ev["refunded"])}` : ""}; allowance after ${sent.receipt.allowanceAfter}` : " (receipt pending; service verifier will confirm)"} (submission ${sub.status}); executor ${d.wallet.address}`, { status: 200, executed: true, txHash: sent.txHash, approveTxHash: sent.approveTxHash ?? preApprove?.approveTxHash ?? null, preApprove, gas: sent.gas ?? null, receipt: sent.receipt ?? null, stepIndex: step.stepIndex, stepDigest: sd, submission: sub.body as Record<string, unknown>, executor: d.wallet.address, onchainBefore: onchain });
-      } catch (e) {
-        if (e instanceof AgentWalletError) return fail(e.code, e.message, { executed: false });
-        return fail("send_failed", e instanceof Error ? e.message : String(e), { executed: false });
-      }
+      return executePreparedStep(d, c, prep.body, { mandateId: a.mandateId, mandate: a.mandate, mandateSignature: a.mandateSignature, outputSet: a.outputSet, expectedStepIndex: a.expectedStepIndex, dryRun: a.dryRun }, preApprove);
     },
   );
 
@@ -279,4 +228,60 @@ export function registerV2Tools(server: McpServer, d: V2Deps): void {
     { title: "Create a share card (battle report)", description: "Creates a shareable report page for a job/mandate/simulation. Private by default; when public, amounts can be shown exact, as a range, or hidden; wallet is always hidden.", inputSchema: { kind: z.enum(["job", "mandate", "simulation"]), id: z.string().min(1), public: z.boolean().default(false), amounts: z.enum(["exact", "range", "hidden"]).default("range"), title: z.string().max(120).optional() } },
     async (a) => fromHttp(await c.call("POST", "/v1/shares", { kind: a.kind, refId: a.id, public: a.public, privacy: { amounts: a.amounts, wallet: "hidden" }, title: a.title }), (b) => `share ${String(b["shareId"])} (${a.public ? "public" : "private"}) ${String(b["url"] ?? "")}`),
   );
+}
+
+/** 已签发的 READY 步骤（prepare-step 或 CV-D16 交易意图的 READY 体）→ 本地核对 → 链上步序 → 发送 → 回报（execute_next_step 与 execute_trade_intent 共用） */
+export async function executePreparedStep(d: { wallet: AgentWallet | null | undefined; chainId: number; heartbeat?: ExecutorHeartbeat | null }, c: VerifyClient, p: Record<string, unknown>, a: { mandateId: string; mandate: { domain: Record<string, unknown>; message: Record<string, unknown> }; mandateSignature: string; outputSet: string[]; expectedStepIndex?: number; dryRun: boolean }, preApprove: { approveTxHash: Hex | null; allowance: string; error?: string } | null): Promise<ToolResult> {
+  if (!d.wallet) return walletDisabled();
+    if (p["status"] !== "READY") return ok(`not ready: ${String(p["status"])}${p["reasons"] ? ` (${JSON.stringify(p["reasons"]).slice(0, 300)})` : ""}`, { status: 200, ...p, executed: false });
+    const step = (p["step"] ?? (p["typedData"] as { message?: unknown } | undefined)?.message) as MandateStep | undefined;
+    const cert = p["certificate"] as StepCertificate | undefined;
+    const certSig = p["certificateSignature"] as Hex | undefined;
+    const calldata = p["routerCalldata"] as Hex | undefined;
+    const planGuard = (p["planGuard"] ?? (a.mandate.domain as { verifyingContract?: string })["verifyingContract"]) as Hex | undefined;
+    let outputSet: Hex[];
+    try {
+      outputSet = normalizeOutputSet((p["outputSet"] as string[] | undefined) ?? a.outputSet);
+    } catch (e) {
+      return fail("bad_output_set", e instanceof Error ? e.message : String(e));
+    }
+    if (!step || !cert || !certSig || !calldata || !planGuard) return fail("prepare_step_incomplete", "service response lacks step/certificate/calldata/planGuard", { response: p });
+    const chainId = Number((a.mandate.domain as { chainId?: number })["chainId"] ?? d.chainId);
+    const domain = makePlanGuardDomain(chainId, planGuard);
+    const md = mandateDigest(domain, a.mandate.message as unknown as TradeMandate);
+    const problems: string[] = [];
+    if (step.mandateDigest.toLowerCase() !== md.toLowerCase()) problems.push("step.mandateDigest ≠ local mandate digest");
+    if (a.expectedStepIndex !== undefined && Number(step.stepIndex) !== a.expectedStepIndex) problems.push(`stepIndex ${step.stepIndex} ≠ expected ${a.expectedStepIndex}`);
+    const m = a.mandate.message as Record<string, string>;
+    if (BigInt(step.amountIn) > BigInt(m["perStepCap"]!)) problems.push("amountIn > perStepCap");
+    if (BigInt(step.minAmountOut) <= 0n) problems.push("minAmountOut must be > 0");
+    const now = Math.floor(Date.now() / 1000);
+    if (Number(cert.validUntil) <= now) problems.push("certificate already expired");
+    if (Number(step.deadline) <= now) problems.push("step deadline already passed");
+    if (outputSetHash(outputSet) !== m["outputSetHash"]) problems.push("outputSet hash ≠ mandate.outputSetHash");
+    if (!outputSet.includes(step.outputToken.toLowerCase() as Hex)) problems.push("step.outputToken not in outputSet");
+    const sd = stepDigest(domain, step);
+    if (sd.toLowerCase() !== cert.stepDigest.toLowerCase()) problems.push("certificate.stepDigest ≠ recomputed step digest");
+    if (!d.wallet.allowsChain(chainId)) problems.push(`chain ${chainId} not allowed by AGENT_WALLET_CHAIN_IDS`);
+    if (problems.length) return fail("step_rejected_locally", problems.join("; "), { step, certificate: cert, executed: false });
+    // 链上步序：s.stepIndex 必须等于 mandateState(digest).steps（防止服务端与链上不同步导致 StepOutOfOrder / 重复执行）
+    let onchain: { steps: number; spent: string; revoked: boolean } | null = null;
+    try {
+      onchain = await d.wallet.reader.mandateSteps(chainId, planGuard, md);
+    } catch (e) {
+      return fail("chain_read_failed", `cannot read mandateState from PlanGuard ${planGuard}: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`, { executed: false });
+    }
+    if (onchain.revoked) return fail("mandate_revoked_onchain", "mandate is revoked on PlanGuard", { onchain, executed: false });
+    if (onchain.steps !== Number(step.stepIndex)) return fail("step_index_onchain_mismatch", `service step ${step.stepIndex} but PlanGuard expects ${onchain.steps} (spent ${onchain.spent}); refusing to send`, { onchain, executed: false });
+    if (a.dryRun) return ok(`dry run: step ${step.stepIndex} passes local + on-chain checks (amountIn ${step.amountIn}, minOut ${step.minAmountOut}); not sent`, { status: 200, executed: false, step, stepDigest: sd, certificate: cert, planGuard, chainId, onchain });
+    try {
+      const sent = await d.wallet.sendStep({ chainId, planGuard, mandate: m, mandateSignature: a.mandateSignature as Hex, outputSet, step: step as unknown as Record<string, string>, certificate: cert as unknown as Record<string, string>, certificateSignature: certSig, routerCalldata: calldata });
+      const sub = await c.call("POST", `/v1/mandates/${a.mandateId}/steps/${step.stepIndex}/submissions`, { txHash: sent.txHash });
+      d.heartbeat?.watch(a.mandateId);
+      const ev = sent.receipt?.event ?? null;
+      return ok(`step ${step.stepIndex} sent: ${sent.txHash}${sent.receipt ? ` → ${sent.receipt.status}${ev ? ` spent ${String(ev["spent"])} received ${String(ev["received"])} refunded ${String(ev["refunded"])}` : ""}; allowance after ${sent.receipt.allowanceAfter}` : " (receipt pending; service verifier will confirm)"} (submission ${sub.status}); executor ${d.wallet.address}`, { status: 200, executed: true, txHash: sent.txHash, approveTxHash: sent.approveTxHash ?? preApprove?.approveTxHash ?? null, preApprove, gas: sent.gas ?? null, receipt: sent.receipt ?? null, stepIndex: step.stepIndex, stepDigest: sd, submission: sub.body as Record<string, unknown>, executor: d.wallet.address, onchainBefore: onchain });
+    } catch (e) {
+      if (e instanceof AgentWalletError) return fail(e.code, e.message, { executed: false });
+      return fail("send_failed", e instanceof Error ? e.message : String(e), { executed: false });
+    }
 }

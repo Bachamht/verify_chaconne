@@ -4,7 +4,7 @@
  * 挂到 mandates monitor 的同一个 tick（mandates/monitor.ts monitorOnce(mandates, tasks)）。
  */
 import { log } from "../log";
-import type { TasksService } from "./service";
+import { scopeOf, type TasksService } from "./service";
 import type { Db } from "../db";
 import { confirmRevocationsOnce, type RevokedLogReader } from "./revocations";
 
@@ -17,7 +17,8 @@ export async function taskMonitorOnce(tasks: TasksService, revocations?: { db: D
   let waiting = 0;
   for (const row of rows) {
     try {
-      const r = await tasks.evaluateTask(row, { issue: row.status !== "PAUSED" });
+      // CV-D16：scope.issuance=agent 的任务只评估不签发（签发只跟着 agent 提交的交易意图走）
+      const r = await tasks.evaluateTask(row, { issue: row.status !== "PAUSED" && scopeOf(row)?.issuance !== "agent" });
       if (r.status === "STEP_PREPARED") issued += 1;
       if (r.status === "WAITING") waiting += 1;
     } catch (err) {

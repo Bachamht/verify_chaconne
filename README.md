@@ -1,107 +1,164 @@
-# Chaconne Verify — StockProof + RWA Guard
+# Chaconne Verify
 
-**OKX Dev Day 2026 · Build a Company (primary track) · built on top of the existing Chaconne project**
+**English** | [中文](README.zh-CN.md)
 
-> A **trade-task service for agents** on tokenized US stocks: plan what is actually achievable, keep watching while conditions move, execute only inside limits the user signed once, and hand over evidence anyone can re-check offline.
+**OKX Dev Day 2026 · Build a Company track · built on top of the existing Chaconne project**
 
-> **Two names, one product.** The live site brands itself **Chaconne Agent** (its job, stated plainly: let an AI agent trade for you). These review materials and the OKX AI listing keep the project name **Chaconne Verify**, which is the name ASP #13803 is registered and under review as. Nothing technical differs between them: same domain, same API paths, same contracts, same package names. "Verify" also remains the name of the capability itself (verification report, evidence bundle, `verify-bundle` CLI).
+Chaconne Verify is a verification and guarded execution service for AI agents that trade tokenized US stocks on X Layer. Your agent makes the decisions with its own strategy. Chaconne checks every trade against evidence, keeps execution inside the scope the owner signed, and leaves a decision record that anyone can check again, offline, in a browser.
 
-- Product entry (独立入口): `https://verify.chaconne.xyz/`
-- OKX AI service: ASP **#13803 "Chaconne Verify"**, A2MCP service *StockProof Trade Verification* → `POST https://verify.chaconne.xyz/a2mcp/verify`
-- Guard contract (X Layer mainnet, 196): [`0x02834e26bbd851eedb888bafba666bc0af72770c`](https://www.okx.com/web3/explorer/xlayer/address/0x02834e26bbd851eedb888bafba666bc0af72770c) — Sourcify exact match
-- **Mainnet evidence (LIVE, 2026-09-20)**: first real Guard fill, 5 USDG → 0.01498 AAPLx under `REFERENCE_CONTEXT`, tx [`0x333a…5449`](https://www.okx.com/web3/explorer/xlayer/tx/0x333a6e41742f046d478e6a074f80d148d678e5baf8ab7f0c0736041c20245449) — `GuardedExecution(spent=5000000, received=14983578260014962, refunded=0)`; Guard keeps 0 USDG and 1 wei of rebasing dust; details in `deployments.json`.
-- PlanGuard contract (X Layer 196, v2 — one-signature mandates, step-by-step certificates, permissionless executor): address in `deployments.json` once deployed; fork-verified 2026-09-21 (two buys + one sell through a third-party executor).
-- Code: this repository. Everything here was written during the Dev Day build window; contract addresses, transaction hashes and Sourcify match ids are in `docs/deployments.json`.
+The live site calls itself **Chaconne Agent**, because that is what a user does there: hand a goal to an AI agent. The project, the OKX AI listing and the code keep the name **Chaconne Verify**. They are the same product, on the same domain, with the same contracts.
+
+## Links
+
+| What | Where |
+|---|---|
+| Live product | https://verify.chaconne.xyz/ |
+| OKX AI listing | ASP #13803 "Chaconne Verify": https://www.okx.ai/agents/13803 |
+| A2MCP services on that listing | StockProof Trade Verification `POST https://verify.chaconne.xyz/a2mcp/verify` and Agent Task Drafts `POST https://verify.chaconne.xyz/a2mcp/agent-tasks` (both free) |
+| Guard contract (X Layer mainnet, chain 196) | [`0x02834e26bbd851eedb888bafba666bc0af72770c`](https://www.okx.com/web3/explorer/xlayer/address/0x02834e26bbd851eedb888bafba666bc0af72770c), Sourcify exact match |
+| PlanGuard contract (X Layer mainnet, chain 196) | [`0xE8517f296211F4b9175796bAAB47979FB14Fd2F0`](https://www.okx.com/web3/explorer/xlayer/address/0xE8517f296211F4b9175796bAAB47979FB14Fd2F0), Sourcify exact match |
+| Developer docs | https://verify.chaconne.xyz/developers, plus machine readable `/openapi.json`, `/llms.txt` and `/.well-known/agent-card.json` |
+| Deployments, hashes and evidence | `docs/deployments.json` |
+| Work done in the build window | `docs/changes.md` |
+
+Mainnet evidence on X Layer:
+
+* First buy through Guard, 5 USDG for 0.01498 AAPLx: [`0x333a…5449`](https://www.okx.com/web3/explorer/xlayer/tx/0x333a6e41742f046d478e6a074f80d148d678e5baf8ab7f0c0736041c20245449)
+* First sell through PlanGuard, AAPLx back to USDG: [`0xee9d…2180`](https://www.okx.com/web3/explorer/xlayer/tx/0xee9dce5e931974c2b9ef8cc593ad9871e1da906010bf9415651bc8cfb7e22180)
+* x402 settlements for paid verification on the X Layer testnet (chain 1952): see `x402Evidence` in `docs/deployments.json`
 
 ## The problem
 
-Agents buying tokenized US stocks on-chain make three silent mistakes: they trust a **symbol** instead of a chain + contract; they compare an on-chain quote against a stock "price" that is actually a **stale close** or has no source time; and they treat an **unknown price impact as zero**. Existing tooling (RWA dashboards, wallet simulation, generic copilots) shows numbers — it does not tell you when the numbers are *not comparable*.
+Agents that buy tokenized US stocks on chain tend to make three quiet mistakes. They trust a ticker instead of a chain and a contract address. They compare an on chain quote with a stock "price" that is really a stale close, or has no source time at all. They treat an unknown price impact as zero. And once an agent holds a wallet key, the owner has no way to say "only these stocks, only this much, only until Friday" and have that rule enforced.
 
-## What an agent can buy
+Chaconne Verify fixes both halves. The agent keeps its own judgement. The platform checks the facts, and a contract enforces the limits.
 
-| Product | What it delivers | "No good answer" is still delivery |
-|---|---|---|
-| `verify_once` | One immutable report on one fixed intent | A `rejected` report with reason codes |
-| `plan` | Up to 12 concrete candidates (amount × funding token × policy) with completion %, fees, blocking reasons and one explicit next step | "Nothing is feasible under your limits, here is which limit binds" |
-| `monitor_window` | The goal is kept alive; every evaluation says *what changed, what it affects, what is next* | "Still waiting, and why" |
-| `task_bundle` | A signed mandate executed step by step inside the user's limits, plus the evidence bundle | Partial completion with the unspent budget untouched |
+## How it works
 
-## What Chaconne Verify does
+The product has three layers, and the website is organised the same way.
 
-1. **StockProof (sold through OKX AI).** Input a fixed intent (owner, stablecoin, stock token, exact-in amount, policy, limits). The service collects evidence — OKX DEX quote + route calldata, on-chain token metadata (with block), OKX RWA registry entry, Finnhub reference tick/close with *source* time — and runs a deterministic rule engine. Output: an immutable report `eligible | limited | rejected` with reason codes, every evidence record's `requestedAt / receivedAt / sourcePublishedAt`, and a keccak `evidenceHash`. Three explicit policies, never auto-downgraded:
-   - `STRICT_LIVE` — regular US hours + live reference (≤90 s old) + fresh quote. Outside regular hours the correct answer is **rejected**.
-   - `REFERENCE_CONTEXT` — official close (or two-source cross-verified close) as context; not called "live".
-   - `QUOTE_ONLY` — route/quote/impact checks only; comparison explicitly `not_requested`.
-2. **RWA Guard (X Layer).** A re-verification issues a 60-second EIP-712 `VerificationCertificate` bound to the user's EIP-712 `TradeIntent` (amount, minOut, recipient, router, spender, calldata hash, policy/registry/evidence hashes, nonce, deadline). The Guard contract checks both signatures, allowlists (policy, registry, route, selector, tokens), pulls the exact input, grants a single-use exact allowance, calls the OKX DEX router, attributes only this-tx balance deltas, enforces the absolute minimum output, refunds unspent input to the owner and delivers output to the recipient. Anything else reverts; nonce is consumed only on success.
-3. **Planner.** A goal (basket legs, budget across several accepted stablecoins, side, policy, limits, deadline) is turned into a deterministic ladder of candidates. Each candidate is scored under **all three policies**, so the user sees not only "no" but "no under STRICT_LIVE, yes under REFERENCE_CONTEXT at 50% of the budget". Shrinking the amount is never silently treated as completing the original goal. `USER_MUST_RELAX_LIMIT` is never auto-executed.
-4. **Mandate + PlanGuard (X Layer, v2).** The user signs **one** EIP-712 `TradeMandate`: input token, allowed output set, total budget cap, per-step cap, max steps, policy/registry hashes, validity window, nonce. The service then re-verifies before every step and signs a short-lived `StepCertificate`; **any executor** may submit the step (the user's own agent wallet or browser wallet). The contract enforces order (`stepIndex == steps`), caps, allowlists, calldata hash, and pays out only to the recipient — an executor can never take the funds. The service holds no key that can move money and runs no relayer.
-5. **Portable evidence.** `GET /v1/{jobs,mandates}/:id/bundle` returns everything needed to re-check the work: registry, policy, every evidence record with its four timestamps, reports, plans, certificates and signatures, executions, and the bill. `bundleHash` is signed by the attestation key. A **pure client-side verifier page** and a CLI re-run the hashes, the signatures and the rules, and a built-in tamper box shows exactly which layer fails when a field is edited.
-6. **Same task record throughout.** Payment (x402), report versions, mandates, steps and executions are separate states referencing one task; a rejected report is a delivered service, and paying never grants trade permission.
+### 1. The task: a goal, a strategy, and a scope you sign
 
-## Architecture
+A task is a goal written in plain words (for example "over the next five trading days, split my budget between AAPLx and NVDAx according to how the market digests each macro release"), a strategy the agent should follow, and a scope.
 
-```
-Agent / OKX AI / MCP host / browser
-        │  POST /a2mcp/verify (A2MCP)  |  /v1/* (API key)  |  verify-web proxy
-        ▼
-apps/verify-service  (Express 5 + OKX x402 SDK)
-  ├─ evidence/live.ts   OKX DEX quote+swap (ladder, buy & sell), OKX RWA list, X Layer RPC, Finnhub, xStocks multiplier
-  ├─ core/verify        rule engine + planner + delta + bundle (pure), hashes, EIP-712, policies, registry
-  ├─ plans/ mandates/   planner use-cases · mandate registry · monitor worker · step certificates
-  ├─ payments/          orders · payment attempts · entitlements · reconcile · refund tickets
-  ├─ execution/         Guard/PlanGuard ABI · on-chain receipt verifier (SUBMITTED → REORG_PENDING → CONFIRMED / REVERTED / UNKNOWN)
-  └─ attestation/       one key, signs VerificationCertificate / StepCertificate / bundleHash only
-        ▼
-packages/verify-contracts  ChaconneVerifyGuard (single trade) · ChaconneVerifyPlanGuard (mandates)  →  OKX DEX Router
-        ▲
-packages/verify-mcp (agent tools, optional user-side agent wallet) · packages/verify-sdk · apps/verify-web (incl. offline bundle verifier)
-```
+* **The goal and the strategy sit outside the signature.** The owner can edit them at any time, every edit is kept as a new version, and no new signature is needed. The agent reads the latest version on its next round.
+* **The scope is what the owner signs, once, as an EIP 712 `TradeMandate`.** It lists the stocks the agent may buy, the total budget, the cap per trade, the maximum number of trades, the deadline, whether selling is allowed, the trust tier for the agent's evidence, and optional hard constraints such as "US regular hours only". The scope cannot be widened afterwards. A wider scope means a new task and a new signature.
 
-Frozen interfaces: `docs/interfaces.md`. Address provenance: `docs/the address-approval log (internal)`. Deployments and versions: `docs/deployments.json`.
+### 2. The context: what the agent reasons with
 
-## Reproduce locally (no keys needed)
+* **Event calendar.** CPI, payrolls, FOMC, Fed speeches, other macro releases, earnings for every supported stock, US holidays and early closes, each with a stable id and an honest precision (exact time, day only, or estimated).
+* **Market context.** Session label, Fed blackout, rates, VIX, and the cross asset reaction after the last major release (relief, transmission or divergence). Context comes from our Crowsnest pipeline, is signed with Ed25519, and every field carries its own status, so a missing value is reported as unavailable rather than guessed.
+* **Wake ups.** When an event the task watches is approaching, is due, or is rescheduled, the platform opens a new round for the agent. The agent has thirty minutes to respond. A round with no answer is recorded and nothing happens.
+
+### 3. Verification: what the platform guarantees
+
+In each round the agent can submit a trade intent, hold and ask for more evidence, revise its plan, or end the task. Holding is a complete decision, not a failure.
+
+A trade intent is "what to buy and how much" together with a decision record: the reason, and the sources it relied on. Before anything can execute, the platform runs four checks:
+
+1. **Evidence sorting.** Each source is classified as a fact the platform verified, data the agent brought, or the agent's own research. The owner's trust tier decides which kinds are admissible. Anything the platform did not verify is labelled "provided by the agent, unverified".
+2. **Scope and hard constraints.** The stock must be in the signed set, the amount must fit the per trade cap and the remaining budget, the trade count and the deadline must still allow it, and every hard constraint must hold on the fresh quote.
+3. **Execution checks.** The same engine as the single trade verification: token identity against a curated registry, reference price and its age, the OKX DEX quote and route, and the price impact.
+4. **Certificate binding.** The step certificate must bind to the exact mandate the owner signed.
+
+Only when all four pass does a live task receive a step certificate. The certificate is valid for sixty seconds at most, and usually about thirty. The agent's wallet or the owner's browser wallet then sends the step to PlanGuard, which checks the certificate, the mandate signature, the caps, the allowlists and the calldata hash, pays out only to the recipient, and refunds unused input in the same transaction. A rejected intent is still stored with its reasons.
+
+### The decision record
+
+Every task keeps a timeline of wake ups, decisions, intents, the four check results, certificates and fills. The owner can export it as JSON from the task page and paste it into `/verify-bundle`. The page recomputes every hash, every EIP 712 digest and every signature locally in the browser, and re runs the rules. Change a single number and the check fails. The same verifier is available as a CLI in `packages/verify-mcp`.
+
+## Try it in five minutes
+
+You need a browser wallet (OKX Wallet works). Simulations never move funds.
+
+1. Open https://verify.chaconne.xyz/ and click **Try a task for free**. Connect your wallet and sign the sign in message. Signing in costs no gas and grants nothing; it only proves the address is yours.
+2. Pick one of the five sample tasks, for example the macro driven allocation across two stocks, and click **Create a simulation and play the agent**.
+3. You are now the agent for one round. Try all three decisions: hold and ask for evidence, revise the plan, then submit a buy intent. The timeline records each one, and the intent shows the four checks.
+4. Open the task page. You will find the signed scope, the strategy with its versions, a box to add requirements without signing again, and the decision timeline.
+5. Expand **Execution details**, click **Export the decision bundle (JSON)**, copy it, click **Verify offline**, paste it and run the checks. Then change one number and run them again.
+
+To call the service the way other agents do, open the OKX AI listing, click **Use now**, and give the prompt it shows to any agent that has Onchain OS installed.
+
+## For agents and developers
+
+* **OKX AI (A2MCP).** Two free services on ASP #13803. Missing or invalid input always returns HTTP 200 with `status: "input_required"`, the missing fields, a schema and an example; success returns `status: "delivered"`. The paid tier answers HTTP 402 with an x402 challenge.
+* **MCP.** `packages/verify-mcp` exposes 51 tools, from `get_market_context`, `get_events` and `create_task` to `submit_trade_intent`, `report_agent_status`, `execute_trade_intent` and `verify_evidence_bundle`. An agent wallet mode can execute certified steps within limits set in its own environment.
+* **SDK and HTTP.** `packages/verify-sdk` and the REST API described in `/openapi.json`.
+* **API keys.** Market context, the asset registry, the policies and the A2MCP endpoints need no key. Everything that acts for a wallet needs a key, and a user issues one at `/agent/keys` with a single wallet signature. The key is bound to that wallet and can be revoked there.
+
+## Security model and trust boundary
+
+* The service holds exactly one key, the attestation signer. It signs certificates and bundle hashes. It cannot move user funds.
+* Funds move only through Guard or PlanGuard, only within the signed mandate, and only to the recipient in that mandate.
+* PlanGuard constrains trades that go through it. An agent that holds a full private key could still send other transactions from that wallet directly; the product never claims otherwise.
+* The contract owner can pause, rotate the signer and edit allowlists. That is a stated trust boundary, not a "trustless" claim.
+* The website acts only for the wallet that signed in, and every write through the API needs a key bound to the wallet it acts for.
+
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| `apps/verify-service` | The service: evidence collection, rule engine wiring, planner, tasks, intents, mandates, x402 payments, receipt verifier, A2MCP endpoints |
+| `apps/verify-web` | The website, including the offline decision record verifier |
+| `packages/core/src/verify` | Pure logic: rules, policies, registry, hashing, EIP 712, planner, task scope, intents, bundle verification |
+| `packages/verify-contracts` | `ChaconneVerifyGuard` (single trade) and `ChaconneVerifyPlanGuard` (mandates), with Foundry tests |
+| `packages/verify-mcp` | MCP server, agent wallet executor and bundle verifier CLI |
+| `packages/verify-sdk` | TypeScript client |
+| `packages/db` | The `verify_*` tables and SQL migrations |
+| `docs` | Interfaces, deployments, change list, test results, demo script |
+
+## Reproduce locally
+
+No keys are needed for the fixture mode below.
 
 ```bash
 pnpm install
-pnpm -w test                      # core 203 · service 43 · mcp 6 · contracts 53 (forge)
-# service in FIXTURE mode (no external calls), free, with a web key.
-# ATTESTATION_PRIVATE_KEY below is anvil's well-known public test account #0 — never use it for anything real:
+pnpm typecheck
+pnpm test                                             # unit and integration suites
+(cd packages/verify-contracts && forge build && forge test)
+pnpm --filter @chaconne/verify-web build
+```
+
+Run the service in fixture mode, with no external calls. The attestation key below is Anvil's well known public test account #0. Never use it for anything real.
+
+```bash
 cd packages/db && DATABASE_URL=pglite://../../.pgdata-verify pnpm db:migrate && cd ../..
 cd apps/verify-service && DATABASE_URL=pglite://../../.pgdata-verify NODE_ENV=test PAYMENT_MODE=mock \
   EVIDENCE_MODE=fixture REGISTRY_MODE=fixture GUARD_ADDRESS=0x4444444444444444444444444444444444444444 \
   ATTESTATION_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
   VERIFY_API_KEYS="dev:web:*" pnpm start
-curl -s -X POST http://127.0.0.1:8790/a2mcp/verify -H 'content-type: application/json' -d '{}' | head -c 400   # → 400 input_required + schema
+# in another terminal
+curl -s -X POST http://127.0.0.1:8790/a2mcp/verify -H 'content-type: application/json' -d '{}' | head -c 400
 ```
 
-LIVE mode needs OKX Onchain OS credentials and a Finnhub key (`apps/verify-service/.env.example`). The X Layer fork execution (`pnpm --filter @chaconne/verify-service fork:execute`) needs `anvil` and OKX credentials; it deploys the Guard on a local fork, fetches real OKX route calldata, signs both structures and executes — evidence in `changes.md`.
+The last command returns `status: "input_required"` with the schema and an example. Live mode needs OKX Onchain OS credentials and a Finnhub key, listed in `apps/verify-service/.env.example`. Per case test results are in `docs/test-results.md`.
 
-## Evidence modes (every screen and record is labelled)
+## Check that this code is what runs in production
 
-`LIVE` real upstream call · `REPLAY` recorded real response · `FIXTURE` constructed input · `FORK` local mainnet fork · `SIMULATION` pre-execution estimate. Test results per case: `test-results.md`.
+`docs/RELEASE.json` carries a tree hash of every file in this snapshot. Run `pnpm release:hash` after cloning and compare the result with `release.treeHash` from https://verify.chaconne.xyz/healthz. Both contracts can be rebuilt from `packages/verify-contracts` and compared on Sourcify.
 
-## What is new vs. pre-existing (rules: only build-window work is judged)
+## Evidence modes
 
-Pre-existing Chaconne (July 2026): Solana/Jupiter trading site, Pyth/Finnhub reference pipeline, premium engine, quality gates, data APIs. **New in the build window**: everything listed in `changes.md` — the verification rule engine and evidence model, the paid service with x402 and A2MCP, the Guard contract and its tests, the OKX X Layer adapters and registry, the MCP server, the standalone web entry, and this documentation. No pre-existing code was relabelled as new.
+Every screen and every record says where its data came from: `LIVE` is a real upstream call, `REPLAY` is a recorded real response, `FIXTURE` is constructed input, `FORK` is a local mainnet fork, and `SIMULATION` is an estimate before execution.
 
-## Honest limits
+## What is new in the build window
 
-- Pyth's equity feeds lost entitlement on 2026-08-26; the reference source is **Finnhub** (source time = last trade). Documented as CV-D02.
-- OKX's RWA list on X Layer currently returns an empty `stockPrice`, so the "two-source close" path is implemented but not exercised live.
-- First version: one issuer (xStocks), `exactIn` only, EOA wallets only (no EIP-1271), assets: USDG/USDC/USD₮0 ↔ AAPLx/NVDAx (SPYx stays disabled for lack of a second source). **Selling goes through the mandate path (PlanGuard v2), not the single-job path**: the stock tokens are share-accounted, so every transfer delivers ~1 wei less than requested; PlanGuard tolerates that (`inputShortfallTolerance`, and the unused remainder is refunded in the same transaction), while the v1 Guard has no tolerance and a single-job sell reverts `InputTransferShortfall`. First mainnet sell: `deployments.json → mainnetEvidence3`.
-- The planner ranks **only** the candidates it priced (ladder amounts × accepted funding tokens). It does not claim to search the whole market, and OKX rate-limits concurrent quotes, so a plan is at most 8 quotes per leg.
-- A close taken from the 16:00 ET last trade is labelled `close_last_tick` and carries an explicit "not yet confirmed" note until the next day's previous-close agrees with it. Finnhub's daily candle endpoint is not available on the free tier, so that confirmation path exists but is off by default.
-- xStocks corporate-action history needs an API key we do not have; the before/after unit-change page is a clearly labelled constructed REPLAY built from real multiplier observations.
-- A mandate reduces signing to once, but it is still a standing permission: the user can pause it off-chain and revoke it on-chain, and every step is capped and re-verified. That is the trade-off, stated plainly.
-- Paid A2MCP is implemented and tested against the OKX SDK contract (server SDK with a mock facilitator, and the official client SDK end-to-end); the listing is submitted **free** first. The real X Layer testnet facilitator has been exercised LIVE (verify / settle / status); both settlement transactions reverted because the payer wallet held no test USD₮0, which surfaced that the facilitator's verify does not check balance — so settlement now defaults to synchronous (`SETTLE_SYNC=true`) and a report is never delivered on an unconfirmed payment. Two funded LIVE settlements on X Layer testnet then succeeded (`deployments.json` → `x402Evidence`).
-- The service holds exactly one key: the attestation signer. It cannot move user funds. Admin can pause / rotate the signer / edit allowlists — a stated trust boundary, not "trustless".
-- Rebasing output tokens (xStocks EVM) leave ≤ a few wei of rounding dust in the Guard (CV-D05); it belongs to no user and can only be swept by the owner.
-- The receipt verifier marks CONFIRMED after 6 X Layer confirmations and re-checks a vanished receipt (REORG_PENDING → SUBMITTED); it is not a finality proof against the L1 settlement.
+Chaconne existed before the event as a Solana and Jupiter trading site with a reference price pipeline and a premium engine. Everything in this repository was written during the build window: the verification engine and evidence model, tasks with signed scopes, trade intents and the four checks, agent wake ups, the event calendar and context integration, the A2MCP services and x402 payments, both contracts and their tests, the X Layer registry and OKX adapters, the MCP server, the SDK, and the website. `docs/changes.md` lists it item by item.
+
+## Known limits
+
+* Stock reference prices come from Finnhub, because Pyth's equity feeds lost entitlement on 2026-08-26. The source time is the last trade, and a close taken from the 16:00 ET last trade stays labelled "not yet confirmed" until the next day agrees with it.
+* One issuer (xStocks), about forty stocks, exact input swaps only, and externally owned wallets only.
+* Selling goes through PlanGuard. The stock tokens are share accounted, so every transfer delivers about one wei less than requested. PlanGuard tolerates that and refunds the remainder; the single trade Guard does not, so a sell there would revert.
+* Both A2MCP services are listed free. Paid A2MCP with x402 is implemented and has settled for real on the X Layer testnet, but it is not switched on for the listing.
+* The planner ranks only the candidates it actually priced, and OKX rate limits concurrent quotes, so it never claims to have searched the whole market.
+* A mandate turns many signatures into one, but it is still a standing permission. The owner can pause it in the service and revoke it on chain, and every step stays capped and verified again.
+* The receipt verifier marks a transaction confirmed after six X Layer confirmations. That is not a proof of finality on the settlement layer.
 
 ## Team
 
-Solo builder (Chaconne operator).
+Solo builder, the Chaconne operator.
 
 ## License
 
-MIT — see `LICENSE`. Source integrity: `docs/RELEASE.json` carries the tree hash of this snapshot; recompute with `pnpm release:hash` and compare with the deployed service's `GET /healthz` → `release.treeHash`.
+MIT, see `LICENSE`.

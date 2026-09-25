@@ -31,7 +31,13 @@
 .start-budget input{padding:11px 0;min-width:0;width:100%;border:0;background:transparent;font-size:26px;color:var(--color-fg-1);outline-offset:3px}
 .start-budget select{border:0;background:var(--start-panel);font-size:12px;min-width:77px;max-width:130px;padding:10px 4px}
 .start-budget:focus-within{border-color:var(--start-accent)}
-.start-presets{display:flex;gap:8px;margin-top:10px}
+.start-presets{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.start-presets button[aria-pressed=true]{border-color:var(--start-accent);color:var(--color-fg-1);background:rgba(188,164,245,.14)}
+/* 允许买入的股票：登记表可能有几十只——换行的芯片 + 已选计数；绝不横向溢出 */
+.start-assets{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;max-height:168px;overflow-y:auto;padding:2px}
+.start-assets button{font-size:12px;padding:4px 11px;border:1px solid var(--start-line);border-radius:6px;background:var(--start-panel);color:var(--color-fg-2);max-width:100%;overflow-wrap:anywhere}
+.start-assets button[aria-pressed=true]{border-color:var(--start-accent);color:var(--color-fg-1);background:rgba(188,164,245,.14)}
+.start-assets-count{font-size:12px;color:var(--color-fg-3);margin-top:6px}
 .start-presets button{font-size:12px;padding:4px 13px;border:1px solid var(--start-line);border-radius:6px;background:var(--start-panel);color:var(--color-fg-2)}
 .start-presets button:hover{border-color:var(--start-accent);color:var(--color-fg-1)}
 .start-summary{background:var(--start-panel);border:1px solid var(--start-line);border-radius:14px;overflow:hidden;min-width:0}
@@ -106,3 +112,15 @@
 .start-result-title>svg{color:var(--start-accent);flex:none}
 .start-result-sub{font-size:15px!important;color:var(--color-fg-1)!important}
 .start-evaluated .start-link-button{display:inline;font-size:12px;text-decoration:underline;text-underline-offset:3px}
+
+/* CV-D16 批次 6：扮演 Agent 的三张决定卡 + 时间线容器 */
+.start-play { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 10px; }
+.start-play-card { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--line, rgba(255,255,255,.12)); border-radius: 12px; }
+.start-play-card label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--fg-2, #b8b5c8); }
+.start-play-card input, .start-play-card select, .start-play-card textarea { width: 100%; font: inherit; color: inherit; background: rgba(255,255,255,.04); border: 1px solid var(--line, rgba(255,255,255,.12)); border-radius: 8px; padding: 6px 8px; }
+.start-play-submit { margin-top: auto; display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 8px 14px; border: 1px solid var(--start-accent); border-radius: 9px; background: transparent; color: var(--start-accent); font-size: 13px; font-weight: 500; transition: background .18s, color .18s; }
+.start-play-submit:hover:not(:disabled) { background: var(--start-accent); color: #231235; }
+.start-play-submit:disabled { opacity: .6; }
+.start-play-outcome { font-size: 12px; line-height: 1.6; color: var(--color-ok, #8fd3a5); margin: 0; }
+.start-play-outcome.is-bad { color: var(--color-bad); }
+.start-timeline { margin-top: 18px; }

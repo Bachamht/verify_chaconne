@@ -1,4 +1,4 @@
-/** 代理调用方解析：请求里的地址优先于 cookie；占位地址不覆盖已记住的真实地址（修「试玩不填地址后查自己任务被拒」）。 */
+/** 代理调用方解析（FIX-175）：真实地址必须有登录会话；占位地址免登录；cookie 只记占位地址。 */
 import { describe, expect, it } from "vitest";
 import { ownerFromBody, PLACEHOLDER_OWNER, resolveCaller } from "../lib/proxyOwner";
 
@@ -7,27 +7,27 @@ const a = A.toLowerCase();
 const B = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 describe("resolveCaller", () => {
-  it("cookie 记了占位地址后，用自己的地址查任务 / 事件 / 组合都按自己的地址当调用方", () => {
-    expect(resolveCaller({ cookieOwner: PLACEHOLDER_OWNER, queryOwner: A }, { ownerSetter: false })).toEqual({ caller: a, persist: null });
-    expect(resolveCaller({ cookieOwner: PLACEHOLDER_OWNER, pathOwner: A }, { ownerSetter: false })).toEqual({ caller: a, persist: null });
-    expect(resolveCaller({ cookieOwner: B, bodyOwner: A }, { ownerSetter: false })).toEqual({ caller: a, persist: null });
+  it("请求里的真实地址等于会话地址 → 当调用方；不等或没会话 → denied（401 wallet_signin_required）", () => {
+    expect(resolveCaller({ sessionOwner: a, queryOwner: A }, { ownerSetter: false })).toEqual({ caller: a, persist: null, denied: null });
+    expect(resolveCaller({ sessionOwner: a, pathOwner: A }, { ownerSetter: false })).toEqual({ caller: a, persist: null, denied: null });
+    expect(resolveCaller({ sessionOwner: a, bodyOwner: A }, { ownerSetter: true })).toEqual({ caller: a, persist: null, denied: null });
+    expect(resolveCaller({ queryOwner: A }, { ownerSetter: false })).toEqual({ caller: "", persist: null, denied: a });
+    expect(resolveCaller({ sessionOwner: B, bodyOwner: A }, { ownerSetter: true })).toEqual({ caller: "", persist: null, denied: a });
+    // cookie 记着别的真实地址也压不过会话
+    expect(resolveCaller({ sessionOwner: a, cookieOwner: B, queryOwner: A }, { ownerSetter: false }).caller).toBe(a);
   });
-  it("没写地址才用 cookie；什么都没有就不带调用方", () => {
-    expect(resolveCaller({ cookieOwner: B }, { ownerSetter: false })).toEqual({ caller: B, persist: null });
-    expect(resolveCaller({ cookieOwner: PLACEHOLDER_OWNER }, { ownerSetter: false })).toEqual({ caller: PLACEHOLDER_OWNER, persist: null });
-    expect(resolveCaller({}, { ownerSetter: false })).toEqual({ caller: "", persist: null });
-    expect(resolveCaller({ cookieOwner: "junk", queryOwner: "0x12" }, { ownerSetter: false })).toEqual({ caller: "", persist: null });
+  it("没写地址：用会话地址；没会话时 cookie 里的占位地址还算数，真实地址不算（denied 让浏览器登录后重试）", () => {
+    expect(resolveCaller({ sessionOwner: a, cookieOwner: PLACEHOLDER_OWNER }, { ownerSetter: false })).toEqual({ caller: a, persist: null, denied: null });
+    expect(resolveCaller({ cookieOwner: PLACEHOLDER_OWNER }, { ownerSetter: false })).toEqual({ caller: PLACEHOLDER_OWNER, persist: null, denied: null });
+    expect(resolveCaller({ cookieOwner: B }, { ownerSetter: false })).toEqual({ caller: "", persist: null, denied: B });
+    expect(resolveCaller({}, { ownerSetter: false })).toEqual({ caller: "", persist: null, denied: null });
+    expect(resolveCaller({ cookieOwner: "junk", queryOwner: "0x12" }, { ownerSetter: false })).toEqual({ caller: "", persist: null, denied: null });
   });
-  it("建任务等路径用真实地址 → 写 cookie；用占位地址只在浏览器还没记过真实地址时才写", () => {
-    expect(resolveCaller({ bodyOwner: A }, { ownerSetter: true })).toEqual({ caller: a, persist: a });
-    expect(resolveCaller({ cookieOwner: B, bodyOwner: A }, { ownerSetter: true })).toEqual({ caller: a, persist: a });
-    expect(resolveCaller({ bodyOwner: PLACEHOLDER_OWNER }, { ownerSetter: true })).toEqual({ caller: PLACEHOLDER_OWNER, persist: PLACEHOLDER_OWNER });
-    expect(resolveCaller({ cookieOwner: PLACEHOLDER_OWNER, bodyOwner: PLACEHOLDER_OWNER }, { ownerSetter: true })).toEqual({ caller: PLACEHOLDER_OWNER, persist: PLACEHOLDER_OWNER });
-    // 关键：已经记住真实地址 B 的浏览器去试玩不填地址，不会被改记成占位地址
-    expect(resolveCaller({ cookieOwner: B, bodyOwner: PLACEHOLDER_OWNER }, { ownerSetter: true })).toEqual({ caller: PLACEHOLDER_OWNER, persist: null });
-  });
-  it("非 owner-setter 的 POST 不写 cookie，即便 body 有地址", () => {
-    expect(resolveCaller({ cookieOwner: B, bodyOwner: A }, { ownerSetter: false }).persist).toBeNull();
+  it("占位地址（无钱包模拟）免登录；建任务时只在没有会话的浏览器里记进 cookie；真实地址不再写 cookie", () => {
+    expect(resolveCaller({ bodyOwner: PLACEHOLDER_OWNER }, { ownerSetter: true })).toEqual({ caller: PLACEHOLDER_OWNER, persist: PLACEHOLDER_OWNER, denied: null });
+    expect(resolveCaller({ sessionOwner: a, bodyOwner: PLACEHOLDER_OWNER }, { ownerSetter: true })).toEqual({ caller: PLACEHOLDER_OWNER, persist: null, denied: null });
+    expect(resolveCaller({ bodyOwner: PLACEHOLDER_OWNER }, { ownerSetter: false }).persist).toBeNull();
+    expect(resolveCaller({ sessionOwner: a, bodyOwner: A }, { ownerSetter: true }).persist).toBeNull();
   });
 });
 

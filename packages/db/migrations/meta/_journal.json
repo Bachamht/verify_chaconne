@@ -5,15 +5,71 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1789892550374,
-      "tag": "0000_verify_init",
+      "when": 1783059935174,
+      "tag": "0000_shared_readonly",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
+      "when": 1789892550374,
+      "tag": "0001_verify_init",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
       "when": 1789956405592,
-      "tag": "0001_verify_v5",
+      "tag": "0002_verify_v5",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790143118018,
+      "tag": "0003_verify_v6",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790323898131,
+      "tag": "0004_task_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790324845926,
+      "tag": "0005_task_intents",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790325389239,
+      "tag": "0006_agent_turn",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790333236980,
+      "tag": "0007_task_brief",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790342343183,
+      "tag": "0008_task_archive",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790349138569,
+      "tag": "0009_api_keys",
       "breakpoints": true
     }
   ]

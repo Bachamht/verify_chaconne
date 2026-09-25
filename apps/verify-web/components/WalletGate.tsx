@@ -25,7 +25,7 @@ export function WalletGate({ children, title, description, compact = false }: { 
         compact={compact}
         icon={<Wallet size={28} strokeWidth={1.5} />}
         title={title ?? (zh ? "先连接钱包" : "Connect a wallet first")}
-        description={description ?? (zh ? "钱包地址就是你的账户：任务、模拟、核验与记录都跟着它走。连接不会发起任何签名或交易。" : "Your wallet address is your account: tasks, simulations, verifications and records all follow it. Connecting never signs or trades.")}
+        description={description ?? (zh ? "钱包地址就是你的账户：任务、模拟、核验与记录都跟着它走。第一次读写记录时会请你签一条登录消息（30 天有效）——不是交易，不花钱。" : "Your wallet address is your account: tasks, simulations, verifications and records all follow it. The first time you read or write records you sign one sign-in message (valid 30 days); it is not a transaction and costs nothing.")}
         primary={{ label: busy ? t("wallet_connecting") : t("connect"), onClick: () => { setBusy(true); setErr(null); connect().catch((e: unknown) => setErr(walletErrorText(e, locale))).finally(() => setBusy(false)); } }}
       />
       {err && <p className="mt-3 text-center text-sm text-bad" role="alert">{err}</p>}

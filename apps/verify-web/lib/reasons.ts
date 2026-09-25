@@ -54,6 +54,10 @@ const R: Record<string, { en: string; zh: string }> = {
   THESIS_EXPIRED: { en: "The thesis has expired; renew it or stop the task.", zh: "理由卡已到期，续一张或停止任务。" },
   EXECUTOR_OFFLINE: { en: "No executor is online; certificates are still issued, nobody executes them.", zh: "没有执行器在线：证书仍会签发，但没有人来执行。" },
   AWAITING_USER_SIGNATURE: { en: "Waiting for your wallet signature.", zh: "等待你的钱包签名。" },
+  INTENT_OUT_OF_SCOPE: { en: "The agent's trade intent is outside the scope you signed.", zh: "agent 的交易意图超出了你签的范围。" },
+  DECISION_BASIS_NOT_ADMISSIBLE: { en: "The agent cited a basis your trust tier does not admit.", zh: "agent 引用了你的信任档位不采信的依据。" },
+  HARD_CONSTRAINT_BLOCK: { en: "A hard constraint in the signed scope is not satisfied.", zh: "签名里的硬约束未满足。" },
+  SELL_MANDATE_REQUIRED: { en: "Selling needs a separate sell authorization for that asset.", zh: "卖出需要按资产另签一份卖出授权。" },
 };
 
 export function reasonText(code: string, locale: Locale): string {

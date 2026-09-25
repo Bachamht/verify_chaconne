@@ -10,12 +10,9 @@ import type { Db } from "@chaconne/db";
 import { verifyJobs, verifyMandates, verifyPlans, verifyTasks } from "@chaconne/db";
 import { isEvmAddress } from "@chaconne/core/verify";
 import { HttpError } from "../jobs/service";
+import { callerActsFor } from "../http/auth";
 
-export function callerActsFor(callerId: string, owner: string): boolean {
-  const o = owner.toLowerCase();
-  const c = callerId.toLowerCase();
-  return c === o || c.endsWith(`:${o}`);
-}
+export { callerActsFor };
 
 export async function callerHasRelationship(db: Db, callerId: string, owner: string): Promise<boolean> {
   const o = owner.toLowerCase();

@@ -8,6 +8,7 @@ import { headline } from "@/lib/report-copy";
 import { Card, Pill, Row } from "@/components/ui";
 import { PersonaArt, PERSONAS } from "@/components/personas";
 import { EXPLORER, short } from "@/lib/wallet";
+import { formatTime } from "@/lib/format";
 import "./verification-workspace.css";
 
 const TONE: Record<PublicReport["status"], "ok" | "warn" | "bad" | "neutral" | "brand"> = { completed: "ok", partial: "warn", waiting: "neutral", rejected: "bad", simulation: "brand" };
@@ -48,6 +49,23 @@ export function ReportCard({ r, compact = false }: { r: PublicReport; compact?: 
             {r.result.waitingOn && <Row k={t("status_waiting")} v={r.result.waitingOn} />}
             {r.result.reasons.length > 0 && <Row k={t("reasons")} v={r.result.reasons.map((x) => reasonText(x.code, locale)).join("; ")} />}
           </Card>
+          {r.kind === "job" && r.check && (() => {
+            const c = r.check;
+            const session = ({ REGULAR: zh ? "美股常规时段" : "US regular session", PRE: zh ? "盘前" : "pre-market", POST: zh ? "盘后" : "after-hours", CLOSED: zh ? "休市" : "closed", HOLIDAY: zh ? "假日休市" : "holiday" } as Record<string, string>)[c.marketSession] ?? c.marketSession;
+            const dev = c.reference?.deviationBps;
+            return (
+              <Card title={zh ? "核验结果（这是一次核验，不是成交）" : "Check result (a check, not a fill)"} className="cvf-detail-card">
+                <Row k={zh ? "判定" : "Verdict"} v={<Pill tone={c.executionEligible ? "ok" : "bad"}>{c.executionEligible ? (zh ? "可执行：通过全部限制" : "eligible: within every limit") : (zh ? "不可执行" : "not eligible")}</Pill>} />
+                <Row k={zh ? "策略" : "Policy"} v={c.policyId} mono />
+                <Row k={zh ? "市场时段" : "Market session"} v={`${session}${c.comparisonStatus === "live" ? (zh ? " · 实时参考价" : " · live reference") : c.comparisonStatus === "official_close" ? (zh ? " · 官方收盘价" : " · official close") : ""}`} />
+                {c.reference && <Row k={zh ? "参考价" : "Reference price"} v={`$${c.reference.priceUsd}${c.reference.sourcePublishedAt ? ` · ${formatTime(c.reference.sourcePublishedAt, locale)}` : c.reference.tradingDate ? ` · ${c.reference.tradingDate}` : ""}`} mono />}
+                {c.executableUsdPerShare && <Row k={zh ? "链上可执行单价" : "Executable price on-chain"} v={`$${c.executableUsdPerShare}${dev !== null && dev !== undefined ? ` (${dev > 0 ? "+" : ""}${(dev / 100).toFixed(2)}% ${zh ? "相对参考价" : "vs reference"})` : ""}`} mono />}
+                {c.adverseImpactBps !== null && <Row k={zh ? "价格冲击" : "Price impact"} v={`${c.adverseImpactBps} bps`} mono />}
+                <Row k={zh ? "核验时间" : "Checked at"} v={formatTime(c.evaluatedAt, locale)} mono />
+                <p className="mt-3 text-xs text-fg-2">{r.evidence.txHashes.length > 0 ? (zh ? "这笔已上链，交易哈希见下方「证据与验证器」，点开即到区块浏览器。" : "This one was executed; the transaction hash is under Evidence below and opens the block explorer.") : (zh ? "核验通过不等于买入：没有任何资金移动。要真的成交，要在任务里授权（你的钱包签名），由 Agent 提交意图、拿到步骤证书后上链；成交后交易哈希会出现在这一页和任务页，一键打开区块浏览器。核验结果只代表核验那一刻，交易前请重新核验。" : "A passed check is not a purchase: no funds moved. To trade for real, authorize the task with your wallet, let the agent submit an intent and take the step certificate on-chain; the transaction hash then shows on this page and on the task page with a block-explorer link. The verdict is a snapshot of that moment; re-check before trading.")}</p>
+              </Card>
+            );
+          })()}
           <Card title={t("report_evidence")} className="cvf-detail-card">
             {r.evidence.reportHash && <Row k="reportHash" v={r.evidence.reportHash} mono />}
             {r.evidence.evidenceHash && <Row k="evidenceHash" v={r.evidence.evidenceHash} mono />}
