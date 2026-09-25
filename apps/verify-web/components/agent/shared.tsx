@@ -5,6 +5,7 @@ import { PlugZap } from "lucide-react";
 import { API_SLOW_MS } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useAccount } from "@/lib/useAccount";
+import { connect } from "@/lib/wallet";
 import { EmptyState, Pill } from "@/components/ui";
 import "./agent.css";
 
@@ -82,24 +83,18 @@ export function ModeTag({ mode }: { mode: Mode }) {
   return <Pill tone="neutral">{m}</Pill>;
 }
 
-/** owner：已连接钱包优先；否则允许手填地址（只读页面），不弹窗 */
+/** 钱包账户化：owner 只来自已连接的钱包，不再手填地址；没连接时 valid=false，页面显示连接入口 */
 export function useOwnerInput(): { owner: string; setOwner: (v: string) => void; connected: string | null; valid: boolean } {
   const connected = useAccount();
-  const [owner, setOwner] = useState("");
-  useEffect(() => {
-    if (connected) setOwner(connected);
-  }, [connected]);
-  return { owner, setOwner, connected, valid: /^0x[0-9a-fA-F]{40}$/.test(owner) };
+  const owner = connected ?? "";
+  return { owner, setOwner: () => undefined, connected, valid: /^0x[0-9a-fA-F]{40}$/.test(owner) };
 }
 
-export function OwnerField({ owner, setOwner, connected }: { owner: string; setOwner: (v: string) => void; connected: string | null }) {
-  const { locale } = useI18n();
-  return (
-    <label className="ag-span">
-      {locale === "zh" ? "钱包地址（owner）" : "Wallet address (owner)"}
-      <input className="field mono" value={owner} onChange={(e) => setOwner(e.target.value.trim())} placeholder="0x…" spellCheck={false} disabled={!!connected} />
-    </label>
-  );
+export function OwnerField({ owner, connected }: { owner: string; setOwner?: (v: string) => void; connected: string | null }) {
+  const { locale, t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  if (connected) return <div className="ag-span ag-actions"><span className="ag-note">{locale === "zh" ? "钱包" : "Wallet"}</span><span className="mono text-sm" title={owner}>{`${owner.slice(0, 6)}…${owner.slice(-4)}`}</span></div>;
+  return <div className="ag-span ag-actions"><button type="button" className="btn" disabled={busy} onClick={() => { setBusy(true); connect().catch(() => undefined).finally(() => setBusy(false)); }}>{busy ? t("wallet_connecting") : t("connect")}</button><span className="ag-note">{locale === "zh" ? "钱包地址就是账户，连接后才能继续。" : "Your wallet is your account; connect to continue."}</span></div>;
 }
 
 export const shortKey = (k: string) => (k.includes(":") ? `${k.split(":")[2]?.slice(0, 6)}…${k.slice(-4)}` : k);

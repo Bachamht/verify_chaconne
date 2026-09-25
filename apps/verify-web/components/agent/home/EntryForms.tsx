@@ -3,41 +3,10 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { marketEvents, notReady } from "@/lib/api-v2";
-import { apiError } from "@/lib/errors";
-import type { EventImpact } from "@chaconne/core/verify";
 import type { AssetEntry } from "@/lib/assets";
-import { Pill } from "@/components/ui";
-import { NotReady, OwnerField, shortKey, useOwnerInput } from "../shared";
 import { TaskForm } from "../tasks/TaskForm";
 import type { TaskDraft } from "../tasks/taskDraft";
 import type { EntryId } from "./entries";
-
-export function ImpactForm() {
-  const { locale } = useI18n();
-  const zh = locale === "zh";
-  const { owner, setOwner, connected, valid } = useOwnerInput();
-  const [state, setState] = useState<{ kind: "idle" } | { kind: "busy" } | { kind: "nr"; http: number } | { kind: "err"; msg: string } | { kind: "ok"; items: EventImpact[] }>({ kind: "idle" });
-  async function run() {
-    setState({ kind: "busy" });
-    const r = await marketEvents.impacts(owner.toLowerCase(), 48).catch(() => null);
-    if (!r) return setState({ kind: "err", msg: zh ? "服务不可达" : "Service unreachable" });
-    if (notReady(r)) return setState({ kind: "nr", http: r.status });
-    if (r.status !== 200) return setState({ kind: "err", msg: apiError(r, locale) });
-    setState({ kind: "ok", items: r.data.impacts });
-  }
-  return (
-    <div className="space-y-3">
-      <div className="ag-form"><OwnerField owner={owner} setOwner={setOwner} connected={connected} /></div>
-      <div className="ag-actions"><button className="btn" disabled={!valid || state.kind === "busy"} onClick={run}>{zh ? "查 48 小时内的影响" : "Check the next 48 h"}</button><Link className="btn-ghost" href="/agent/events">{zh ? "去事件台" : "Open the event desk"}</Link></div>
-      {state.kind === "nr" && <NotReady what="GET /v1/event-impacts" status={state.http} />}
-      {state.kind === "err" && <p className="text-sm text-bad">{state.msg}</p>}
-      {state.kind === "ok" && (state.items.length === 0 ? <p className="ag-note">{zh ? "48 小时内没有与你持仓或任务相关的排期事件。未覆盖的资产不在此列（显示为未知，不是没有影响）。" : "No scheduled event touches your holdings or tasks in 48 h. Uncovered assets are not listed (unknown, not 'no impact')."}</p> : (
-        <ul className="ag-list">{state.items.map((i) => <li key={i.eventId}><div className="ag-actions"><span className="mono text-xs">{i.eventId}</span><Pill tone={i.relation === "company_direct" ? "warn" : i.relation === "user_rule" ? "info" : "neutral"}>{i.relation}</Pill></div><p className="ag-note">{zh ? "资产" : "assets"}: {i.assets.map(shortKey).join(", ") || "—"} · {zh ? "任务" : "tasks"}: {i.tasks.map((t) => `${t.taskId}:${t.effect}`).join(", ") || "—"} · {zh ? "可选动作" : "actions"}: {i.actions.join(" / ")}</p>{i.relation === "macro_research" && <p className="ag-note">{zh ? "宏观事件只标研究关联，不写涨跌。" : "Macro events are research links only; no direction is implied."}</p>}</li>)}</ul>
-      ))}
-    </div>
-  );
-}
 
 /** 「诊断等待」只保留 /agent/lab 一套实现（V-33）：这里只是入口 */
 export function labWaitHref(taskId?: string | null): string {
@@ -58,7 +27,6 @@ export function WaitEntry({ taskId }: { taskId?: string }) {
 
 export function EntryPanel({ entry, assets, assetsSource, onRetryAssets, preset, taskId }: { entry: EntryId; assets: AssetEntry[]; assetsSource?: "live" | "cache" | "none"; onRetryAssets?: () => void; preset?: Partial<TaskDraft>; taskId?: string }) {
   if (entry === "buy") return <TaskForm assets={assets} assetsSource={assetsSource} onRetryAssets={onRetryAssets} preset={preset} />;
-  if (entry === "impact") return <ImpactForm />;
   if (entry === "wait") return <WaitEntry taskId={taskId} />;
   return <CompareEntry taskId={taskId} />;
 }

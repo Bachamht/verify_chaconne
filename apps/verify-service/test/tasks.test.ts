@@ -230,20 +230,20 @@ describe("Y-05 / Y-06", () => {
       return c;
     };
     env = (await envWithContext({ evidenceDecorator: decorator })).e;
-    const cost = await api(env, "POST", "/v1/tasks", { ...dcaBody(), playbookId: "target_sell", params: { amountRaw: "400000000000000000", trackedCostPnlPctGte: 10, inputAssetKey: STABLE_KEY, outputAssetKey: STOCK_KEY } });
+    const cost = await api(env, "POST", "/v1/tasks", { ...dcaBody(), playbookId: "target_sell", params: { amountRaw: "400000000000000000", trackedCostPnlPctGte: 10, policyId: "STRICT_LIVE", inputAssetKey: STABLE_KEY, outputAssetKey: STOCK_KEY } });
     expect(cost.status, JSON.stringify(cost.json)).toBe(201);
     const p = await api(env, "POST", `/v1/tasks/${(cost.json["task"] as { id: string }).id}/prepare-step`, {});
     expect(p.status).toBe(409);
     const blocker = (p.json["blockers"] as Array<{ code: string; userActionRequired: boolean; text: string }>).find((b) => b.code === "TRACKED_COST_UNKNOWN")!;
     expect(blocker.userActionRequired).toBe(true);
     expect(blocker.text).toMatch(/target price/);
-    const target = await api(env, "POST", "/v1/tasks", { ...dcaBody(), playbookId: "target_sell", params: { amountRaw: "400000000000000000", targetPriceUsd: "240", inputAssetKey: STABLE_KEY, outputAssetKey: STOCK_KEY } });
+    const target = await api(env, "POST", "/v1/tasks", { ...dcaBody(), playbookId: "target_sell", params: { amountRaw: "400000000000000000", targetPriceUsd: "240", policyId: "STRICT_LIVE", inputAssetKey: STABLE_KEY, outputAssetKey: STOCK_KEY } });
     expect(target.status, JSON.stringify(target.json)).toBe(201);
     const p2 = await api(env, "POST", `/v1/tasks/${(target.json["task"] as { id: string }).id}/prepare-step`, {});
     const perItem = (p2.json["evaluation"] as { perItem: Array<{ item: { type: string }; outcome: string }> }).perItem;
     expect(perItem.find((x) => x.item.type === "target_price_gte")!.outcome).toBe("SATISFIED");
     expect(codes(p2.json)).not.toContain("TARGET_NOT_REACHED");
-    const far = await api(env, "POST", "/v1/tasks", { ...dcaBody(), playbookId: "target_sell", params: { amountRaw: "400000000000000000", targetPriceUsd: "300", inputAssetKey: STABLE_KEY, outputAssetKey: STOCK_KEY } });
+    const far = await api(env, "POST", "/v1/tasks", { ...dcaBody(), playbookId: "target_sell", params: { amountRaw: "400000000000000000", policyId: "STRICT_LIVE", targetPriceUsd: "300", inputAssetKey: STABLE_KEY, outputAssetKey: STOCK_KEY } });
     const p3 = await api(env, "POST", `/v1/tasks/${(far.json["task"] as { id: string }).id}/prepare-step`, {});
     expect(p3.status).toBe(409);
     expect(codes(p3.json)).toContain("TARGET_NOT_REACHED");
@@ -327,7 +327,8 @@ describe("K-09 改条件 = 新授权；D-088 停止语义；K-03 上下文不可
 
   it("K-03 上下文不可达：依赖上下文的条件 CONTEXT_UNAVAILABLE → WAITING；不依赖的 session 仍 SATISFIED；owner 鉴权：其它调用方 403", async () => {
     env = await createTestEnv();
-    const r = await api(env, "POST", "/v1/tasks", { ...dcaBody(), playbookId: "event_aware_accumulate" });
+    // session 自 2026-09-25 起不再默认生成（24 小时交易），显式要求常规时段才加
+    const r = await api(env, "POST", "/v1/tasks", { ...dcaBody({}, { regularSessionOnly: true }), playbookId: "event_aware_accumulate" });
     expect(r.status).toBe(201);
     expect((r.json["task"] as { status: string }).status).toBe("WAITING");
     expect(codes(r.json)).toContain("CONTEXT_UNAVAILABLE");

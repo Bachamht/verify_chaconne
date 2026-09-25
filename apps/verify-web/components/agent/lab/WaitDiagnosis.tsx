@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { fmtLocal } from "@/lib/format";
 import { apiError } from "@/lib/errors";
-import { Card, Json, Pill, Row } from "@/components/ui";
+import { Card, Pill, Row } from "@/components/ui";
 import { blockerSentence } from "../tasks/taskTitle";
 import { lab, type ExplainWaitView } from "./api";
 
@@ -92,7 +92,6 @@ export function WaitDiagnosis({ initialTaskId, onTaskId }: { initialTaskId: stri
               })}
             </ul>
           )}
-          <details><summary className="cursor-pointer text-xs text-fg-3">{zh ? "开发者视图（原始响应）" : "Developer view (raw response)"}</summary><Json value={d} /></details>
         </div>
       )}
     </Card>

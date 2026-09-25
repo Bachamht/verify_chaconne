@@ -11,7 +11,6 @@ import type { Task } from "@chaconne/core/verify";
 import { Card, EmptyState, Pill } from "@/components/ui";
 import { LoadingState, NotReady, OwnerField, Skeleton, useOwnerInput } from "../shared";
 import { blockerSentence, statusLabel, taskTitle } from "./taskTitle";
-import { RecentAgentTasks } from "./RecentAgentTasks";
 
 const TONE: Record<string, "ok" | "warn" | "bad" | "info" | "brand" | "neutral"> = { ACTIVE: "ok", STEP_PREPARED: "ok", COMPLETED: "ok", WAITING: "warn", PAUSED: "warn", AWAITING_AUTHORIZATION: "info", DRAFT: "neutral", PARTIAL: "info", REVOKE_PENDING: "bad", REVOKED: "bad", EXPIRED: "neutral", CANCELLED: "neutral" };
 
@@ -47,11 +46,10 @@ export function TasksList() {
   };
   return (
     <>
-      <header><h1 className="ag-h1">{t("ag_tasks_h")}</h1><p className="ag-lead">{zh ? "继续本机保存的体验，或按钱包地址查找计划、等待原因和下一步。" : "Continue a task saved on this device, or look up plans, waiting reasons and next steps by wallet address."}</p></header>
-      <RecentAgentTasks />
-      <Card title={zh ? "按钱包地址查找" : "Find tasks by wallet address"}>
+      <header><h1 className="ag-h1">{t("ag_tasks_h")}</h1><p className="ag-lead">{zh ? "这个钱包名下的计划、等待原因和下一步。" : "Plans, waiting reasons and next steps under this wallet."}</p></header>
+      <Card title={zh ? "我的任务" : "My tasks"}>
         <div className="ag-form"><OwnerField owner={owner} setOwner={setOwner} connected={connected} /></div>
-        {!valid && <p className="ag-note mt-2">{zh ? "连接钱包或填地址后列出任务。" : "Connect a wallet or type an address to list tasks."}</p>}
+        
         {state.kind === "busy" && <div className="mt-3 space-y-2" aria-busy="true"><LoadingState onRetry={reload} /><Skeleton lines={3} /></div>}
         {state.kind === "nr" && <div className="mt-3"><NotReady what="GET /v1/tasks?owner" status={state.http} onRetry={reload} /></div>}
         {state.kind === "err" && <p className="mt-2 text-sm text-bad">{state.msg}</p>}

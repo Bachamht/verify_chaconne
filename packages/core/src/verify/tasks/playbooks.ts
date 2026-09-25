@@ -51,7 +51,7 @@ export interface PlaybookParamError {
 export const COMMON_PLAYBOOK_PARAMS: Record<string, PlaybookParamSpec> = {
   inputAssetKey: { type: "asset_key", required: true, role: "stable_input" },
   outputAssetKey: { type: "asset_key", required: true, role: "stock_output" },
-  policyId: { type: "policy_id", default: "STRICT_LIVE" },
+  policyId: { type: "policy_id", default: "QUOTE_ONLY" },
   policyVersion: { type: "policy_id", default: LATEST_POLICY_VERSION },
   maxSlippageBps: { type: "integer", min: 1, max: 300, default: 50 },
   maxPriceImpactBps: { type: "integer", min: 1, max: 1000, default: 100 },

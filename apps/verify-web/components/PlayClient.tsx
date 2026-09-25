@@ -14,7 +14,6 @@ import { connect } from "@/lib/wallet";
 import { headline } from "@/lib/report-copy";
 import { apiError } from "@/lib/errors";
 import { walletErrorText } from "@/lib/i18n.execute";
-import { remember } from "@/lib/history";
 import { addressProblem, nextStepText } from "@/lib/format";
 import { tx } from "@/lib/i18n.execute";
 
@@ -76,8 +75,6 @@ export function PlayClient() {
       const r = await simulations.create({ goal, personaId: persona, presetId: preset, clientRequestId: `web-sim-${Date.now()}` });
       if (r.status === 200 || r.status === 201) {
         setSim(r.data);
-        const p = PRESETS.find((x) => x.id === preset);
-        remember({ kind: "simulation", id: r.data.simulationId, title: `${zh ? PERSONAS[persona].name.zh : PERSONAS[persona].name.en} · ${p ? (zh ? p.title.zh : p.title.en) : preset}`, owner: owner || null });
       } else setErr(apiError(r, locale));
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));

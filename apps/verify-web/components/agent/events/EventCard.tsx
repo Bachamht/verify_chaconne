@@ -11,7 +11,7 @@ import { useI18n } from "@/lib/i18n";
 import { formatAmount, formatTime } from "@/lib/format";
 import { conditionText } from "@/lib/conditions";
 import { assetByKey, type AssetEntry } from "@/lib/assets";
-import { Json, Pill } from "@/components/ui";
+import { Pill } from "@/components/ui";
 import { copy, reasonText6, type CopyKey } from "./copy";
 import { eventDesk, type ActionResult, type EventDeskItem } from "./api";
 import { primaryActionOf } from "./primaryAction";
@@ -179,7 +179,6 @@ function ActionOutcome({ result, event, onWholeDay, onIgnore }: { result: { acti
   const { locale } = useI18n();
   const zh = locale === "zh";
   const c = copy(locale);
-  const [open, setOpen] = useState(false);
   const r = result.r;
   if (!r || (result.error && !r.effect)) {
     return <div className="rounded-md bg-bad/12 p-2 text-xs text-bad">{result.status === 0 || result.status === 502 ? c("unreachable") : `${c(`action_${result.action}` as CopyKey)}: ${result.error ?? `HTTP ${result.status}`}`}</div>;
@@ -204,8 +203,7 @@ function ActionOutcome({ result, event, onWholeDay, onIgnore }: { result: { acti
         <div className="mt-2 text-xs">
           {!r.evidence || r.evidence.length === 0 ? <p className="text-fg-2">{estimated ? c("evidence_none_estimated") : c("evidence_none")}</p> : (
             <>
-              <button type="button" className="btn-ghost h-7 px-2 text-xs" onClick={() => setOpen((o) => !o)}>{r.evidence.length} {c("evidence_n")} · {open ? c("hide") : c("show_more")}</button>
-              {open && <Json value={r.evidence} />}
+              <p className="text-fg-2">{r.evidence.length} {c("evidence_n")}</p>
             </>
           )}
         </div>
@@ -220,7 +218,7 @@ function ActionOutcome({ result, event, onWholeDay, onIgnore }: { result: { acti
       {(r.effect === "draft" || r.effect === "created" || r.effect === "attached") && (
         <div className="mt-2 text-xs">
           {r.taskId && <Link className="underline" href={`/agent/tasks/${r.taskId}`}>{c("open_task")} →</Link>}
-          {r.draft !== undefined && <><button type="button" className="btn-ghost ml-2 h-7 px-2 text-xs" onClick={() => setOpen((o) => !o)}>{open ? c("hide") : c("dev_view")}</button>{open && <Json value={r.draft} />}</>}
+          
         </div>
       )}
       {r.blockers && r.blockers.length > 0 && r.effect !== "needs_choice" && (

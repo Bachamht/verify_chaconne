@@ -13,7 +13,6 @@ import { CHAIN_ID, connect, currentChainId, ensureChain, short } from "@/lib/wal
 import { fmtLocal, humanToRaw, rawToHuman } from "@/lib/format";
 import { apiError } from "@/lib/errors";
 import { walletErrorText } from "@/lib/i18n.execute";
-import { remember } from "@/lib/history";
 
 export function MandateBuilder({ plan, candidates, assets, onBack }: { plan: PlanView; candidates: PlanCandidate[]; assets: AssetsResponse | null; onBack: () => void }) {
   const { t, locale } = useI18n();
@@ -67,7 +66,6 @@ export function MandateBuilder({ plan, candidates, assets, onBack }: { plan: Pla
         clientRequestId: `web-mandate-${Date.now()}`,
       });
       if (r.status === 200 || r.status === 201) {
-        remember({ kind: "mandate", id: r.data.mandateId, title: `${goal.legs.map((l) => assets?.assets.find((x) => x.assetKey === l.outputAssetKey)?.displaySymbol ?? "?").join("+")} · ${budgetHuman} ${inSym} · ${maxSteps} ${zh ? "步" : "steps"}`, owner: goal.ownerAddress });
         router.push(`/tasks/${r.data.mandateId}`);
       } else {
         setStep("error");
@@ -96,13 +94,6 @@ export function MandateBuilder({ plan, candidates, assets, onBack }: { plan: Pla
             <label className="block"><span className="text-fg-2">{t("mandate_max_steps")}</span><input className="field mono mt-1" type="number" min={1} max={50} value={maxSteps} onChange={(e) => setMaxSteps(Number(e.target.value))} /></label>
             <Row k={t("plan_deadline")} v={fmtLocal(goal.deadline, locale)} mono />
             <Row k={t("f_policy")} v={`${goal.policyId} v${goal.policyVersion}`} mono />
-            <details className="demo-hide">
-              <summary className="cursor-pointer text-xs text-fg-3">{t("dev_details")}</summary>
-              <Row k="budgetCap (raw)" v={budgetCap} mono />
-              <Row k="perStepCap (raw)" v={perStep} mono />
-              <Row k="deadline (ISO)" v={goal.deadline} mono />
-              <p className="text-xs text-fg-3">{t("dev_raw_note")}</p>
-            </details>
           </div>
         </Card>
         <Card title={zh ? "将要签署的内容" : "What you will sign"}>

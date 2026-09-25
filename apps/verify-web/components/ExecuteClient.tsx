@@ -17,7 +17,7 @@ import { reasonText } from "@/lib/reasons";
 import { apiError } from "@/lib/errors";
 import { fmtLocal } from "@/lib/format";
 import { assetMeta, fmtAmount } from "@/lib/format.execute";
-import { Card, Json, Pill, Row, VerdictBadge } from "@/components/ui";
+import { Card, Pill, Row, VerdictBadge } from "@/components/ui";
 import { activeWalletName, allowance, approveExact, balanceOf, CHAIN_ID, connect, currentChainId, ensureChain, EXPLORER, forgetWallet, injected, restoreConnection, sendGuardCall, short, signTypedData, waitReceipt } from "@/lib/wallet";
 import { useAccount } from "@/lib/useAccount";
 import { useWalletStatus } from "@/lib/useWalletStatus";
@@ -57,7 +57,6 @@ type Evented = { on?: (ev: string, fn: (x: unknown) => void) => void; removeList
 
 export function ExecuteClient({ jobId }: { jobId: string }) {
   const { t, locale } = useI18n();
-  const zh = locale === "zh";
   const [job, setJob] = useState<JobView | null>(null);
   const [assets, setAssets] = useState<AssetsResponse["assets"] | null>(null);
   /** 与页头同源（eth_accounts）；刷新后静默恢复 */
@@ -480,11 +479,6 @@ export function ExecuteClient({ jobId }: { jobId: string }) {
           </ol>
           {gate && <p className="mt-2 text-xs text-fg-2">{gate}</p>}
           {step === "expired" && <p className="mt-3 text-sm text-warn">{t("expired")}</p>}
-          <details className="demo-hide mt-3">
-            <summary className="cursor-pointer text-xs text-fg-2">{t("dev_details")}</summary>
-            <p className="mb-1 text-xs text-fg-3">{zh ? "原始单位与 typed data 只在这里出现。" : "Raw units and typed data appear only here."}</p>
-            <Json value={{ typedData: exec.typedData, certificate: exec.certificate, certificateSignature: exec.certificateSignature, intentDigest: exec.intentDigest, routerCalldataHead: exec.routerCalldata.slice(0, 10) }} />
-          </details>
         </Card>
       )}
     </div>

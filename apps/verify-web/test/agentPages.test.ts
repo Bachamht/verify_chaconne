@@ -45,15 +45,17 @@ describe("导航与路由", () => {
     const footer = read("components/Footer.tsx");
     expect(footer).toContain("demo_mode_hint");
     const i18n = read("lib/i18n.tsx");
-    expect(i18n).toMatch(/nav_me: \{ en: "Local verification records", zh: "本机核验记录" \}/);
+    expect(i18n).toMatch(/nav_me: \{ en: "My records", zh: "我的记录" \}/);
     expect(read("app/globals.css")).toMatch(/\.verify-menu-toggle \{ display: none; \}/);
   });
   it("代理放行 §11.7 全部 v6 路径", () => {
     const src = read("app/api/verify/[...path]/route.ts");
     for (const p of ["v1/context", "v1/events", "v1/event-impacts", "v1/tasks", "v1/theses", "v1/budget-groups", "v1/portfolio", "v1/notify", "v1/replays", "v1/rebalance", "v1/recaps", "v1/missions"]) expect(src).toContain(p);
   });
-  it("四个入口与三个示例任务（条件不含金额/钱包）", () => {
-    expect(ENTRIES.map((e) => e.id)).toEqual(["buy", "impact", "wait", "compare"]);
+  it("入口与示例任务（条件不含金额/钱包；不再默认限制美股常规时段）", () => {
+    expect(ENTRIES.map((e) => e.id)).toEqual(["buy", "wait", "compare"]);
+    expect(new Set(SAMPLES.map((s) => s.id)).size).toBe(SAMPLES.length);
+    for (const s of SAMPLES) expect(s.conditions.some((c) => c.type === "session")).toBe(false);
     for (const s of SAMPLES) {
       const j = JSON.stringify(s.conditions);
       expect(j).not.toMatch(/0x[0-9a-fA-F]{40}/);

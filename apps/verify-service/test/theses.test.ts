@@ -82,7 +82,8 @@ describe("V-27 休市建任务：时间门不是论点前提", () => {
     const { e } = await setup();
     env = e;
     env.setNow("2026-09-18T22:00:00.000Z");
-    const r = await api(env, "POST", "/v1/tasks", body("pause_issuance"));
+    // session 自 2026-09-25 起不再默认生成（24 小时交易），本例测时间门，显式要求常规时段
+    const r = await api(env, "POST", "/v1/tasks", body("pause_issuance", "SIMULATION", { params: { steps: 2, perStepAmountRaw: "100000000", inputAssetKey: FIXTURE_STABLE_KEY, outputAssetKey: FIXTURE_STOCK_KEY, regularSessionOnly: true } }));
     expect(r.status, JSON.stringify(r.json)).toBe(201);
     const thesis = r.json["thesis"] as { status: string; premises: Array<{ kind: string; status: string; text: string }> };
     expect(thesis.status).toBe("holds");

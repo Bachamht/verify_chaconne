@@ -87,10 +87,11 @@ export function Funds() {
   const Balance = ({ assetKey, raw, decimals, symbol, unavailable }: { assetKey: string; raw: string; decimals: number; symbol: string; unavailable?: boolean }) => {
     if (!unavailable) return <span className="mono text-sm">{formatAmount(raw, decimals, symbol)}</span>;
     const r = rpc[assetKey];
-    if (r?.kind === "ok") return <span className="ag-actions"><span className="mono text-sm">{formatAmount(r.raw, decimals, symbol)}</span><Pill tone="info">{zh ? "RPC 直读（服务端读取失败）" : "read via RPC (service read failed)"}</Pill></span>;
+    if (r?.kind === "ok") return <span className="mono text-sm">{formatAmount(r.raw, decimals, symbol)}</span>;
     return <span className="ag-actions"><span className="mono text-sm">—</span><Pill tone="warn">{r?.kind === "busy" ? (zh ? "服务端读取失败 · 正在直读 RPC" : "service read failed · reading via RPC") : (zh ? "未知：链上余额读取失败，不当作 0" : "unknown: on-chain read failed; not treated as 0")}</Pill></span>;
   };
-  const unavailableCount = pf.kind === "ok" ? [...(pf.v.cash ?? []), ...pf.v.holdings].filter((x) => x.unavailable).length : 0;
+  // 只有浏览器直读也失败的项才提示；服务端读不到但 RPC 读到了，对用户就是正常显示
+  const unavailableCount = pf.kind === "ok" ? [...(pf.v.cash ?? []), ...pf.v.holdings].filter((x) => x.unavailable && rpc[x.assetKey]?.kind !== "ok").length : 0;
   return (
     <>
       <header><h1 className="ag-h1">{t("ag_funds_h")}</h1><p className="ag-lead">{zh ? "可用、预留、在途、成本已知范围、现金下限、任务冲突。余额对应区块号；成本只覆盖能追溯的数量，未知不算零。" : "Available, reserved, in-flight, cost coverage, cash floor, task conflicts. Balances are pinned to a block; cost covers traceable quantity only — unknown is not zero."}</p></header>
@@ -102,7 +103,7 @@ export function Funds() {
         {pf.kind === "ok" && (
           <div className="mt-3 space-y-3">
             <p className="ag-note">{zh ? "区块" : "block"} <span className="mono">{pf.v.block?.number ?? pf.v.blockNumber ?? "—"}</span>{pf.v.block?.timestamp ? ` · ${zh ? "截至" : "as of"} ${formatTime(pf.v.block.timestamp, locale)}` : ""} · X Layer {pf.v.chainId} · {pf.v.holdings.length} {zh ? "项持仓" : "holding(s)"}</p>
-            {unavailableCount > 0 && <p className="ag-warn">{zh ? `服务端有 ${unavailableCount} 项余额读取失败（链上 RPC 故障）。这些项显示「—」而不是 0；页面会用浏览器直接读一次链作为兜底。` : `${unavailableCount} balance(s) could not be read by the service (on-chain RPC failure). They show "—", not 0; the page reads the chain directly once as a fallback.`}</p>}
+            {unavailableCount > 0 && <p className="ag-warn">{zh ? `有 ${unavailableCount} 项余额暂时读不到（链上 RPC 故障），显示「—」而不是 0；稍后重试。` : `${unavailableCount} balance(s) could not be read by the service (on-chain RPC failure). They show "—", not 0; the page reads the chain directly once as a fallback.`}</p>}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-fg-3">{zh ? "资金币种" : "Funding currencies"}</p>
               {(pf.v.cash ?? []).length === 0 ? <p className="ag-note">—</p> : <ul className="ag-list">{(pf.v.cash ?? []).map((c) => <li key={c.assetKey}><div className="ag-actions"><span className="font-semibold">{symbolOf(c.assetKey, c.symbol)}</span><Balance assetKey={c.assetKey} raw={c.balanceRaw} decimals={decimalsOf(c.assetKey, c.decimals)} symbol={symbolOf(c.assetKey, c.symbol)} unavailable={c.unavailable} /></div></li>)}</ul>}
@@ -131,7 +132,6 @@ export function Funds() {
               )}
             </div>
             {pf.v.unitAdjustments?.length ? <p className="ag-note">{zh ? "发行商数量调整" : "issuer unit adjustments"}: {pf.v.unitAdjustments.map((u) => `${symbolOf(u.assetKey)} ${u.note}`).join("; ")}</p> : null}
-            <details><summary className="ag-note cursor-pointer">{t("ag_dev_view")}</summary><pre className="ag-json">{JSON.stringify(pf.v, null, 2)}</pre></details>
           </div>
         )}
       </Card>
@@ -162,7 +162,6 @@ export function Funds() {
             <label>{zh ? "现金下限" : "Cash floor"}{formStable ? ` (${formStable.displaySymbol})` : ""}<input className="field" inputMode="decimal" value={form.cashFloor} onChange={(e) => setForm({ ...form, cashFloor: e.target.value.trim() })} aria-invalid={cashFloorRaw === null} />{formDecimals !== null && cashFloorRaw === null && <span className="ag-field-err" role="alert">{zh ? "现金下限须为 0 或正数金额。" : "The cash floor must be 0 or a positive amount."}</span>}</label>
           </div>
           <div className="ag-actions mt-3"><button className="btn" disabled={creating || !valid || !form.name || !formStable || capRaw === null || cashFloorRaw === null} onClick={create}>{zh ? "创建（30 天周期）" : "Create (30-day period)"}</button>{capRaw && formStable && <span className="ag-note">{zh ? "服务额度上限 " : "Service cap "}{formatAmount(capRaw, formStable.tokenDecimals, formStable.displaySymbol)}{zh ? "；现金下限 " : "; cash floor "}{formatAmount(cashFloorRaw ?? "0", formStable.tokenDecimals, formStable.displaySymbol)}</span>}</div>
-          {capRaw && <details className="demo-hide mt-2"><summary className="ag-note cursor-pointer">{t("ag_dev_view")}</summary><span className="mono text-xs text-fg-3">capRaw = {capRaw} · cashFloorRaw = {cashFloorRaw ?? "0"}</span></details>}
         </Card>
       </div>
     </>

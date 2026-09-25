@@ -6,14 +6,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeftRight, ArrowUpRight, CalendarSearch, HelpCircle, ShoppingCart, Sparkles } from "lucide-react";
+import { ArrowLeftRight, ArrowUpRight, HelpCircle, ShoppingCart, Sparkles } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { marketContext, type CreateTaskBody } from "@/lib/api-v2";
 import { assetByKey, loadAssets, type AssetsLoad } from "@/lib/assets";
 import { useAccount } from "@/lib/useAccount";
-import { agentTaskHistory } from "@/lib/history";
 import { Card } from "@/components/ui";
-import { RecentAgentTasks } from "../tasks/RecentAgentTasks";
 import { Crew } from "../crew/Crew";
 import { Missions } from "../crew/Missions";
 import { nextUpcomingEvent } from "../crew/nextEvent";
@@ -24,7 +22,7 @@ import { EntryPanel, labCompareHref, labWaitHref } from "./EntryForms";
 import { FirstMinute } from "./FirstMinute";
 import { NlBox } from "./NlBox";
 
-const ICONS = { buy: ShoppingCart, impact: CalendarSearch, wait: HelpCircle, compare: ArrowLeftRight } as const;
+const ICONS = { buy: ShoppingCart, wait: HelpCircle, compare: ArrowLeftRight } as const;
 
 export function AgentHome() {
   const { t, locale } = useI18n();
@@ -33,17 +31,12 @@ export function AgentHome() {
   const router = useRouter();
   const account = useAccount();
   const [assets, setAssets] = useState<AssetsLoad>({ assets: [], source: "none", evidenceMode: null });
-  const [entry, setEntry] = useState<EntryId | null>((sp.get("entry") as EntryId | null) && ENTRIES.some((e) => e.id === sp.get("entry")) ? (sp.get("entry") as EntryId) : null);
+  const entry: EntryId | null = ENTRIES.some((e) => e.id === sp.get("entry")) ? (sp.get("entry") as EntryId) : null;
+  // 入口切换写进 URL（push）：浏览器回退回到上一个视图，而不是跳出页面
+  const setEntry = (next: EntryId | null) => { const q = new URLSearchParams(sp.toString()); if (next) q.set("entry", next); else q.delete("entry"); q.delete("draft"); const qs = q.toString(); router.push(`/agent${qs ? `?${qs}` : ""}`, { scroll: false }); };
   const [crewData, setCrewData] = useState<Record<string, unknown>>({});
-  // 新用户优先（VERIFY-UX-REVIEW P1）：没连钱包也没有本机任务时，先给一个能直接跑的示例入口；四个功能入口保留在其后
-  const [localTasks, setLocalTasks] = useState<number | null>(null);
-  useEffect(() => {
-    const read = () => setLocalTasks(agentTaskHistory().length);
-    read();
-    window.addEventListener("verify:history", read);
-    return () => window.removeEventListener("verify:history", read);
-  }, []);
-  const newcomer = !account && localTasks === 0;
+  // 新用户优先（VERIFY-UX-REVIEW P1）：没连钱包时先给一个能直接跑的示例入口；四个功能入口保留在其后
+  const newcomer = !account;
   // 草稿来源三选一：一句话编译（NlBox）> 会话交接（Missions「用这个草案」）> 查询串（playbook / asset / steps / inputAssetKey / perStepAmountRaw / mode）
   const [draft, setDraft] = useState<DraftHandoff | null>(null);
   useEffect(() => {
@@ -110,12 +103,11 @@ export function AgentHome() {
       </header>
       {newcomer && (
         <Card className="ag-start-here" title={zh ? "第一次来？先免费模拟一个任务" : "First time here? Simulate a task for free"} right={<Sparkles size={18} aria-hidden="true" className="text-brand-300" />}>
-          <p className="ag-note">{zh ? "不需要钱包，也不需要自备 Agent。选一个模板、设一个模拟预算，看看它现在会行动还是等待；满意后再决定是否授权真实交易。下面的四个入口和表单是完整工作区，随时可用。" : "No wallet or agent of your own needed. Pick a template and a simulation budget to see whether it would act or wait now; decide about real trades afterwards. The four entries and forms below are the full workspace and stay available."}</p>
+          <p className="ag-note">{zh ? "不需要自备 Agent。连接钱包，选一个模板、设一个模拟预算，看看它现在会行动还是等待；满意后再决定是否授权真实交易。下面的入口和表单是完整工作区，随时可用。" : "No agent of your own needed. Connect a wallet, pick a template and a simulation budget to see whether it would act or wait now; decide about real trades afterwards. The entries and forms below are the full workspace and stay available."}</p>
           <div className="ag-actions mt-3"><Link className="btn" href="/start">{zh ? "免费体验一个任务" : "Try a task for free"}<ArrowUpRight size={15} aria-hidden="true" /></Link><Link className="btn-ghost" href="/agent/tasks">{zh ? "我已经有任务" : "I already have tasks"}</Link></div>
         </Card>
       )}
-      {!account && localTasks !== null && localTasks > 0 && <RecentAgentTasks />}
-      <div className="ag-entries" role="tablist" aria-label={zh ? "四个入口" : "Four entries"}>
+      <div className="ag-entries" role="tablist" aria-label={zh ? "入口" : "Entries"}>
         {ENTRIES.map((e) => {
           const Icon = ICONS[e.id];
           return <button key={e.id} type="button" role="tab" className="ag-entry" aria-pressed={entry === e.id} aria-selected={entry === e.id} onClick={() => setEntry(entry === e.id ? null : e.id)}><Icon size={20} aria-hidden="true" /><strong>{t(e.key)}</strong><span>{e.blurb[locale]}</span></button>;

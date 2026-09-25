@@ -1,11 +1,13 @@
 /**
  * 服务端代理：/api/verify/<path> → VERIFY_SERVICE_URL/<path>
  * - 注入 x-api-key（浏览器永远拿不到）；
- * - x-verify-caller = 任务 owner 地址（创建时取 body.ownerAddress 并写 cookie；之后读 cookie）；
+ * - x-verify-caller = 任务 owner 地址：请求里明确写了地址（?owner= / 组合路径 / body）就按它，否则用 cookie 记住的；
+ *   建任务等路径成功后把 body 地址写进 cookie，占位地址不覆盖已记住的真实地址（规则见 lib/proxyOwner.ts）；
  * - 透传 x402 头（PAYMENT-SIGNATURE / PAYMENT-REQUIRED / PAYMENT-RESPONSE）。
  */
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
+import { ownerFromBody, resolveCaller } from "@/lib/proxyOwner";
 
 const SERVICE = process.env["VERIFY_SERVICE_URL"] ?? "http://127.0.0.1:8790";
 const KEY = process.env["VERIFY_WEB_API_KEY"] ?? "";
@@ -36,6 +38,8 @@ const ALLOWED = new RegExp(
       "v1/rebalance/(preview|plans(/[A-Za-z0-9_]+)?)",
       "v1/recaps(/[A-Za-z0-9_]+(/share)?)?",
       "v1/missions",
+      /* 钱包账户化：按 owner 列出该钱包的全部记录（任务 / 授权 / 规划 / 核验 / 模拟） */
+      "v1/records",
       /* Lane D 的动作与覆盖端点、Lane C 的执行器端点（F 的名单漏了这三条） */
       "v1/event-impacts/actions",
       "v1/events/earnings/coverage",
@@ -55,26 +59,14 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
   const target = `${SERVICE}/${joined}${url.search}`;
 
   const jar = await cookies();
-  let owner = jar.get(COOKIE)?.value ?? "";
-  // v6：只读列表带 ?owner=（任务 / 复盘 / 影响 / 组合）——没有 cookie 时也按该地址当 caller，服务端仍按 owner 鉴权
-  if (!owner) {
-    const qo = url.searchParams.get("owner") ?? /^v1\/portfolio\/(0x[0-9a-fA-F]{40})/.exec(joined)?.[1] ?? "";
-    if (/^0x[0-9a-fA-F]{40}$/.test(qo)) owner = qo.toLowerCase();
-  }
   let bodyText: string | undefined;
-  if (req.method === "POST" || req.method === "PUT") {
-    bodyText = await req.text();
-    // 建任务等路径：body 的 owner 覆盖 cookie 并回写；其它 POST（如事件台动作）只在没有 cookie 时把 body.owner 当调用方，不写 cookie
-    if (OWNER_SETTERS.has(joined) || !owner) {
-      try {
-        const b = JSON.parse(bodyText || "{}") as { ownerAddress?: string; owner?: string; goal?: { ownerAddress?: string }; typedData?: { message?: { owner?: string } } };
-        const cand = b.ownerAddress ?? b.owner ?? b.goal?.ownerAddress ?? b.typedData?.message?.owner;
-        if (typeof cand === "string" && /^0x[0-9a-fA-F]{40}$/.test(cand)) owner = cand.toLowerCase();
-      } catch {
-        /* 交给服务校验 */
-      }
-    }
-  }
+  if (req.method === "POST" || req.method === "PUT") bodyText = await req.text();
+  const { caller: owner, persist } = resolveCaller({
+    cookieOwner: jar.get(COOKIE)?.value,
+    queryOwner: url.searchParams.get("owner"),
+    pathOwner: /^v1\/portfolio\/(0x[0-9a-fA-F]{40})/.exec(joined)?.[1],
+    bodyOwner: bodyText !== undefined ? ownerFromBody(bodyText) : null,
+  }, { ownerSetter: OWNER_SETTERS.has(joined) });
   const headers: Record<string, string> = { "content-type": "application/json", "x-api-key": KEY };
   if (owner) headers["x-verify-caller"] = owner;
   const ps = req.headers.get("payment-signature");
@@ -92,8 +84,8 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
     const v = res.headers.get(h);
     if (v) out.headers.set(h, v);
   }
-  if (OWNER_SETTERS.has(joined) && res.status < 300 && owner) {
-    out.cookies.set(COOKIE, owner, { httpOnly: true, sameSite: "lax", secure: process.env["NODE_ENV"] === "production", path: "/", maxAge: 60 * 60 * 24 * 30 });
+  if (persist && res.status < 300) {
+    out.cookies.set(COOKIE, persist, { httpOnly: true, sameSite: "lax", secure: process.env["NODE_ENV"] === "production", path: "/", maxAge: 60 * 60 * 24 * 30 });
   }
   return out;
 }

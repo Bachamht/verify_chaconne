@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { AssetEntry } from "../lib/assets";
 import { SAMPLES } from "../components/agent/home/entries";
 import { presetFromDraft } from "../components/agent/tasks/taskDraft";
-import { buildSimulationRequest, isOnboardingSnapshot, isSimulationTask, liveDraftFromSimulation, SIMULATION_OWNER, simulationDecision, splitSimulationBudget, type SimulationTask } from "../components/onboarding/model";
+import { buildSimulationRequest, isSimulationTask, liveDraftFromSimulation, simulationDecision, splitSimulationBudget, type SimulationTask } from "../components/onboarding/model";
+
+const OWNER = "0xbacb0000000000000000000000000000000f0381";
 
 const stable: AssetEntry = { assetKey: "eip155:196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8", tokenAddress: "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8", tokenDecimals: 6, displaySymbol: "USDG", underlyingId: "fiat:USD", role: "stable_input", executionAllowed: true };
 const stock: AssetEntry = { assetKey: "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a", tokenAddress: "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a", tokenDecimals: 18, displaySymbol: "AAPLx", underlyingId: "NASDAQ:AAPL", role: "stock_output", executionAllowed: true };
@@ -29,16 +31,18 @@ describe("New visitor budget caps", () => {
   it("rejects invalid precision and steps", () => {
     for (const [decimals, steps] of [[-1, 3], [37, 3], [6, 0], [6, 61], [6, 1.5]]) expect(splitSimulationBudget("30", decimals!, steps!)).toBeNull();
   });
-  it.each(SAMPLES)("keeps the total cap and full conditions for $playbookId", (sample) => {
-    const request = buildSimulationRequest(sample, stock, stable, "30", null, "test-1")!;
+  it.each(SAMPLES)("keeps the total cap and full conditions for $id", (sample) => {
+    const request = buildSimulationRequest(sample, stock, stable, "30", OWNER, "test-1")!;
     expect(request.mode).toBe("SIMULATION");
-    expect(request.ownerAddress).toBe(SIMULATION_OWNER);
+    expect(request.ownerAddress).toBe(OWNER);
     expect(request.conditions.items).toEqual(sample.conditions);
     expect(BigInt(String(request.params.perStepAmountRaw ?? request.params.amountRaw)) * BigInt(sample.steps)).toBe(30_000_000n);
     if (sample.playbookId === "discount_watch") expect(request.params.maxPremiumBps).toBe(30);
   });
-  it("does not request execution for unsupported output assets", () => {
-    expect(buildSimulationRequest(SAMPLES[0]!, { ...stock, executionAllowed: false }, stable, "30", null, "test-2")).toBeNull();
+  it("does not request execution for unsupported output assets, and never without a connected wallet", () => {
+    expect(buildSimulationRequest(SAMPLES[0]!, { ...stock, executionAllowed: false }, stable, "30", OWNER, "test-2")).toBeNull();
+    expect(buildSimulationRequest(SAMPLES[0]!, stock, stable, "30", null, "test-2")).toBeNull();
+    expect(buildSimulationRequest(SAMPLES[0]!, stock, stable, "30", "0x123", "test-2")).toBeNull();
   });
 });
 
@@ -65,19 +69,8 @@ describe("Honest simulation results", () => {
 });
 
 describe("Simulation-to-live handoff", () => {
-  it("rejects corrupt local snapshots before rendering amounts or restoring a live draft", () => {
-    const sample = SAMPLES[0]!;
-    const request = buildSimulationRequest(sample, stock, stable, "30", null, "saved")!;
-    const saved = { view: view(), request, stock, stable, sample };
-    expect(isOnboardingSnapshot(saved)).toBe(true);
-    expect(isOnboardingSnapshot({ ...saved, request: { ...request, mode: "LIVE" } })).toBe(false);
-    expect(isOnboardingSnapshot({ ...saved, request: { ...request, params: { ...request.params, perStepAmountRaw: "broken" } } })).toBe(false);
-    expect(isOnboardingSnapshot({ ...saved, stable: { ...stable, tokenDecimals: -1 } })).toBe(false);
-    expect(isOnboardingSnapshot({ ...saved, sample: { ...sample, steps: 60 } })).toBe(false);
-    expect(isOnboardingSnapshot(null)).toBe(false);
-  });
-  it.each(SAMPLES)("preserves $playbookId settings through the existing form without carrying a demo owner", (sample) => {
-    const request = buildSimulationRequest(sample, stock, stable, "30", null, "test-3")!;
+  it.each(SAMPLES)("preserves $id settings through the existing form without carrying a demo owner", (sample) => {
+    const request = buildSimulationRequest(sample, stock, stable, "30", OWNER, "test-3")!;
     const draft = liveDraftFromSimulation(request);
     const preset = presetFromDraft(draft, () => 6);
     expect(draft.mode).toBe("LIVE");

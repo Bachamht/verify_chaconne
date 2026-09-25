@@ -11,7 +11,6 @@ import { templates, type TemplateView } from "@/lib/api-v2";
 import { addressProblem, isAddress } from "@/lib/format";
 import { apiError } from "@/lib/errors";
 import { walletErrorText } from "@/lib/i18n.execute";
-import { remember } from "@/lib/history";
 import "./verification-workspace.css";
 
 interface Policies {
@@ -127,7 +126,6 @@ export function NewJobForm() {
     return BigInt(i + (f + "0".repeat(inAsset.tokenDecimals)).slice(0, inAsset.tokenDecimals)).toString();
   }, [amount, inAsset]);
 
-  const outAsset = useMemo(() => assets?.assets.find((a) => a.assetKey === output), [assets, output]);
   const ownerProblem = addressProblem(owner, connected, locale);
   const recipientProblem = recipient.trim() ? addressProblem(recipient, null, locale) : null;
   const disabledWhy = !owner.trim() ? t("why_owner") : ownerProblem || recipientProblem ? t("why_owner_invalid") : !input || !output ? t("why_assets") : !amountRaw ? t("why_budget") : null;
@@ -155,7 +153,6 @@ export function NewJobForm() {
       };
       const r = await api<{ jobId?: string; error?: string; message?: string; details?: unknown }>("POST", "v1/jobs", body);
       if ((r.status === 200 || r.status === 201) && r.data.jobId) {
-        remember({ kind: "job", id: r.data.jobId, title: `${outAsset?.displaySymbol ?? "?"} · ${amount} ${inAsset?.displaySymbol ?? ""} · ${policy}`, owner: owner.trim() });
         router.push(`/jobs/${r.data.jobId}`);
       } else setErr(apiError(r, locale));
     } catch (e) {
@@ -225,13 +222,6 @@ export function NewJobForm() {
               <span aria-hidden>{inAsset?.displaySymbol ?? "—"}</span>
             </span>
           </label>
-          {amountRaw && (
-              <details className="demo-hide mt-3">
-                <summary className="cursor-pointer text-xs text-fg-3">{t("dev_details")}</summary>
-                <span className="mono text-xs text-fg-3">amountInRaw = {amountRaw}</span>
-                <p className="text-xs text-fg-3">{t("dev_raw_note")}</p>
-              </details>
-          )}
         </section>
 
         <section className="cvf-panel" aria-labelledby="verify-wallet-title">

@@ -10,7 +10,7 @@ import { prefillFromSimulationGoal } from "@/components/planPrefill";
 import { useI18n } from "@/lib/i18n";
 import { useAccount } from "@/lib/useAccount";
 import { reasonText } from "@/lib/reasons";
-import { Card, Pill, Row } from "@/components/ui";
+import { Card, Pill } from "@/components/ui";
 import { balanceOf, connect } from "@/lib/wallet";
 import { fmtAmount } from "@/lib/format.execute";
 import { tx } from "@/lib/i18n.execute";
@@ -19,7 +19,6 @@ import { addressProblem, blockingSummary, fmtLocal, isAddress, nextStepText, tzL
 import { useMounted } from "@/lib/useMounted";
 import { apiError } from "@/lib/errors";
 import { walletErrorText } from "@/lib/i18n.execute";
-import { remember } from "@/lib/history";
 
 const POLICIES: PolicyId[] = ["STRICT_LIVE", "REFERENCE_CONTEXT", "QUOTE_ONLY"];
 const NEXT_TONE: Record<PlanNextStep, "ok" | "warn" | "bad" | "neutral"> = { READY: "ok", ACCEPT_PARTIAL: "warn", SWITCH_INPUT: "warn", WAIT_CONDITION: "neutral", PROVIDE_DATA: "neutral", USER_MUST_RELAX_LIMIT: "bad" };
@@ -177,7 +176,6 @@ export function PlanClient() {
       const r = await plans.create(goal);
       if (r.status === 200 || r.status === 201) {
         setPlan(r.data);
-        remember({ kind: "plan", id: r.data.planId, title: `${side === "buy" ? (zh ? "买" : "Buy") : zh ? "卖" : "Sell"} ${legs.map((l) => sym(l.outputAssetKey)).join("+")} · ${budget} ${primary?.displaySymbol ?? ""} · ${policy}`, owner: owner.trim() });
         router.replace(`/plan?plan=${r.data.planId}`);
       } else setErr(apiError(r, locale));
     } catch (e) {
@@ -192,7 +190,6 @@ export function PlanClient() {
     const r = await plans.toJob(plan.planId, c.candidateId);
     setBusy(false);
     if (r.status === 200 || r.status === 201) {
-      remember({ kind: "job", id: r.data.jobId, title: `${zh ? "部分完成" : "Partial"} ${sym(plan.goal.legs[c.legIndex]?.outputAssetKey ?? "")} · ${fmtAmount(c.amountInRaw, dec(c.inputAssetKey), sym(c.inputAssetKey))}`, owner: owner.trim() });
       router.push(`/jobs/${r.data.jobId}`);
     } else setErr(apiError(r, locale));
   }
@@ -281,13 +278,6 @@ export function PlanClient() {
             <label className="block">
               <span className="text-fg-2">{t("plan_budget")} ({primary?.displaySymbol ?? "—"})</span>
               <input className="field mono mt-1" value={budget} onChange={(e) => setBudget(e.target.value)} inputMode="decimal" />
-              {budgetRaw && (
-                <details className="demo-hide mt-1">
-                  <summary className="cursor-pointer text-xs text-fg-3">{t("dev_details")}</summary>
-                  <span className="mono text-xs text-fg-3">amountInRaw = {budgetRaw}</span>
-                  <p className="text-xs text-fg-3">{t("dev_raw_note")}</p>
-                </details>
-              )}
             </label>
           </div>
         </Card>
@@ -412,15 +402,6 @@ export function PlanClient() {
             <span className="self-center text-xs text-fg-3">{tx(locale, "plan_sign_wait_hint")}</span>
             <Link href="/verify-bundle" className="btn-ghost">{t("nav_verify_bundle")}</Link>
           </div>
-          {report && (
-            <details className="demo-hide mt-3">
-              <summary className="cursor-pointer text-xs text-fg-2">{t("dev_details")}</summary>
-              <Row k="goalHash" v={report.goalHash} mono />
-              <Row k="planHash" v={report.planHash} mono />
-              <Row k="evidenceHash" v={report.evidenceHash} mono />
-              <Row k="registryHash" v={report.registryHash} mono />
-            </details>
-          )}
         </Card>
       )}
     </div>

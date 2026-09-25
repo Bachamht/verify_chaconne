@@ -5,8 +5,6 @@ import { humanToRaw } from "@/lib/format";
 import { buildTaskBody, type DraftHandoff } from "../agent/tasks/taskDraft";
 import type { SamplePlaybook } from "../agent/home/entries";
 
-export const SIMULATION_OWNER = "0x0000000000000000000000000000000000000001";
-
 export interface SimulationTask extends TaskCreated {
   lastEvaluation?: {
     evaluatedAt?: string;
@@ -14,31 +12,6 @@ export interface SimulationTask extends TaskCreated {
     perItem?: ConditionItemResult[];
     simulation?: { wouldIssue?: boolean } | null;
   } | null;
-}
-
-export interface OnboardingResult {
-  view: SimulationTask;
-  request: CreateTaskBody;
-  stock: AssetEntry;
-  stable: AssetEntry;
-  sample: SamplePlaybook;
-}
-
-/** Local snapshots may be missing or damaged; never render their amount with unchecked BigInt input. */
-export function isOnboardingSnapshot(value: unknown): value is OnboardingResult {
-  if (!value || typeof value !== "object") return false;
-  const saved = value as Partial<OnboardingResult>;
-  const raw = saved.request?.params?.["perStepAmountRaw"] ?? saved.request?.params?.["amountRaw"];
-  return isSimulationTask(saved.view) && saved.request?.mode === "SIMULATION"
-    && /^0x[0-9a-fA-F]{40}$/.test(saved.request.ownerAddress)
-    && typeof raw === "string" && /^\d{1,90}$/.test(raw) && BigInt(raw) > 0n
-    && Array.isArray(saved.request.conditions?.items)
-    && !!saved.stock && saved.stock.role === "stock_output" && typeof saved.stock.assetKey === "string" && typeof saved.stock.displaySymbol === "string"
-    && !!saved.stable && saved.stable.role === "stable_input" && typeof saved.stable.assetKey === "string" && typeof saved.stable.displaySymbol === "string"
-    && Number.isInteger(saved.stable.tokenDecimals) && saved.stable.tokenDecimals >= 0 && saved.stable.tokenDecimals <= 36
-    && !!saved.sample && Number.isInteger(saved.sample.steps) && saved.sample.steps >= 1 && saved.sample.steps <= 60
-    && saved.sample.steps === saved.request.params["steps"] && saved.sample.playbookId === saved.request.playbookId
-    && typeof saved.sample.title?.zh === "string" && typeof saved.sample.title?.en === "string" && Array.isArray(saved.sample.conditions);
 }
 
 /** Split a total cap in token base units. Rounding can only reduce the total. */
@@ -57,10 +30,12 @@ export function splitSimulationBudget(human: string, decimals: number, steps: nu
   return { requestedRaw: requested, perStepRaw: per.toString(), totalRaw: total.toString(), remainderRaw: (BigInt(requested) - total).toString(), perStepHuman };
 }
 
+/** 钱包账户化：owner 必须是已连接的钱包地址；没有就不构造请求 */
 export function buildSimulationRequest(sample: SamplePlaybook, stock: AssetEntry, stable: AssetEntry, totalHuman: string, owner: string | null, clientRequestId: string): CreateTaskBody | null {
   const amount = splitSimulationBudget(totalHuman, stable.tokenDecimals, sample.steps);
   if (!amount || stock.role !== "stock_output" || !stock.executionAllowed || stable.role !== "stable_input") return null;
-  const effectiveOwner = owner && /^0x[0-9a-fA-F]{40}$/.test(owner) ? owner : SIMULATION_OWNER;
+  if (!owner || !/^0x[0-9a-fA-F]{40}$/.test(owner)) return null;
+  const effectiveOwner = owner;
   return buildTaskBody({
     playbookId: sample.playbookId,
     outputAssetKey: stock.assetKey,
@@ -85,7 +60,7 @@ export function simulationDecision(view: SimulationTask): SimulationDecision {
   return "unknown";
 }
 
-/** Copy only the user's original plan. Never carry a demo owner or a generated thesis id into LIVE. */
+/** Copy only the user's original plan; never carry a generated thesis id into LIVE. */
 export function liveDraftFromSimulation(request: CreateTaskBody): DraftHandoff {
   return {
     playbookId: request.playbookId,

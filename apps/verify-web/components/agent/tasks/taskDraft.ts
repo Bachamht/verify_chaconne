@@ -17,10 +17,16 @@ export interface TaskDraft {
   conditions: Condition[];
   /** discount_watch 专用：最大溢价 bps */
   maxPremiumBps?: number;
+  /** 每一步交易的核验策略；缺省 QUOTE_ONLY（24 小时可执行，只核对路由 / 报价 / 价格冲击） */
+  policyId?: "QUOTE_ONLY" | "REFERENCE_CONTEXT" | "STRICT_LIVE";
+  /** 最大价格冲击（bps，1–1000）；超过则该步拒绝，这是唯一的硬性拦截 */
+  maxPriceImpactBps?: number;
+  /** 只在美股常规时段执行（可选；链上股票本身 24 小时可交易）。表单据此加一条 session 条件，不作为参数发送 */
+  regularSessionOnly?: boolean;
   /** 草案里带的 owner（A2MCP 草案是完整的 POST /v1/tasks 请求体）；只在没连钱包时预填 */
   ownerAddress?: string;
 }
-export type DraftField = "outputAssetKey" | "inputAssetKey" | "steps" | "perStepAmountRaw" | "ownerAddress";
+export type DraftField = "outputAssetKey" | "inputAssetKey" | "steps" | "perStepAmountRaw" | "ownerAddress" | "maxPriceImpactBps";
 
 /** 模板的金额参数名：DCA / 加仓按每步（perStepAmountRaw）；单步模板按总额（amountRaw） */
 export function amountParamOf(playbookId: PlaybookId): "perStepAmountRaw" | "amountRaw" {
@@ -40,7 +46,8 @@ export function validateDraft(d: TaskDraft, owner: string, decimals: number | nu
 
 export function buildTaskBody(d: TaskDraft, owner: string, decimals: number, clientRequestId: string): CreateTaskBody {
   const raw = humanToRaw(d.perStepHuman, decimals) ?? "0";
-  const params: Record<string, unknown> = { inputAssetKey: d.inputAssetKey.toLowerCase(), outputAssetKey: d.outputAssetKey.toLowerCase(), steps: d.steps, [amountParamOf(d.playbookId)]: raw };
+  const params: Record<string, unknown> = { inputAssetKey: d.inputAssetKey.toLowerCase(), outputAssetKey: d.outputAssetKey.toLowerCase(), steps: d.steps, [amountParamOf(d.playbookId)]: raw, policyId: d.policyId ?? "QUOTE_ONLY" };
+  if (d.maxPriceImpactBps !== undefined) params["maxPriceImpactBps"] = d.maxPriceImpactBps;
   if (d.playbookId === "discount_watch") params["maxPremiumBps"] = d.maxPremiumBps ?? 30;
   return { clientRequestId, ownerAddress: owner.toLowerCase(), playbookId: d.playbookId, params, conditions: { version: "conditions/1", items: d.conditions }, mode: d.mode };
 }
@@ -106,6 +113,8 @@ export function presetFromDraft(d: DraftHandoff | null | undefined, decimalsOf: 
   if (typeof p["inputAssetKey"] === "string") out.inputAssetKey = p["inputAssetKey"];
   if (typeof p["steps"] === "number" && Number.isInteger(p["steps"])) out.steps = p["steps"];
   if (typeof p["maxPremiumBps"] === "number") out.maxPremiumBps = p["maxPremiumBps"];
+  if (p["policyId"] === "QUOTE_ONLY" || p["policyId"] === "REFERENCE_CONTEXT" || p["policyId"] === "STRICT_LIVE") out.policyId = p["policyId"];
+  if (typeof p["maxPriceImpactBps"] === "number" && Number.isInteger(p["maxPriceImpactBps"])) out.maxPriceImpactBps = p["maxPriceImpactBps"];
   const raw = (p["perStepAmountRaw"] ?? p["amountRaw"]) as unknown;
   if (typeof raw === "string" && /^\d+$/.test(raw) && typeof p["inputAssetKey"] === "string") {
     const dec = decimalsOf(p["inputAssetKey"]);
@@ -117,6 +126,6 @@ export function presetFromDraft(d: DraftHandoff | null | undefined, decimalsOf: 
     }
   }
   const items = Array.isArray(d.conditions) ? d.conditions : Array.isArray(d.conditions?.items) ? d.conditions.items : null;
-  if (items && items.length) out.conditions = items;
+  if (items && items.length) { out.conditions = items; if (items.some((c) => c && typeof c === "object" && (c as { type?: string }).type === "session")) out.regularSessionOnly = true; }
   return out;
 }

@@ -204,7 +204,6 @@ export function ReplayTimeline({ initialAsset, initialDate }: { initialAsset?: s
           <p className="text-xs text-fg-3">
             {zh ? `用到的数据：证据 ${d.sources?.verify_evidence ?? 0} 条 · 上下文快照 ${d.sources?.verify_context_snapshots ?? 0} 份 · 溢价小时线 ${d.sources?.premium_1h ?? 0} 条（只作背景）· 事件 ${d.sources?.events ?? 0} 个` : `Data used: ${d.sources?.verify_evidence ?? 0} evidence record(s) · ${d.sources?.verify_context_snapshots ?? 0} context snapshot(s) · ${d.sources?.premium_1h ?? 0} hourly premium point(s) (background only) · ${d.sources?.events ?? 0} event(s)`}
           </p>
-          <details><summary className="cursor-pointer text-xs text-fg-3">{zh ? "开发者视图" : "Developer view"}</summary><p className="mono mt-1 text-xs text-fg-3">{zh ? "求值器" : "evaluator"} {d.evaluatorId} · replay {d.replayId}</p></details>
           <p className="text-xs text-fg-3">{zh ? d.note.zh : d.note.en}</p>
         </div>
       )}

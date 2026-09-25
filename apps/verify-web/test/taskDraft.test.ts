@@ -13,14 +13,14 @@ const draft: TaskDraft = { playbookId: "session_dca", outputAssetKey: AAPLX, inp
 describe("V-24 · 请求体", () => {
   it("session_dca：params 带 inputAssetKey 与 perStepAmountRaw（按精度换 raw），不带 from/to", () => {
     const b = buildTaskBody(draft, OWNER, 6, "web-1");
-    expect(b.params).toEqual({ inputAssetKey: USDG, outputAssetKey: AAPLX, steps: 3, perStepAmountRaw: "1000000" });
+    expect(b.params).toEqual({ inputAssetKey: USDG, outputAssetKey: AAPLX, steps: 3, perStepAmountRaw: "1000000", policyId: "QUOTE_ONLY" });
     expect(b.ownerAddress).toBe(OWNER);
     expect(b.mode).toBe("SIMULATION");
     expect(Object.keys(b.params)).not.toContain("from");
   });
   it("discount_watch：单步模板用 amountRaw + maxPremiumBps", () => {
     const b = buildTaskBody({ ...draft, playbookId: "discount_watch", steps: 1, perStepHuman: "2.5" }, OWNER, 6, "web-2");
-    expect(b.params).toEqual({ inputAssetKey: USDG, outputAssetKey: AAPLX, steps: 1, amountRaw: "2500000", maxPremiumBps: 30 });
+    expect(b.params).toEqual({ inputAssetKey: USDG, outputAssetKey: AAPLX, steps: 1, amountRaw: "2500000", policyId: "QUOTE_ONLY", maxPremiumBps: 30 });
     expect(amountParamOf("event_aware_accumulate")).toBe("perStepAmountRaw");
   });
   it("前置校验与服务端同名 code：缺 owner / 金额非法 / 步数越界", () => {

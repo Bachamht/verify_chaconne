@@ -63,3 +63,5 @@
 .ag-toast-close{color:var(--color-fg-3);font-size:16px;line-height:1}
 .ag-task-row{display:flex;flex-direction:column;gap:4px}
 .ag-task-row h3{margin:0;font-size:14px;font-weight:600;line-height:1.4}
+
+.ag-check{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}.ag-check input{width:16px;height:16px;accent-color:var(--color-brand-400)}

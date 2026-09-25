@@ -10,8 +10,7 @@ import { useI18n } from "@/lib/i18n";
 import { fmtLocal } from "@/lib/format";
 import { conditionText } from "@/lib/conditions";
 import { apiError } from "@/lib/errors";
-import { remember } from "@/lib/history";
-import { Card, Json, Pill, Row } from "@/components/ui";
+import { Card, Pill, Row } from "@/components/ui";
 import { blockerSentence } from "../tasks/taskTitle";
 import { lab, type CompareView } from "./api";
 import { outcomeLabel } from "./WaitDiagnosis";
@@ -66,7 +65,6 @@ export function PolicyCompare({ taskId }: { taskId: string }) {
     const r = await lab.simulate(d.remix.simulationBody);
     if (r.status === 201) {
       setSimId(r.data.simulationId);
-      remember({ kind: "simulation", id: r.data.simulationId, title: `${zh ? "由对照建的模拟" : "Simulation from comparison"} ${d.comparisonId}` });
     } else setSimErr(apiError(r, locale));
   }
 
@@ -154,7 +152,6 @@ export function PolicyCompare({ taskId }: { taskId: string }) {
             {simErr && <span className="text-sm text-warn">{simErr}</span>}
           </div>
           {d.note && <p className="text-xs text-fg-3">{zh ? d.note.zh : d.note.en}</p>}
-          <details><summary className="cursor-pointer text-xs text-fg-3">{zh ? "开发者视图（原始响应）" : "Developer view (raw response)"}</summary><Json value={d} /></details>
         </div>
       )}
     </Card>

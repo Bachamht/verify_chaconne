@@ -44,7 +44,7 @@ describe("模拟入口与真实任务模式边界", () => {
   });
 
   it("锁定入口即使收到 LIVE 预填仍显示模拟创建，且不提供实盘切换", () => {
-    const html = renderToStaticMarkup(React.createElement(TaskForm, { assets, allowPlaceholderOwner: true, modeLock: "SIMULATION", preset: { mode: "LIVE" } }));
+    const html = renderToStaticMarkup(React.createElement(TaskForm, { assets, modeLock: "SIMULATION", preset: { mode: "LIVE" } }));
     expect(html).toContain("ag_create_sim");
     expect(html).not.toContain("ag_create_live");
     expect(html).not.toContain('value="LIVE"');

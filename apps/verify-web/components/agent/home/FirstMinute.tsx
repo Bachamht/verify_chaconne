@@ -7,32 +7,31 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { contextProvenance, marketContext, marketEvents, notReady, replays, type TaskCreated } from "@/lib/api-v2";
+import { contextProvenance, marketContext, marketEvents, notReady, type TaskCreated } from "@/lib/api-v2";
+import { lab, type ReplayView } from "../lab/api";
 import { stocksOf, type AssetsLoad } from "@/lib/assets";
 import { conditionText } from "@/lib/conditions";
 import { fmtLocal } from "@/lib/format";
-import { connect } from "@/lib/wallet";
-import { useAccount } from "@/lib/useAccount";
-import type { MarketContext, MarketEvent, ReplayRun } from "@chaconne/core/verify";
+import { apiError } from "@/lib/errors";
+import type { MarketContext, MarketEvent } from "@chaconne/core/verify";
 import { Card, Pill } from "@/components/ui";
-import { LoadingState, ModeTag, NotReady, shortKey } from "../shared";
+import { LoadingState, ModeTag, NotReady } from "../shared";
 import { TaskForm } from "../tasks/TaskForm";
 import { SAMPLES } from "./entries";
 import sampleContext from "./sample_context.agent.json";
 
-type Loaded<T> = { kind: "idle" } | { kind: "busy" } | { kind: "nr"; http: number } | { kind: "ok"; v: T };
+type Loaded<T> = { kind: "idle" } | { kind: "busy" } | { kind: "nr"; http: number } | { kind: "err"; msg: string } | { kind: "ok"; v: T };
 const SAMPLE = sampleContext as unknown as MarketContext;
 
 export function FirstMinute({ assets, onRetryAssets }: { assets: AssetsLoad; onRetryAssets?: () => void }) {
   const { locale, t } = useI18n();
   const zh = locale === "zh";
-  const account = useAccount();
   const stocks = stocksOf(assets.assets);
   const [asset, setAsset] = useState("");
   const [sampleIdx, setSampleIdx] = useState(0);
   const [events, setEvents] = useState<Loaded<MarketEvent[]>>({ kind: "idle" });
   const [ctx, setCtx] = useState<Loaded<MarketContext>>({ kind: "idle" });
-  const [run, setRun] = useState<Loaded<{ created: TaskCreated } | { replay: ReplayRun }>>({ kind: "idle" });
+  const [run, setRun] = useState<Loaded<{ created: TaskCreated } | { replay: ReplayView }>>({ kind: "idle" });
   const [showForm, setShowForm] = useState(false);
   const [showSample, setShowSample] = useState(false);
   const chosen = stocks.find((a) => a.assetKey === asset) ?? stocks[0] ?? null;
@@ -53,11 +52,14 @@ export function FirstMinute({ assets, onRetryAssets }: { assets: AssetsLoad; onR
   async function replay() {
     if (!chosen) return;
     setRun({ kind: "busy" });
-    const to = new Date();
+    // 服务端拒绝 to 在未来：浏览器时钟可能比服务器快，结束点往前留 5 分钟
+    const to = new Date(Date.now() - 5 * 60_000);
     const from = new Date(to.getTime() - 3 * 86_400_000);
-    const r = await replays.create({ playbookId: sample.playbookId, conditions: { version: "conditions/1", items: sample.conditions }, assetKey: chosen.assetKey, from: from.toISOString(), to: to.toISOString() }).catch(() => null);
+    // 响应形状是 { replayId, run: { points, coverage, gaps? }, … }（此前按顶层 points 读，整页崩溃）
+    const r = await lab.replay({ playbookId: sample.playbookId, conditions: { items: sample.conditions }, assetKey: chosen.assetKey, from: from.toISOString(), to: to.toISOString(), stepMinutes: 60, locale }).catch(() => null);
     if (!r) return setRun({ kind: "nr", http: 0 });
     if (r.status === 201 || r.status === 200) return setRun({ kind: "ok", v: { replay: r.data } });
+    if (r.status === 400) return setRun({ kind: "err", msg: apiError(r, locale) });
     setRun({ kind: "nr", http: r.status });
   }
   const ctxView = ctx.kind === "ok" ? ctx.v : showSample ? SAMPLE : null;
@@ -65,7 +67,7 @@ export function FirstMinute({ assets, onRetryAssets }: { assets: AssetsLoad; onR
   const relEvents = events.kind === "ok" ? events.v.filter((e) => sample.eventKinds.length === 0 || sample.eventKinds.includes(e.kind) || e.underlyingIds.includes(chosen?.underlyingId ?? "")) : [];
 
   return (
-    <Card title={zh ? "第一分钟" : "Your first minute"} right={<Pill tone="brand">{zh ? "不需要钱包" : "no wallet needed"}</Pill>}>
+    <Card title={zh ? "第一分钟" : "Your first minute"} right={null}>
       <ol className="ag-steps">
         <li className="ag-step" data-done={chosen ? "1" : "0"}>
           <h3>{zh ? "选一个已支持的资产" : "Pick a supported asset"}</h3>
@@ -74,7 +76,7 @@ export function FirstMinute({ assets, onRetryAssets }: { assets: AssetsLoad; onR
         </li>
         <li className="ag-step" data-done="1">
           <h3>{zh ? "挑一个示例任务" : "Pick a sample task"}</h3>
-          <div className="ag-actions mt-2">{SAMPLES.map((s, i) => <button key={s.playbookId} className={`btn-ghost h-8 px-3 text-xs ${i === sampleIdx ? "ring-line-brand text-brand-300" : ""}`} aria-pressed={i === sampleIdx} onClick={() => { setSampleIdx(i); setRun({ kind: "idle" }); }}>{s.title[locale]}</button>)}</div>
+          <div className="ag-actions mt-2">{SAMPLES.map((s, i) => <button key={s.id} className={`btn-ghost h-8 px-3 text-xs ${i === sampleIdx ? "ring-line-brand text-brand-300" : ""}`} aria-pressed={i === sampleIdx} onClick={() => { setSampleIdx(i); setRun({ kind: "idle" }); }}>{s.title[locale]}</button>)}</div>
           <p className="mt-2">{sample.what[locale]}</p>
         </li>
         <li className="ag-step" data-done={events.kind === "ok" || ctx.kind === "ok" ? "1" : "0"}>
@@ -117,15 +119,11 @@ export function FirstMinute({ assets, onRetryAssets }: { assets: AssetsLoad; onR
             <button className="btn" disabled={!chosen || run.kind === "busy"} aria-expanded={showForm} onClick={() => setShowForm((v) => !v)}>{zh ? "创建模拟任务" : "Create simulation task"}</button>
             <button className="btn-ghost" disabled={!chosen || run.kind === "busy"} onClick={replay}>{zh ? "回放最近 3 天" : "Replay the last 3 days"}</button>
           </div>
-          {showForm && chosen && <div className="mt-3"><TaskForm assets={assets.assets} assetsSource={assets.source} onRetryAssets={onRetryAssets} preset={{ playbookId: sample.playbookId, outputAssetKey: chosen.assetKey, steps: sample.steps, mode: "SIMULATION", conditions: sample.conditions }} allowPlaceholderOwner modeLock="SIMULATION" onCreated={(v) => { setRun({ kind: "ok", v: { created: v } }); setShowForm(false); }} /></div>}
+          {showForm && chosen && <div className="mt-3"><TaskForm assets={assets.assets} assetsSource={assets.source} onRetryAssets={onRetryAssets} preset={{ playbookId: sample.playbookId, outputAssetKey: chosen.assetKey, steps: sample.steps, mode: "SIMULATION", conditions: sample.conditions }} modeLock="SIMULATION" onCreated={(v) => { setRun({ kind: "ok", v: { created: v } }); setShowForm(false); }} /></div>}
           {run.kind === "nr" && <NotReady what={"POST /v1/replays"} status={run.http} />}
+          {run.kind === "err" && <p className="mt-2 text-sm text-bad" role="alert">{run.msg}</p>}
           {run.kind === "ok" && "created" in run.v && <FirstMinuteTaskResult value={run.v.created} />}
-          {run.kind === "ok" && "replay" in run.v && <div className="mt-2 space-y-1"><div className="ag-actions"><ModeTag mode="REPLAY" /><span className="mono text-xs">{run.v.replay.id}</span></div><p className="ag-note">{zh ? `${run.v.replay.points.length} 个评估点，${run.v.replay.gaps.length} 段缺口（缺口如实显示，不补）；只用当时可知的信息，不输出收益。` : `${run.v.replay.points.length} evaluation point(s), ${run.v.replay.gaps.length} gap(s) shown as gaps; only information known at the time, no returns.`}</p></div>}
-        </li>
-        <li className="ag-step" data-done={account ? "1" : "0"}>
-          <h3>{t("ag_connect_last")}</h3>
-          <p>{t("ag_connect_why")}</p>
-          <div className="ag-actions mt-2">{account ? <Pill tone="ok">{shortKey(account)}</Pill> : <button className="btn-ghost" onClick={() => connect().catch(() => undefined)}>{t("connect")}</button>}<Link className="btn-ghost" href="/agent?entry=buy&mode=LIVE">{zh ? "去安排一笔真实买入" : "Schedule a real buy"}</Link></div>
+          {run.kind === "ok" && "replay" in run.v && (() => { const pts = run.v.replay.run?.points ?? []; const gaps = run.v.replay.run?.gaps ?? []; const waiting = pts.filter((p) => p.outcome !== "SATISFIED").length; return <div className="mt-2 space-y-1"><div className="ag-actions"><ModeTag mode="REPLAY" /><Link className="text-sm underline" href="/agent/lab#replay">{zh ? "去实验页做完整回放 →" : "Full replay on the lab page →"}</Link></div><p className="ag-note">{zh ? `最近 3 天每小时评估一次：${pts.length} 个评估点，其中 ${pts.length - waiting} 个满足条件、${waiting} 个在等待；${gaps.length} 段缺口如实显示。只用当时可知的信息，不输出收益。` : `Hourly over the last 3 days: ${pts.length} evaluation points, ${pts.length - waiting} satisfied and ${waiting} waiting; ${gaps.length} gap(s) shown as gaps. Only information known at the time, no returns.`}</p></div>; })()}
         </li>
       </ol>
     </Card>

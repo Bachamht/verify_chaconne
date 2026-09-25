@@ -8,7 +8,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { agentTasks, mandates, notReady, type MandateDraftView, type PrepareStepView, type TaskCreated } from "@/lib/api-v2";
+import { agentTasks, mandates, notReady, type MandateDraftView, type TaskCreated } from "@/lib/api-v2";
 import { apiError } from "@/lib/errors";
 import { formatAmount, formatTime } from "@/lib/format";
 import { assetByKey, loadAssets, type AssetEntry } from "@/lib/assets";
@@ -18,7 +18,7 @@ import { encodeRevoke } from "@/lib/mandate";
 import { PLANGUARD_ADDRESS } from "@/lib/planGuardAbi";
 import { useAccount } from "@/lib/useAccount";
 import type { TradeMandate } from "@chaconne/core/verify";
-import { Card, Json, Pill } from "@/components/ui";
+import { Card, Pill } from "@/components/ui";
 import { LoadingState, ModeTag, NotReady, Skeleton, Toast, useToast } from "../shared";
 import { Blockers } from "./Blockers";
 import { blockerSentence, statusLabel, taskTitle } from "./taskTitle";
@@ -34,15 +34,15 @@ export function TaskDetail({ id }: { id: string }) {
   const [state, setState] = useState<{ kind: "busy" } | { kind: "nr"; http: number } | { kind: "err"; msg: string } | { kind: "ok"; v: TaskCreated }>({ kind: "busy" });
   const [pending, setPending] = useState<"prepare" | "pause" | "resume" | "cancel" | "authorize" | "revoke" | null>(null);
   const [toast, setToast] = useToast();
-  const [prep, setPrep] = useState<PrepareStepView | null>(null);
   useEffect(() => { void loadAssets().then((r) => setAssets(r.assets)); }, []);
   const load = useCallback(async () => {
-    const r = await agentTasks.get(id).catch(() => null);
+    // 钱包账户化：带上已连接钱包，代理按它当调用方（不依赖 cookie）
+    const r = await agentTasks.get(id, account).catch(() => null);
     if (!r || r.status === 0) return setState((s) => (s.kind === "ok" ? s : { kind: "nr", http: 0 }));
     if (notReady(r)) return setState({ kind: "nr", http: r.status });
     if (r.status !== 200) return setState({ kind: "err", msg: apiError(r, locale) });
     setState({ kind: "ok", v: r.data });
-  }, [id, locale]);
+  }, [id, locale, account]);
   useEffect(() => {
     void load();
     const i = setInterval(() => void load(), 15_000);
@@ -101,7 +101,6 @@ export function TaskDetail({ id }: { id: string }) {
     setPending(null);
     if (!r || r.status === 0) return setToast({ text: t("ag_service_unreachable"), tone: "bad" });
     if (notReady(r)) return setToast({ text: `${t("ag_not_ready_h")} · POST /v1/tasks/:id/prepare-step`, tone: "warn" });
-    setPrep(r.data);
     const d = r.data;
     if (d.taskStatus === "PAUSED") setToast({ text: t("ag_eval_paused"), tone: "warn" });
     else if (d.status === "READY") setToast({ text: d.mode === "SIMULATION" ? t("ag_eval_sim_ready") : t("ag_eval_ready"), tone: "ok" });
@@ -184,11 +183,6 @@ export function TaskDetail({ id }: { id: string }) {
           <p className="ag-note mt-2">{zh ? "到期" : "valid until"} {formatTime(thesisDraft.validUntil, locale)} · {thesisDraft.onInvalidation === "pause_issuance" ? t("ag_thesis_on_pause_issuance") : thesisDraft.onInvalidation === "draft_exit" ? t("ag_thesis_on_draft_exit") : t("ag_thesis_on_notify")}</p>
         </Card>
       )}
-      <details className="card"><summary className="cursor-pointer text-sm">{zh ? "开发者视图（原始响应）" : "Developer view (raw response)"}</summary>
-        <p className="mono mt-2 text-xs text-fg-3">{task.id} · {task.playbookId} · conditions {task.conditions.hash}</p>
-        {prep !== null && <div className="mt-3"><p className="text-xs font-semibold uppercase tracking-wide text-fg-3">prepare-step</p><Json value={prep} /></div>}
-        <Json value={state.v} />
-      </details>
       <Toast msg={toast} onClose={() => setToast(null)} />
     </>
   );

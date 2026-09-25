@@ -42,6 +42,8 @@ import type { RecapsService } from "../recaps/service";
 import { buildMissions, defaultDraftFunding } from "../missions/build";
 import { A2MCP_AGENT_TASKS_PATH, createA2mcpAgentTasksHandler, type AgentTasksDeps } from "./a2mcpAgentTasks";
 import { buildAgentCard, buildLlmsTxt, buildOpenApi, DISCOVERY_PATHS, type DiscoveryDeps } from "./discovery";
+import { listRecords } from "../records/service";
+import { assertOwner } from "../portfolio/ownerAuth";
 
 export interface AppDeps {
   cfg: VerifyConfig;
@@ -220,6 +222,17 @@ export function createApp(d: AppDeps) {
     wrap(async (req, res) => {
       const job = await d.service.requireJob(callerOf(res), String(req.params["id"]));
       res.json(await d.service.view(job));
+    }),
+  );
+
+  /* 钱包账户化：该钱包名下全部记录（任务 / 授权 / 规划 / 核验 / 模拟）的只读汇总；owner 鉴权与组合页一致 */
+  app.get(
+    "/v1/records",
+    auth,
+    wrap(async (req, res) => {
+      const owner = typeof req.query["owner"] === "string" ? req.query["owner"] : "";
+      const o = await assertOwner(d.service["d"].db, callerOf(res), owner);
+      res.json({ owner: o, items: await listRecords(d.service["d"].db, o) });
     }),
   );
 

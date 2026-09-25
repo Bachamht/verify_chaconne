@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, type AssetsResponse } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { reasonText } from "@/lib/reasons";
-import { Card, Json, Pill, Row, EmptyState } from "@/components/ui";
+import { Card, Pill, Row, EmptyState } from "@/components/ui";
 import { Conductor, type ConductorState } from "@/components/Conductor";
 import { fmtLocal } from "@/lib/format";
 import { assetMeta, fmtAmount, fmtClock, fmtPrice } from "@/lib/format.execute";
@@ -86,7 +86,6 @@ export function JobClient({ jobId }: { jobId: string }) {
   const [job, setJob] = useState<JobView | null>(null);
   const [rep, setRep] = useState<ReportResponse | null>(null);
   const [status, setStatus] = useState<number | null>(null);
-  const [showDev, setShowDev] = useState(false);
   const [bill, setBill] = useState<Bill | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -259,7 +258,7 @@ export function JobClient({ jobId }: { jobId: string }) {
           </div>
 
           <div id="verify-report-evidence" className="cvf-evidence-section">
-          <Card title={t("evidence")} className="cvf-detail-card" right={<button className="btn-ghost px-3 py-1 text-xs" aria-expanded={showDev} aria-controls="verify-report-raw-evidence" onClick={() => setShowDev(!showDev)}>{t("dev_details")}</button>}>
+          <Card title={t("evidence")} className="cvf-detail-card">
             <p className="mb-5 text-sm text-fg-2">{zh ? "以下为这份报告实际使用的证据。来源与时间保留，供你逐项核对。" : "Evidence used by this report, with sources and timestamps available for inspection."}</p>
             <ul className="cvf-evidence-list text-sm">
               {rep?.evidence.map((e, i) => (
@@ -273,17 +272,6 @@ export function JobClient({ jobId }: { jobId: string }) {
                 </li>
               ))}
             </ul>
-            {showDev && (
-              <div id="verify-report-raw-evidence" className="mt-5 space-y-2">
-                <Row k="requestHash" v={job.requestHash} mono />
-                <Row k="evidenceHash" v={report.evidenceHash} mono />
-                <Row k="reportHash" v={rep?.reportHash} mono />
-                <Row k="policyDefinitionHash" v={job.policyDefinitionHash} mono />
-                <Row k="effectivePolicyHash" v={job.effectivePolicyHash} mono />
-                <Row k="registryHash" v={job.registryHash} mono />
-                <Json value={rep} />
-              </div>
-            )}
           </Card>
           </div>
 

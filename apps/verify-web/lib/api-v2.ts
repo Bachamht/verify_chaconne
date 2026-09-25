@@ -436,9 +436,36 @@ const q = (o: Record<string, string | number | undefined>) => {
   return p.length ? `?${p.join("&")}` : "";
 };
 
+/** 钱包账户化：GET /v1/records?owner= —— 该钱包名下全部记录，倒序 */
+export interface RecordItem {
+  kind: "task" | "mandate" | "plan" | "job" | "simulation";
+  id: string;
+  createdAt: string;
+  status?: string;
+  mode?: string;
+  playbookId?: string;
+  params?: Record<string, unknown>;
+  side?: "buy" | "sell";
+  policyId?: string;
+  inputAssetKey?: string;
+  outputAssetKeys?: string[];
+  amountInRaw?: string;
+  personaId?: string | null;
+  taskId?: string | null;
+  stepsDone?: number;
+  maxSteps?: number;
+  budgetCap?: string;
+  spent?: string;
+  deadline?: string;
+}
+export const records = {
+  list: (owner: string) => api<{ owner: string; items: RecordItem[] }>("GET", `v1/records${q({ owner })}`),
+};
+
 export const agentTasks = {
   create: (body: CreateTaskBody) => mapOk<TaskCreated & { error?: string; message?: string; details?: unknown }>(api("POST", "v1/tasks", body), normalizeTask),
-  get: (id: string) => mapOk<TaskCreated>(api("GET", `v1/tasks/${id}`), normalizeTask),
+  /** owner 给了就带 ?owner=：代理按它当调用方，不受浏览器 cookie 里记住的别的地址影响 */
+  get: (id: string, owner?: string | null) => mapOk<TaskCreated>(api("GET", `v1/tasks/${id}${owner ? q({ owner }) : ""}`), normalizeTask),
   list: (owner: string) => mapOk<{ tasks: Task[] }>(api("GET", `v1/tasks${q({ owner })}`), normalizeList("tasks")),
   pause: (id: string) => mapOk<TaskStopped>(api("POST", `v1/tasks/${id}/pause`), normalizeTask),
   resume: (id: string) => mapOk<TaskStopped>(api("POST", `v1/tasks/${id}/resume`), normalizeTask),
@@ -456,7 +483,7 @@ export const marketEvents = {
   impacts: (owner: string, horizonHours = 48) => mapOk<{ impacts: EventImpact[] }>(api("GET", `v1/event-impacts${q({ owner, horizonHours })}`), normalizeList("impacts")),
 };
 export const replays = {
-  create: (body: { playbookId: PlaybookId; conditions: { version: "conditions/1"; items: Condition[] }; assetKey: string; from: string; to: string }) => api<ReplayRun>("POST", "v1/replays", body),
+  create: (body: { playbookId: PlaybookId; conditions: { version: "conditions/1"; items: Condition[] }; assetKey: string; from: string; to: string; stepMinutes?: number; locale?: string }) => api<ReplayRun>("POST", "v1/replays", body),
 };
 export const budgetGroups = {
   get: (id: string) => mapOk<BudgetGroupView>(api("GET", `v1/budget-groups/${id}`), normalizeList("allocations")),
