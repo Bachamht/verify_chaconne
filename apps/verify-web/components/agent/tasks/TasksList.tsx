@@ -7,6 +7,7 @@ import { agentTasks, notReady } from "@/lib/api-v2";
 import { apiError } from "@/lib/errors";
 import { formatTime } from "@/lib/format";
 import { loadAssets, type AssetEntry } from "@/lib/assets";
+import { V7_UI } from "@/lib/v7";
 import type { Task } from "@chaconne/core/verify";
 import { Card, EmptyState, Pill } from "@/components/ui";
 import { LoadingState, NotReady, OwnerField, Skeleton, useOwnerInput, useToast, Toast } from "../shared";
@@ -50,7 +51,9 @@ export function TasksList() {
   }, [owner, valid, locale, seq]);
   const nextLine = (task: Task): string => {
     if (task.status === "PAUSED") return zh ? "已暂停，点进去可继续或取消。" : "Paused; open to resume or cancel.";
-    if (task.status === "AWAITING_AUTHORIZATION") return zh ? "等你签一次授权后才会开始。" : "Starts after you sign the authorization once.";
+    if (task.status === "AWAITING_AUTHORIZATION") return V7_UI
+      ? (zh ? "打开任务详情，按委托清单完成待办；签名、额度与剩余步骤以清单为准。" : "Open task details to complete the delegation checklist. It shows the required signatures, allowances and remaining steps.")
+      : (zh ? "等你签一次授权后才会开始。" : "Starts after you sign the authorization once.");
     if (task.blockers.length === 0) return zh ? "没有阻塞项。" : "No blockers.";
     const first = blockerSentence(task.blockers[0]!, locale);
     const more = task.blockers.length > 1 ? (zh ? `（还有 ${task.blockers.length - 1} 项）` : ` (+${task.blockers.length - 1} more)`) : "";

@@ -25,7 +25,7 @@ describe("loadConfig 护栏", () => {
     expect(() => loadConfig({ ...base, REPORT_PRICE_USD: "0.01", EVIDENCE_MODE: "live", MERCHANT_RECIPIENT_ADDRESS: "" })).toThrow(/MERCHANT_RECIPIENT_ADDRESS/);
   });
   it("非法地址/私钥格式 → 拒绝", () => {
-    expect(() => loadConfig({ ...base, GUARD_ADDRESS: "0x12" })).toThrow(/GUARD_ADDRESS/);
+    expect(() => loadConfig({ ...base, PLANGUARD_ADDRESS: "0x12" })).toThrow(/PLANGUARD_ADDRESS/);
     expect(() => loadConfig({ ...base, ATTESTATION_PRIVATE_KEY: "abc" })).toThrow(/ATTESTATION_PRIVATE_KEY/);
   });
   it("API key 解析", () => {

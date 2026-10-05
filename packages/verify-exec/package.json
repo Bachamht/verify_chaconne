@@ -1,0 +1,23 @@
+{
+  "name": "@chaconne/verify-exec",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared PlanGuard send path (v7 X5): local checks, tx build, per-caller tx allowlist, revert decoding, serial nonce manager. Used by apps/verify-executor and verify-mcp agent-wallet mode.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@chaconne/core": "workspace:*",
+    "viem": "^2.54.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
+  }
+}

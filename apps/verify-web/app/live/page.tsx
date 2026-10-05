@@ -5,8 +5,14 @@ import { pubList, type PublicReport } from "@/lib/api-v2";
 import { useI18n } from "@/lib/i18n";
 import { ReportCard } from "@/components/ReportCard";
 import { Card, EmptyState } from "@/components/ui";
+import { LiveBoard } from "@/components/features/public/LiveBoard";
 
 export default function LivePage() {
+  if (process.env.NEXT_PUBLIC_V8_UI === "1") return <LiveBoard />;
+  return <LegacyLivePage />;
+}
+
+function LegacyLivePage() {
   const { t, locale } = useI18n();
   const [items, setItems] = useState<PublicReport[] | null>(null);
   useEffect(() => {

@@ -13,6 +13,9 @@ import { assetByKey, loadAssets, type AssetEntry } from "@/lib/assets";
 import { balanceOf } from "@/lib/wallet";
 import { Card, Pill } from "@/components/ui";
 import { LoadingState, NotReady, OwnerField, Skeleton, shortKey, useOwnerInput } from "../shared";
+import { V7_UI } from "@/lib/v7";
+import { FX_OWNER } from "@/lib/v7fixtures";
+import { AllowanceSection } from "./AllowanceSection";
 
 type L<T> = { kind: "idle" } | { kind: "busy" } | { kind: "nr"; http: number } | { kind: "err"; msg: string } | { kind: "ok"; v: T };
 type Rpc = { kind: "busy" } | { kind: "ok"; raw: string } | { kind: "fail" };
@@ -22,6 +25,8 @@ export function Funds() {
   const zh = locale === "zh";
   const sp = useSearchParams();
   const { owner, setOwner, connected, valid } = useOwnerInput();
+  /** v7 本地预览（?v7fixture=1，只在 NEXT_PUBLIC_V7_UI=1 时生效） */
+  const v7Fixture = V7_UI && sp.get("v7fixture") === "1";
   const [assets, setAssets] = useState<AssetEntry[]>([]);
   const [pf, setPf] = useState<L<PortfolioView>>({ kind: "idle" });
   const [rpc, setRpc] = useState<Record<string, Rpc>>({});
@@ -135,6 +140,7 @@ export function Funds() {
           </div>
         )}
       </Card>
+      {V7_UI && <AllowanceSection owner={v7Fixture ? FX_OWNER : valid ? owner.toLowerCase() : ""} assets={assets} fixture={v7Fixture} />}
       <div className="ag-grid-2">
         <Card title={zh ? "资金组" : "Budget group"}>
           <div className="ag-form"><label className="ag-span">{zh ? "资金组 id" : "Budget group id"}<input className="field mono" value={groupId} onChange={(e) => setGroupId(e.target.value)} placeholder="bg_…" /></label></div>

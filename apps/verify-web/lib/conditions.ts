@@ -22,6 +22,11 @@ const REF: Record<string, { en: string; zh: string }> = {
   official_close: { en: "the official close", zh: "正式收盘价" },
   close_last_tick: { en: "the last-tick close", zh: "最后成交收盘价" },
 };
+const CROSS: Record<string, { en: string; zh: string }> = {
+  relief: { en: "relief", zh: "缓和" },
+  transmission: { en: "transmission", zh: "传导" },
+  divergence: { en: "divergence", zh: "背离" },
+};
 const list = (xs: string[], m: Record<string, { en: string; zh: string }>, l: Locale) => xs.map((x) => m[x]?.[l] ?? x).join(l === "zh" ? "、" : ", ");
 
 export function conditionText(c: Condition, locale: Locale): string {
@@ -50,7 +55,7 @@ export function conditionText(c: Condition, locale: Locale): string {
     case "max_steps_per_trading_day":
       return zh ? `每个交易日最多 ${c.value} 步（按${c.scope === "task" ? "本任务" : "资金组"}计）` : `At most ${c.value} step(s) per trading day (per ${c.scope === "task" ? "task" : "budget group"})`;
     case "require_cross_asset_confirmation":
-      return zh ? `要求跨资产确认（${c.acceptStates.join("/")}）` : `Require cross-asset confirmation (${c.acceptStates.join("/")})`;
+      return zh ? `要求跨资产确认（${list(c.acceptStates, CROSS, locale)}）` : `Require cross-asset confirmation (${list(c.acceptStates, CROSS, locale)})`;
     case "target_price_gte":
       return zh ? `实时股价不低于 $${c.underlyingPriceUsd}` : `Live price at or above $${c.underlyingPriceUsd}`;
     case "target_price_lte":
@@ -62,6 +67,51 @@ export function conditionText(c: Condition, locale: Locale): string {
     case "thesis_holds":
       return zh ? "理由卡的前提仍成立" : "The thesis premises still hold";
     default:
-      return JSON.stringify(c);
+      // 新的条件类型：不露 JSON / SNAKE_CASE，给一句通用话；原始结构只在开发者视图
+      return zh ? "另有一条自定义条件" : "One more custom condition";
   }
+}
+
+/**
+ * 服务端影响清单里的规则标签（`avoid_event_window(MACRO_TIER1|FED_SPEECH,30,20)`、`earnings_window(2,1)`）→ 条件对象。
+ * 标签里没有的字段按「不确定」取保守值（不含估计日期、不整日等待），只用于翻成人话；认不出返回 null。
+ */
+export function parseRuleLabel(label: string): Condition | null {
+  const m = /^\s*([a-z_]+)\s*\(([^)]*)\)\s*$/.exec(label);
+  if (!m) return null;
+  const args = m[2]!.split(",").map((s) => s.trim());
+  const num = (s: string | undefined) => (s !== undefined && /^\d+$/.test(s) ? Number(s) : null);
+  if (m[1] === "avoid_event_window" && args.length === 3) {
+    const kinds = args[0]!.split("|").filter(Boolean);
+    const before = num(args[1]);
+    const after = num(args[2]);
+    if (!kinds.length || before === null || after === null) return null;
+    return { type: "avoid_event_window", kinds: kinds as Extract<Condition, { type: "avoid_event_window" }>["kinds"], beforeMin: before, afterMin: after, includeEstimated: false, wholeDayIfDayPrecision: false };
+  }
+  if (m[1] === "earnings_window" && args.length === 2) {
+    const before = num(args[0]);
+    const after = num(args[1]);
+    if (before === null || after === null) return null;
+    return { type: "earnings_window", beforeTradingDays: before, afterSessions: after, requireRegularSessionAfter: false, requireLiveReferenceAfter: false };
+  }
+  return null;
+}
+
+/** 规则标签 → 人话；认不出时也不露原串 */
+export function ruleLabelText(label: string, locale: Locale): string {
+  const c = parseRuleLabel(label);
+  if (!c) return locale === "zh" ? "一条与事件相关的规则" : "A rule tied to this event";
+  if (c.type === "avoid_event_window") {
+    return locale === "zh"
+      ? `${list(c.kinds, KIND, locale)}前 ${c.beforeMin} 分钟到后 ${c.afterMin} 分钟暂停`
+      : `Pause from ${c.beforeMin} min before to ${c.afterMin} min after ${list(c.kinds, KIND, locale)}`;
+  }
+  return conditionText(c, locale);
+}
+
+/** 条件串或条件对象，统一翻成人话（事件台等只拿到字符串的地方用） */
+export function conditionLike(v: unknown, locale: Locale): string {
+  if (typeof v === "string") return ruleLabelText(v, locale);
+  if (v && typeof v === "object" && "type" in v) return conditionText(v as Condition, locale);
+  return locale === "zh" ? "一条条件" : "A condition";
 }

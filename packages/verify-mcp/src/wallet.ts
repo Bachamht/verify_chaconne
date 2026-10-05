@@ -4,10 +4,11 @@
  * 启用后：x402 自动付款（累计额度硬上限）、可代签 TradeMandate、可发送 executeStep 交易（仅允许的链）。
  * 本模块从不打印私钥；错误信息里只出现地址。
  */
-import { createPublicClient, createWalletClient, decodeEventLog, encodeFunctionData, erc20Abi, http, type Hex } from "viem";
+import { createPublicClient, createWalletClient, decodeEventLog, erc20Abi, http, type Hex } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { createX402Payer, type X402Challenge, type X402Payer } from "@chaconne/verify-sdk";
-import { PLAN_GUARD_ABI, toCertArg, toMandateArg, toStepArg } from "./planGuardAbi";
+import { assertTxAllowed, buildApproveTx, buildExecuteStepTx, ExecTxError } from "@chaconne/verify-exec";
+import { PLAN_GUARD_ABI } from "./planGuardAbi";
 
 export interface AgentWalletConfig {
   privateKey: Hex;
@@ -159,6 +160,17 @@ export function defaultChainReader(rpcUrl: string): ChainReader {
   };
 }
 
+/** v7 X5：用户侧 agent-wallet 的交易白名单（executeStep + approve(PlanGuard, …)，value 0），与 verify-exec 同一实现 */
+function agentWalletTx<T extends { to: Hex; data: Hex; value: bigint }>(tx: T, planGuard: Hex): T {
+  try {
+    assertTxAllowed(tx, { profile: "agent_wallet", planGuard });
+  } catch (e) {
+    if (e instanceof ExecTxError) throw new AgentWalletError(e.code, e.message);
+    throw e;
+  }
+  return tx;
+}
+
 /**
  * 默认发送器（I2 执行者规则）：
  *  1. 输入代币授权：合约从 m.owner 拉款 → 若 agent 钱包 = owner，先精确 approve(PlanGuard, amountIn)（已相等则跳过）；
@@ -176,13 +188,14 @@ export const defaultSendStepTx: SendStepTx = async (a, w) => {
   if (owner === w.address.toLowerCase()) {
     // 正常情况下 ensureAllowance 已在 prepare-step 之前授权到位；这里只兜底补足（避免在证书窗口内多发一笔）
     if (current < amountIn) {
-      approveTxHash = await wc.sendTransaction({ to: inputToken, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [a.planGuard, amountIn] }), value: 0n });
+      const approveTx = agentWalletTx(buildApproveTx({ token: inputToken, spender: a.planGuard, amount: amountIn }), a.planGuard);
+      approveTxHash = await wc.sendTransaction(approveTx);
       await pub.waitForTransactionReceipt({ hash: approveTxHash, timeout: 120_000 });
     }
   } else if (current < amountIn) {
     throw new AgentWalletError("owner_allowance_insufficient", `mandate owner ${owner} has approved ${current} < amountIn ${amountIn} to PlanGuard; a third-party executor cannot approve on the owner's behalf`);
   }
-  const data = encodeFunctionData({ abi: PLAN_GUARD_ABI, functionName: "executeStep", args: [toMandateArg(a.mandate), a.mandateSignature, a.outputSet, toStepArg(a.step), toCertArg(a.certificate), a.certificateSignature, a.routerCalldata] });
+  const { data } = agentWalletTx(buildExecuteStepTx({ planGuard: a.planGuard, mandate: a.mandate, mandateSignature: a.mandateSignature, outputSet: a.outputSet, step: a.step, certificate: a.certificate, certificateSignature: a.certificateSignature, routerCalldata: a.routerCalldata }), a.planGuard);
   let gas: bigint;
   try {
     gas = ((await pub.estimateGas({ account: w.account, to: a.planGuard, data, value: 0n })) * 13n) / 10n;
@@ -213,7 +226,7 @@ export const defaultSendStepTx: SendStepTx = async (a, w) => {
 /** 默认预授权发送器：真实链上 approve(spender, amount) 并等回执 */
 export const defaultSendApproveTx: SendApproveTx = async (a, w) => {
   const { pub, wc } = w.clients(a.chainId);
-  const hash = await wc.sendTransaction({ to: a.token, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [a.spender, a.amount] }), value: 0n });
+  const hash = await wc.sendTransaction(agentWalletTx(buildApproveTx({ token: a.token, spender: a.spender, amount: a.amount }), a.spender));
   await pub.waitForTransactionReceipt({ hash, timeout: 120_000 });
   return hash;
 };

@@ -1,6 +1,6 @@
-import { TaskDetail } from "@/components/agent/tasks/TaskDetail";
+import { TaskPage } from "@/components/routes/TaskPage";
 
 export default async function AgentTaskPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <TaskDetail id={id} />;
+  return <TaskPage id={id} />;
 }

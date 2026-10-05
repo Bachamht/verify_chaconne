@@ -36,8 +36,8 @@ export interface CrowsnestDeps {
   now?: () => Date;
 }
 
-/** 事件修订接收方（Lane D 的 EventRevisionPropagator.onChange 同形）：只收 revised / released */
-export type EventChangeSink = (r: { event: MarketEvent; change: "revised" | "released"; changedFields: string[]; previous: MarketEvent | null }) => Promise<unknown>;
+/** 事件修订接收方（Lane D 的 EventRevisionPropagator.onChange 同形）：只收 revised / released / data_arrived（v7：实际值首次入库） */
+export type EventChangeSink = (r: { event: MarketEvent; change: "revised" | "released" | "data_arrived"; changedFields: string[]; previous: MarketEvent | null }) => Promise<unknown>;
 
 export type IngestOutcome =
   | { ok: true; snapshotId: string; contextHash: string; provenance: "live" | "backfill" | "sample"; fieldStatus: Record<string, string>; events: { inserted: string[]; revised: string[]; unchanged: string[] }; evidence: EvidenceRecord }
@@ -121,7 +121,8 @@ export class CrowsnestAdapter {
       error: null,
       createdAt: receivedDate,
     });
-    const upserted = await this.d.events.upsert(ctx.events, receivedDate);
+    // v7：非 live（backfill / sample）快照不触发实际值回调（回填数据不开轮次）
+    const upserted = await this.d.events.upsert(ctx.events, receivedDate, { emitHooks: provenance === "live" });
     const events = { inserted: upserted.inserted, revised: upserted.revised, unchanged: upserted.unchanged };
     log.info("上下文快照已摄入", { id, publicKeyId: ctx.publicKeyId, packagedAt: ctx.packagedAt, provenance, stale: Object.entries(fieldStatus).filter(([, s]) => s !== "ok").length, events });
     // 宏观事件的改期 / 发布同样要传播到受影响任务并发 event.* 通知（此前只有 Lane D 自己摄入的财报会传播——2026-09-23 线上翻动期间 0 条通知的原因之一）

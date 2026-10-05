@@ -14,6 +14,7 @@ import { FinnhubEarningsClient, type EarningsCalendarSource } from "./finnhubEar
 import { EarningsIngestor } from "./ingest";
 import { EventRevisionPropagator } from "./propagate";
 import { DrizzleEventStore, DrizzleEvidenceSink, MemoryEventStore, MemoryEvidenceSink, type EventStore, type EvidenceSink } from "./store";
+import { OutcomeHookRegistry } from "../outcomes";
 
 export interface LaneDHandles {
   store: EventStore;
@@ -24,6 +25,8 @@ export interface LaneDHandles {
   actions: ImpactActions;
   notifier: Notifier;
   storeKind: "db" | "memory";
+  /** v7：财报实际值回调（Lane A：`laneD.outcomeHooks.set({ onDataArrived })`；只在 cfg.v7.outcomes 开时会触发） */
+  outcomeHooks: OutcomeHookRegistry;
   /** 周期摄入；无 Finnhub key 时为空函数 */
   start(): () => void;
 }
@@ -40,7 +43,9 @@ export interface LaneDOverrides {
 export function createLaneD(cfg: VerifyConfig, db: Db | null, registry: AssetRegistry, o: LaneDOverrides = {}): LaneDHandles | null {
   if (cfg.AGENT_C6_ENABLED !== "true") return null;
   const useDb = cfg.AGENT_C6_STORE === "db" && db !== null;
-  const store: EventStore = useDb ? new DrizzleEventStore(db!) : new MemoryEventStore();
+  const storeOpts = { outcomes: cfg.v7.outcomes, ...(o.clock ? { now: o.clock } : {}) };
+  const store: EventStore = useDb ? new DrizzleEventStore(db!, storeOpts) : new MemoryEventStore(storeOpts);
+  const outcomeHooks = new OutcomeHookRegistry();
   const evidence: EvidenceSink = useDb ? new DrizzleEvidenceSink(db!) : new MemoryEvidenceSink();
   const holdings = o.holdings ?? notReadyHoldings;
   const tasks = o.tasks ?? notReadyTasks;
@@ -50,7 +55,7 @@ export function createLaneD(cfg: VerifyConfig, db: Db | null, registry: AssetReg
   const propagator = new EventRevisionPropagator({ tasks, commands, notify: notifier, clock, publicBaseUrl: cfg.PUBLIC_BASE_URL });
   const source = o.source === undefined ? (cfg.FINNHUB_API_KEY ? new FinnhubEarningsClient(cfg.FINNHUB_API_KEY, fetch, "https://finnhub.io/api/v1", clock) : null) : o.source;
   const ingestor = source
-    ? new EarningsIngestor({ source, registry, store, evidence, clock, spacingMs: cfg.EARNINGS_REQUEST_SPACING_MS, horizonDays: cfg.EARNINGS_HORIZON_DAYS, onChange: (r) => propagator.onChange(r).then(() => undefined) })
+    ? new EarningsIngestor({ source, registry, store, evidence, clock, spacingMs: cfg.EARNINGS_REQUEST_SPACING_MS, horizonDays: cfg.EARNINGS_HORIZON_DAYS, onChange: (r) => propagator.onChange(r).then(() => undefined), outcomeHooks })
     : null;
   const impacts = new ImpactsService({ store, registry, holdings, tasks, clock });
   const actions = new ImpactActions({ store, evidence, tasks, commands, registry, clock });
@@ -63,6 +68,7 @@ export function createLaneD(cfg: VerifyConfig, db: Db | null, registry: AssetReg
     actions,
     notifier,
     storeKind: useDb ? "db" : "memory",
+    outcomeHooks,
     start() {
       if (!ingestor) {
         log.warn("C6 财报摄入未启动：无 FINNHUB_API_KEY（事件台显示覆盖未知）");

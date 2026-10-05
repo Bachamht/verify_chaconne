@@ -45,7 +45,7 @@ async function connect(apiKey: string) {
 const sc = (r: Awaited<ReturnType<Client["callTool"]>>) => r.structuredContent as Record<string, unknown>;
 
 describe("免 key 模式", () => {
-  it("无 VERIFY_API_KEY：服务器照常启动、51 个工具全部可见；免费工具正常调用且不带 x-api-key", async () => {
+  it("无 VERIFY_API_KEY：服务器照常启动、56 个工具全部可见；免费工具正常调用且不带 x-api-key", async () => {
     const { client, b, close } = await connect("");
     const names = (await client.listTools()).tools.map((t) => t.name);
     expect(names.sort()).toEqual([...TOOL_NAMES].sort());

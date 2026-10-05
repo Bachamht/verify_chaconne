@@ -227,7 +227,7 @@ export class ClubService {
           // 公开页的「核验结果」：只放公开行情事实（参考价、偏差、冲击、时段、核验时间），金额仍按隐私设置
           check: { executionEligible: r.executionEligible, marketSession: r.marketSession, comparisonStatus: r.comparisonStatus, evaluatedAt: r.evaluatedAt, policyId: j.policyId, reference: r.reference ? { kind: r.reference.kind, priceUsd: r.reference.priceUsd, deviationBps: r.reference.deviationBps, sourcePublishedAt: r.reference.sourcePublishedAt, tradingDate: r.reference.tradingDate } : null, executableUsdPerShare: r.normalizedQuote?.executableUsdPerShare ?? null, adverseImpactBps: r.normalizedQuote?.adverseImpactBps ?? null, quoteReceivedAt: r.normalizedQuote?.receivedAt ?? null } } : null,
         // publicBundleUrl：无需 key 的证据包（V-39）；bundleUrl 仍是 owner 用 key 读的路径
-        verifier: { bundleUrl: `/v1/jobs/${share.refId}/bundle`, publicBundleUrl: `/pub/reports/${shareId}/bundle`, contractAddress: this.d.cfg.GUARD_ADDRESS || null },
+        verifier: { bundleUrl: `/v1/jobs/${share.refId}/bundle`, publicBundleUrl: `/pub/reports/${shareId}/bundle`, contractAddress: null },
       };
     }
     if (share.kind === "mandate") {

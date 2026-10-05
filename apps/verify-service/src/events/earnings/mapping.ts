@@ -5,9 +5,12 @@
  *  - hour bmo/amc → datePrecision `exact`，scheduledAtUtc 锚定该交易日常规时段边界（开盘 09:30 / 收盘 16:00，半日市 13:00）；
  *    这是**时段锚点**而非新闻稿精确时刻（源不给）；dmh / 空 → `day`，scheduledAtUtc=null
  *  - 源无确认字段 → status `estimated`；epsActual 出现 → `released`
+ *  - v7（D-06）：epsActual 出现时附 `outcome`——只写源里真有的字段：EPS 实际值（必有）、营收实际值（有才写）；
+ *    预估值（epsEstimate / revenueEstimate）有才写成 `expectation`（kind survey = 分析师一致预期），没有就不写，绝不补。
+ *    源不给发布时刻 → `publishedAt` 取首次观测到实际值的抓取时刻（上界，不冒充源时间；不参与 outcome 哈希）。
  */
 import { NYSE_CALENDAR, nyPartsOf, type MarketCalendar } from "@chaconne/core";
-import type { EventDatePrecision, EventSessionHint, EventStatus, IsoUtc, MarketEvent } from "@chaconne/core/verify";
+import { DECIMAL_STRING_RE, type EventDatePrecision, type EventOutcome, type EventOutcomeMetric, type EventSessionHint, type EventStatus, type IsoUtc, type MarketEvent } from "@chaconne/core/verify";
 import type { FinnhubEarningsRow } from "./finnhubEarnings";
 
 export const EARNINGS_SOURCE = "finnhub";
@@ -61,6 +64,44 @@ export interface EarningsEventDraft {
   fields: Omit<MarketEvent, "id" | "revision" | "firstKnownAt" | "revisedFrom">;
   /** 源里有 actual → 已发布 */
   released: boolean;
+  /** v7：源里有 epsActual 才有；只含源里真有的字段 */
+  outcome?: EventOutcome;
+}
+
+/**
+ * Finnhub 的 JSON number → 十进制字符串（canon-1 不收浮点）。转不出纯十进制（如 ≥1e21）→ null，该字段不写。
+ */
+export function decimalFromNumber(n: number | null): string | null {
+  if (n === null || !Number.isFinite(n)) return null;
+  const s = String(n);
+  if (DECIMAL_STRING_RE.test(s)) return s;
+  if (Math.abs(n) < 1) {
+    const f = n.toFixed(20).replace(/\.?0+$/, "");
+    return DECIMAL_STRING_RE.test(f) ? f : null;
+  }
+  return null;
+}
+
+export const EARNINGS_OUTCOME_SOURCE = "finnhub:calendar/earnings";
+
+/** 财报行 → outcome（epsActual 为空 → undefined）。只搬运源字段，不推算、不补预期。 */
+export function buildEarningsOutcome(row: FinnhubEarningsRow, fetchedAt: IsoUtc): EventOutcome | undefined {
+  const epsActual = decimalFromNumber(row.epsActual);
+  if (epsActual === null) return undefined;
+  const period = row.year !== null && row.quarter !== null ? `FY${row.year}Q${row.quarter}` : row.date;
+  const expectation = (n: number | null, field: string): EventOutcomeMetric["expectation"] | undefined => {
+    const v = decimalFromNumber(n);
+    return v === null ? undefined : { value: v, kind: "survey", source: `finnhub:${field}`, at: fetchedAt };
+  };
+  const metrics: EventOutcomeMetric[] = [];
+  const epsExp = expectation(row.epsEstimate, "epsEstimate");
+  metrics.push({ key: "eps", label: "EPS", actual: epsActual, unit: "usd_per_share", period, ...(epsExp ? { expectation: epsExp } : {}) });
+  const revenueActual = decimalFromNumber(row.revenueActual);
+  if (revenueActual !== null) {
+    const revExp = expectation(row.revenueEstimate, "revenueEstimate");
+    metrics.push({ key: "revenue", label: "Revenue", actual: revenueActual, unit: "usd", period, ...(revExp ? { expectation: revExp } : {}) });
+  }
+  return { metrics, source: EARNINGS_OUTCOME_SOURCE, publishedAt: fetchedAt, fetchedAt, provider: "finnhub" };
 }
 
 export function buildEarningsDraft(row: FinnhubEarningsRow, underlyingId: string, fetchedAt: IsoUtc, cal: MarketCalendar = NYSE_CALENDAR): EarningsEventDraft {
@@ -74,11 +115,13 @@ export function buildEarningsDraft(row: FinnhubEarningsRow, underlyingId: string
     scheduledAtUtc = hint === "bmo" ? b.open : b.close;
   }
   const released = row.epsActual !== null;
+  const outcome = buildEarningsOutcome(row, fetchedAt);
   const status: EventStatus = released ? "released" : "estimated";
   const period = row.year !== null && row.quarter !== null ? ` FY${row.year} Q${row.quarter}` : "";
   return {
     matchKey: earningsMatchKey(symbol, row),
     released,
+    ...(outcome ? { outcome } : {}),
     fields: {
       kind: "EARNINGS",
       name: `${symbol} earnings${period}`,

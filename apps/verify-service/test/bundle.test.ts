@@ -31,18 +31,13 @@ describe("GET /v1/jobs/:id/bundle（W3）", () => {
     env = await createTestEnv();
     const owner = privateKeyToAccount(TEST_OWNER_KEY);
     const jobId = (await api(env, "POST", "/v1/jobs", jobBody({ ownerAddress: owner.address.toLowerCase() as `0x${string}`, recipientAddress: owner.address.toLowerCase() as `0x${string}` }))).json["jobId"] as string;
-    const prep = await api(env, "POST", `/v1/jobs/${jobId}/prepare-execution`, { refreshKey: "b1" });
-    const exec = prep.json["execution"] as { typedData: { domain: Record<string, unknown>; types: Record<string, Array<{ name: string; type: string }>>; message: Record<string, string> }; intentDigest: string };
-    const intentSignature = await owner.signTypedData({ domain: exec.typedData.domain, types: exec.typedData.types, primaryType: "TradeIntent", message: normalize(exec.typedData.message) } as never);
-    const sub = await api(env, "POST", `/v1/jobs/${jobId}/submissions`, { attemptId: prep.json["attemptId"], txHash: "0x" + "ab".repeat(32), intentSignature });
-    expect(sub.status).toBe(202);
     const r = await api(env, "GET", `/v1/jobs/${jobId}/bundle`);
     expect(r.status).toBe(200);
     const bundle = r.json as unknown as EvidenceBundle;
     expect(bundle.kind).toBe("job");
-    expect(bundle.reports.length).toBe(2);
-    expect(bundle.certificates.length).toBe(1);
-    expect(bundle.intents!.length).toBe(1);
+    // 单笔 Guard 执行 10/5 起删除：核验单的证据包只有报告与证据（历史单的证书 / 意图仍由离线验证器检查）
+    expect(bundle.reports.length).toBe(1);
+    expect(bundle.certificates.length).toBe(0);
     expect(bundle.bundleSignature).toMatch(/^0x[0-9a-f]{130}$/);
     const checks = await verifyBundleOffline(bundle, { ...injected, expectedSigner: env.signer!.address });
     const failed = checks.filter((c) => !c.ok);

@@ -6,6 +6,8 @@ import { and, eq, gte, inArray, lt } from "drizzle-orm";
 import type { Db } from "@chaconne/db";
 import { verifyMandateEvaluations, verifyMandateSteps, verifyMandates } from "@chaconne/db";
 import type { MarketEvent, Task } from "@chaconne/core/verify";
+import { callerActsFor } from "../http/auth";
+import { buildAgentJournal, type AgentJournalDay } from "./agentJournal";
 
 export interface MandateBundle {
   row: typeof verifyMandates.$inferSelect;
@@ -22,12 +24,15 @@ export interface RecapSources {
   eventsBetween?: (fromUtc: Date, toUtc: Date) => Promise<MarketEvent[] | null>;
   /** 证据模式（LIVE / FIXTURE） */
   evidenceMode: () => "LIVE" | "FIXTURE";
+  /** v7 R4：Agent 段（dbRecapSources 内置；未接上 = 不出该段） */
+  agentJournal?: (callerId: string, owner: string, date: string, dayStartUtc: Date, dayEndUtc: Date) => Promise<AgentJournalDay | null>;
 }
 
 export function dbRecapSources(db: Db, evidenceMode: () => "LIVE" | "FIXTURE", hooks: Pick<RecapSources, "tasksForOwner" | "eventsBetween"> = {}): RecapSources {
   return {
     evidenceMode,
     ...hooks,
+    agentJournal: (callerId, owner, date, dayStartUtc, dayEndUtc) => buildAgentJournal(db, owner, date, dayStartUtc, dayEndUtc, callerActsFor(callerId, owner) ? null : callerId),
     async mandatesForOwner(callerId, owner, dayStartUtc, dayEndUtc) {
       const rows = await db.select().from(verifyMandates).where(and(eq(verifyMandates.callerId, callerId), eq(verifyMandates.ownerAddress, owner.toLowerCase())));
       // 只取与本交易日有关的授权：当日仍有效（deadline ≥ 日起）且在日终前已创建

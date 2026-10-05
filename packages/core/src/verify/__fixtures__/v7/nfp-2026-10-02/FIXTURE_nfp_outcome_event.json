@@ -1,0 +1,78 @@
+{
+  "$comment": "FIXTURE — synthetic numbers for unit tests. NOT BLS data, NOT a forecast, NOT consensus. Shape only (BLS Employment Situation). See README.md in this directory. Three snapshots of one event: scheduled (no outcome), data arrived (revision+1, outcome attached), producer correction (revision+1, outcome changed).",
+  "mode": "FIXTURE",
+  "scheduled": {
+    "id": "fixture.crowsnest:MACRO_TIER1:2026-10-02:nfp",
+    "kind": "MACRO_TIER1",
+    "name": "Employment Situation (FIXTURE)",
+    "underlyingIds": [],
+    "scheduledAtUtc": "2026-10-02T12:30:00.000Z",
+    "dateLocal": "2026-10-02",
+    "datePrecision": "exact",
+    "sessionHint": null,
+    "status": "confirmed",
+    "revision": 3,
+    "source": "fixture.crowsnest",
+    "sourceFetchedAt": "2026-10-02T12:00:00.000Z",
+    "firstKnownAt": "2026-09-01T00:00:00.000Z",
+    "tz": "America/New_York"
+  },
+  "arrived": {
+    "id": "fixture.crowsnest:MACRO_TIER1:2026-10-02:nfp",
+    "kind": "MACRO_TIER1",
+    "name": "Employment Situation (FIXTURE)",
+    "underlyingIds": [],
+    "scheduledAtUtc": "2026-10-02T12:30:00.000Z",
+    "dateLocal": "2026-10-02",
+    "datePrecision": "exact",
+    "sessionHint": null,
+    "status": "released",
+    "revision": 4,
+    "source": "fixture.crowsnest",
+    "sourceFetchedAt": "2026-10-02T12:30:40.000Z",
+    "firstKnownAt": "2026-09-01T00:00:00.000Z",
+    "releasedAt": "2026-10-02T12:30:00.000Z",
+    "tz": "America/New_York",
+    "outcome": {
+      "metrics": [
+        { "key": "payrolls_change", "label": "Nonfarm payrolls change (FIXTURE)", "actual": "111", "unit": "thousands", "period": "2026-09", "previous": "22", "revisedPrevious": "33" },
+        { "key": "unemployment_rate", "label": "Unemployment rate (FIXTURE)", "actual": "4.4", "unit": "percent", "period": "2026-09", "previous": "4.5" },
+        { "key": "ahe_mom", "label": "Average hourly earnings m/m (FIXTURE)", "actual": "0.1", "unit": "percent_mom", "period": "2026-09", "previous": "0.2" }
+      ],
+      "source": "fixture.bls.employment-situation",
+      "sourceUrl": "https://example.invalid/fixture/empsit",
+      "publishedAt": "2026-10-02T12:30:00.000Z",
+      "fetchedAt": "2026-10-02T12:30:40.000Z",
+      "provider": "crowsnest"
+    }
+  },
+  "corrected": {
+    "id": "fixture.crowsnest:MACRO_TIER1:2026-10-02:nfp",
+    "kind": "MACRO_TIER1",
+    "name": "Employment Situation (FIXTURE)",
+    "underlyingIds": [],
+    "scheduledAtUtc": "2026-10-02T12:30:00.000Z",
+    "dateLocal": "2026-10-02",
+    "datePrecision": "exact",
+    "sessionHint": null,
+    "status": "released",
+    "revision": 5,
+    "source": "fixture.crowsnest",
+    "sourceFetchedAt": "2026-10-02T12:45:00.000Z",
+    "firstKnownAt": "2026-09-01T00:00:00.000Z",
+    "releasedAt": "2026-10-02T12:30:00.000Z",
+    "tz": "America/New_York",
+    "outcome": {
+      "metrics": [
+        { "key": "payrolls_change", "label": "Nonfarm payrolls change (FIXTURE)", "actual": "112", "unit": "thousands", "period": "2026-09", "previous": "22", "revisedPrevious": "33" },
+        { "key": "unemployment_rate", "label": "Unemployment rate (FIXTURE)", "actual": "4.4", "unit": "percent", "period": "2026-09", "previous": "4.5" },
+        { "key": "ahe_mom", "label": "Average hourly earnings m/m (FIXTURE)", "actual": "0.1", "unit": "percent_mom", "period": "2026-09", "previous": "0.2" }
+      ],
+      "source": "fixture.bls.employment-situation",
+      "sourceUrl": "https://example.invalid/fixture/empsit",
+      "publishedAt": "2026-10-02T12:30:00.000Z",
+      "fetchedAt": "2026-10-02T12:45:00.000Z",
+      "provider": "crowsnest"
+    }
+  }
+}

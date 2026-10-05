@@ -20,7 +20,8 @@
     "tsx": "^4.22.5",
     "viem": "^2.54.1",
     "zod": "^4.4.3",
-    "@chaconne/verify-sdk": "workspace:*"
+    "@chaconne/verify-sdk": "workspace:*",
+    "@chaconne/verify-exec": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

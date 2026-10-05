@@ -45,6 +45,7 @@ import { A2MCP_AGENT_TASKS_PATH, createA2mcpAgentTasksHandler, type AgentTasksDe
 import { buildAgentCard, buildLlmsTxt, buildOpenApi, DISCOVERY_PATHS, type DiscoveryDeps } from "./discovery";
 import { listRecords } from "../records/service";
 import { assertOwner } from "../portfolio/ownerAuth";
+import { registerV7Early, registerV7Routes, type V7Handles } from "./routes";
 
 export interface AppDeps {
   cfg: VerifyConfig;
@@ -80,13 +81,21 @@ export interface AppDeps {
   recaps?: RecapsService | null;
   agentHooks?: Pick<AgentTasksDeps, "impacts" | "events">;
   now?: () => Date;
+  /* v7（interfaces §12）：各 lane 的服务句柄；缺省全空 = v7 路由不挂载 */
+  v7?: V7Handles;
 }
 
 export function createApp(d: AppDeps) {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", true);
+  // 托管 Agent 的 checkpoint / complete 带整段对话（模型消息 + 工具返回的上下文 / 报价），常超过 64kb；
+  // 10/3 线上 15 轮里 8 轮的 complete 被 413 拒、轮次永远停在 RUNNING。只给这组路由放宽（需要轮次令牌，见 routeGuard），
+  // 先挂，后面全局 64kb 的 parser 看到已解析就跳过
+  app.use("/v1/agent/runs", express.json({ limit: "2mb" }));
   app.use(express.json({ limit: "64kb" }));
+  /* v7：服务 key 默认拒绝与轮次令牌（Lane A）必须先于所有旧路由 */
+  registerV7Early(app, d);
 
   const now = d.now ?? (() => new Date());
   const validKeys = new Set(d.cfg.apiKeys.map((e) => e.key));
@@ -279,28 +288,6 @@ export function createApp(d: AppDeps) {
       const order = await d.service.requireOrder(jobId);
       const version = req.query["version"] ? Number(req.query["version"]) : undefined;
       await d.paywall.handleReport(req, res, order, () => d.service.deliverReport(jobId, version));
-    }),
-  );
-
-  app.post(
-    "/v1/jobs/:id/prepare-execution",
-    auth,
-    wrap(async (req, res) => {
-      const refreshKey = typeof req.body?.refreshKey === "string" ? req.body.refreshKey : "";
-      const r = await d.service.prepareExecution(callerOf(res), String(req.params["id"]), refreshKey);
-      res.status(r.status).json({ ...r.body, replay: r.replay });
-    }),
-  );
-
-  app.post(
-    "/v1/jobs/:id/submissions",
-    auth,
-    wrap(async (req, res) => {
-      const attemptId = typeof req.body?.attemptId === "string" ? req.body.attemptId : "";
-      const txHash = typeof req.body?.txHash === "string" ? req.body.txHash : "";
-      const intentSignature = typeof req.body?.intentSignature === "string" ? req.body.intentSignature : undefined;
-      const body = await d.service.recordSubmission(callerOf(res), String(req.params["id"]), attemptId, txHash, intentSignature);
-      res.status(202).json(body);
     }),
   );
 
@@ -568,7 +555,7 @@ export function createApp(d: AppDeps) {
               res.status(200).json({ ...(await context.view({ tier })), meta: undefined, error: "task_filter_requires_api_key" });
               return;
             }
-            const row = await d.tasks.requireTask(callerId, taskId);
+            const row = await d.tasks.requireTask(callerId, taskId, "read");
             const set = row.conditionsJson as ConditionSet;
             conditions = set.items;
             const goal = row.goalJson as { legs: Array<{ outputAssetKey: string }>; budget: { inputAssetKeys: string[] }; side: string };
@@ -777,7 +764,7 @@ export function createApp(d: AppDeps) {
         "/v1/theses/:id",
         auth,
         wrap(async (req, res) => {
-          res.json(await theses.view(await theses.require(callerOf(res), String(req.params["id"]))));
+          res.json(await theses.view(await theses.require(callerOf(res), String(req.params["id"]), "read")));
         }),
       );
       app.post(
@@ -1011,6 +998,9 @@ export function createApp(d: AppDeps) {
     res.setHeader("Allow", "GET, POST, OPTIONS");
     res.status(204).end();
   });
+
+  /* ---------- v7 新路由（各 lane 模块，见 routes/index.ts）；必须在 405 / 404 之前 ---------- */
+  registerV7Routes(app, d);
 
   /* ---------- V-28：已知路径上的错误方法 → 405 + Allow（此前落到 404 not_found，调用方以为资源不存在） ---------- */
   app.use((req, res, next) => {

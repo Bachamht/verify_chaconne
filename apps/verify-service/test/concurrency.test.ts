@@ -1,14 +1,13 @@
 /**
  * FIX-087（P-13）：同一订单并发付款——同凭证 10 并发 / 不同凭证 3 并发 → 只结算一次；交付前结算已落库。
- * FIX-088（G-13）：证书 validUntil 受报价/参考时效约束。
+ * FIX-088（G-13）：证书 validUntil 受报价/参考时效约束（纯函数；PlanGuard 步骤证书在用）。
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { verifyOrders, verifyPaymentAttempts } from "@chaconne/db";
 import { eq } from "drizzle-orm";
-import { T_REGULAR } from "@chaconne/core/verify/fixtures";
 import { api, buildPaymentHeader, createTestEnv, jobBody, type TestEnv } from "./helpers";
-import { certificateValidUntil } from "../src/jobs/service";
 import { POLICY_QUOTE_ONLY_V1, POLICY_STRICT_LIVE_V1 } from "@chaconne/core/verify";
+import { certificateValidUntil } from "../src/jobs/service";
 
 let env: TestEnv | null = null;
 afterEach(async () => {
@@ -72,24 +71,5 @@ describe("G-13 证书有效期受数据时效约束（FIX-088）", () => {
     expect(certificateValidUntil(issuedAt, POLICY_QUOTE_ONLY_V1, refOld)).toBe(issuedAt + 30);
     // 已过期数据：兜底 issuedAt+1
     expect(certificateValidUntil(issuedAt, POLICY_QUOTE_ONLY_V1, { normalizedQuote: { receivedAt: iso(issuedAt - 100) } as never, reference: null })).toBe(issuedAt + 1);
-  });
-
-  it("HTTP：报价 25 s 前收到 → 证书 validUntil = issuedAt + 5（而非 +60）", async () => {
-    env = await createTestEnv({
-      evidenceDecorator: (c, nowIso) => {
-        for (const e of c.evidence)
-          if (e.payload.kind === "okx_quote") {
-            e.time.receivedAt = new Date(Date.parse(nowIso) - 25_000).toISOString();
-            e.time.requestedAt = new Date(Date.parse(nowIso) - 25_200).toISOString();
-          }
-        return c;
-      },
-    });
-    const jobId = (await api(env, "POST", "/v1/jobs", jobBody())).json["jobId"] as string;
-    const prep = await api(env, "POST", `/v1/jobs/${jobId}/prepare-execution`, { refreshKey: "ttl" });
-    expect(prep.status).toBe(200);
-    const exec = prep.json["execution"] as { validUntil: string; certificate: { issuedAt: string; validUntil: string } };
-    expect(Number(exec.certificate.validUntil) - Number(exec.certificate.issuedAt)).toBe(5);
-    expect(Date.parse(exec.validUntil)).toBe(Date.parse(T_REGULAR) + 5000);
   });
 });

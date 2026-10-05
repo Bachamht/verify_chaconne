@@ -13,6 +13,7 @@ import { verifyExecutorHeartbeats, verifyMandates, verifyNotificationChannels, v
 import { isEvmAddress, type ExecutorPresence, type NotificationPayload, type NotificationType } from "@chaconne/core/verify";
 import { buildNotificationPayload, executorPresence, forbiddenKeysIn, HEARTBEAT_INTERVAL_S, type ExecutorPath } from "@chaconne/core/verify/budget/index";
 import { HttpError } from "../jobs/service";
+import { redactText } from "@chaconne/core/verify/agent/index";
 import { newId } from "../ids";
 import { log } from "../log";
 import { assertOwner } from "../portfolio/ownerAuth";
@@ -25,6 +26,13 @@ export const TIMESTAMP_HEADER = "x-chaconne-timestamp";
 export const MAX_CHANNEL_FAILURES = 3;
 const RETRY_BACKOFF_MS = [10_000, 60_000, 300_000];
 const LINK_CODE_TTL_MS = 10 * 60_000;
+/**
+ * v7（§2.13）：不推给 owner 渠道的通知类型——agent.run_completed 缺省只进夜班日志；ops.alert 只发运营者频道（operatorAlert）。
+ * 这两类即使被入队，派发时也只标 log_only，不投递到 owner 的 webhook / Telegram。
+ */
+export const OWNER_SILENT_TYPES: ReadonlySet<string> = new Set(["agent.run_completed", "ops.alert"]);
+/** 同一告警代码在这个窗口内只发一次 */
+const OPERATOR_ALERT_DEDUPE_MS = 60 * 60_000;
 
 /** 任务时间线：由任务层（Lane B）实现；渠道停用等事件写到任务 */
 export interface TimelineSink {
@@ -69,6 +77,11 @@ export class NotifyService {
   private readonly now: () => Date;
   private readonly fetchImpl: FetchLike;
   private timeline: TimelineSink;
+  /** v7：运营者频道（OPERATOR_TELEGRAM_CHAT_ID）；null = 只记日志 */
+  private operatorChatId: string | null = null;
+  private readonly operatorAlertSentAt = new Map<string, number>();
+  /** 最近的运营者告警（/v1/ops/status 与测试读取） */
+  readonly operatorAlerts: Array<{ at: string; code: string; text: string; delivered: boolean }> = [];
   constructor(private readonly d: NotifyDeps) {
     this.now = d.now ?? (() => new Date());
     this.fetchImpl = d.fetchImpl ?? ((url, init) => fetch(url, init).then((r) => ({ ok: r.ok, status: r.status })));
@@ -80,6 +93,28 @@ export class NotifyService {
   }
   get telegramConfigured(): boolean {
     return Boolean(this.d.telegram);
+  }
+
+  /* ---------- v7：运营者频道（ops.alert；只发运营者，不进 owner 渠道） ---------- */
+  setOperatorChannel(chatId: string | null | undefined): void {
+    this.operatorChatId = chatId && chatId.trim() ? chatId.trim() : null;
+  }
+  /**
+   * 运营者告警：模型不可用、成本上限、执行身份 gas 低、完整性告警等。文本先过密钥扫描；同一 code 一小时内只发一次。
+   * 没配 OPERATOR_TELEGRAM_CHAT_ID 或没配 Telegram bot → 只记日志（delivered=false）。
+   */
+  async operatorAlert(code: string, text: string): Promise<{ delivered: boolean; deduped: boolean }> {
+    const nowMs = this.now().getTime();
+    const last = this.operatorAlertSentAt.get(code);
+    if (last !== undefined && nowMs - last < OPERATOR_ALERT_DEDUPE_MS) return { delivered: false, deduped: true };
+    this.operatorAlertSentAt.set(code, nowMs);
+    const clean = redactText(`[chaconne ops] ${code}: ${text}`).slice(0, 1000);
+    log.warn("运营者告警", { code, text: clean });
+    let delivered = false;
+    if (this.operatorChatId && this.d.telegram) delivered = (await this.d.telegram.send(this.operatorChatId, clean)).ok;
+    this.operatorAlerts.push({ at: new Date(nowMs).toISOString(), code, text: clean, delivered });
+    if (this.operatorAlerts.length > 50) this.operatorAlerts.splice(0, this.operatorAlerts.length - 50);
+    return { delivered, deduped: false };
   }
 
   /* ---------- 入队（幂等） ---------- */
@@ -193,6 +228,10 @@ export class NotifyService {
     let failed = 0;
     const disabledChannels: string[] = [];
     for (const row of rows) {
+      if (OWNER_SILENT_TYPES.has(row.type)) {
+        await this.d.db.update(verifyNotificationOutbox).set({ state: "log_only", attempts: row.attempts + 1, nextAttemptAt: null, updatedAt: this.now() }).where(eq(verifyNotificationOutbox.id, row.id));
+        continue;
+      }
       const channels = (await this.channelsFor(row.ownerAddress)).filter((c) => c.state === "active");
       const prior = (row.deliveries as Array<{ channelId: string; ok: boolean }>) ?? [];
       const doneChannels = new Set(prior.filter((p) => p.ok).map((p) => p.channelId));

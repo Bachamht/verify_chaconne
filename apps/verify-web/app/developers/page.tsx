@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
 import { Card } from "@/components/ui";
+import { DevelopersPage as DevelopersV8 } from "@/components/features/developers/DevelopersPage";
 
 const SERVICE = process.env["NEXT_PUBLIC_PUBLIC_SERVICE_URL"] ?? "https://verify.chaconne.xyz";
 const EXPLORER = process.env["NEXT_PUBLIC_EXPLORER_URL"] ?? "https://www.okx.com/web3/explorer/xlayer";
@@ -66,6 +67,11 @@ const SECTIONS: Array<{ id: string; zh: string; en: string }> = [
 ];
 
 export default function DevelopersPage() {
+  if (process.env.NEXT_PUBLIC_V8_UI === "1") return <DevelopersV8 />;
+  return <LegacyDevelopersPage />;
+}
+
+function LegacyDevelopersPage() {
   const { t, locale } = useI18n();
   const zh = locale === "zh";
   const v1: Array<[string, string]> = [
@@ -75,8 +81,6 @@ export default function DevelopersPage() {
     ["POST /v1/jobs", zh ? "创建固定意图任务，立即算出报告 v1；幂等键 clientRequestId" : "Create a fixed-intent task; report v1 computed immediately; idempotent by clientRequestId"],
     ["GET /v1/jobs/:id", zh ? "任务状态：付款 / 报告版本 / 额度 / 执行与链上回执" : "Task state: payment / report versions / entitlement / executions with server-verified receipts"],
     ["GET /v1/jobs/:id/report", zh ? "报告 + 证据（收费时未付款 402）" : "Report + evidence (402 when paid and unpaid)"],
-    ["POST /v1/jobs/:id/prepare-execution", zh ? "再核验 → 新版本 + TradeIntent typed data + 证书签名 + Guard 调用参数（2 次 / 5 分钟）" : "Re-verify → new version + TradeIntent typed data + certificate + Guard call params (2 per 5 min)"],
-    ["POST /v1/jobs/:id/submissions", zh ? "记录 tx hash（可附 intentSignature）；成交由链上回执核实" : "Record the tx hash (optional intentSignature); fill confirmed from the on-chain receipt"],
     ["GET /v1/jobs/:id/bundle · /bill", zh ? "证据包（含 bundleHash 与证明签名）· 账单（服务费 / 本金 / gas 分列）" : "Evidence bundle (bundleHash + attestation signature) · bill (fees / principal / gas)"],
   ];
   const v2: Array<[string, string]> = [

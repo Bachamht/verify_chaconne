@@ -1,12 +1,13 @@
 "use client";
 /**
- * /verify-bundle：纯客户端验证器（V-06）。core 的 verifyBundleOffline 在浏览器运行，注入 viem 的 verifyTypedData / verifyMessage。
+ * /verify-bundle：纯客户端验证器（V-06）。core 的 verifyEvidenceBundle（= verifyBundleOffline + 任务附加复算 + 任务证据包 v3 检查，与 verify-bundle CLI 同一入口）
+ * 在浏览器运行，注入 viem 的 verifyTypedData / verifyMessage。
  * 不登录、不调 API 也能跑；只有点"从服务加载"才发请求。内嵌 JSON 编辑框：改任一字段立即重跑并高亮翻转的检查项（篡改实验）。
  */
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPublicClient, decodeEventLog, http, verifyMessage, verifyTypedData } from "viem";
-import { verifyBundleOffline, type BundleCheck, type EvidenceBundle } from "@chaconne/core/verify";
+import { verifyEvidenceBundle, type BundleCheck, type EvidenceBundle, type TaskEvidenceBundle } from "@chaconne/core/verify";
 import { GUARD_ABI } from "@/lib/guardAbi";
 import { PLAN_GUARD_ABI } from "@/lib/planGuardAbi";
 import { jobsV2, mandates } from "@/lib/api-v2";
@@ -50,7 +51,7 @@ export function BundleVerifier() {
       setParseErr(e instanceof Error ? e.message : String(e));
       return;
     }
-    const res = await verifyBundleOffline(bundle, {
+    const res = await verifyEvidenceBundle(bundle, {
       ...(!bundle.attestationSigner && /^0x[0-9a-fA-F]{40}$/.test(expectedSigner) ? { expectedSigner: expectedSigner as `0x${string}` } : {}),
       verifyTypedData: async ({ address, typedData, signature }) => verifyTypedData({ address, domain: typedData.domain, types: typedData.types, primaryType: typedData.primaryType, message: typedData.message, signature }),
       verifyMessage: async ({ address, raw, signature }) => verifyMessage({ address, message: { raw }, signature }),
@@ -60,11 +61,11 @@ export function BundleVerifier() {
   }, [expectedSigner]);
 
   const load = useCallback(
-    async (ref: { job?: string; mandate?: string }) => {
+    async (ref: { job?: string; mandate?: string; task?: string }) => {
       setBusy(true);
       setParseErr(null);
       try {
-        const r = ref.job ? await jobsV2.bundle(ref.job) : await mandates.bundle(ref.mandate!);
+        const r = ref.job ? await jobsV2.bundle(ref.job) : ref.task ? await api<EvidenceBundle>("GET", `v1/tasks/${ref.task}/bundle`) : await mandates.bundle(ref.mandate!);
         if (r.status === 200 && r.data && typeof r.data === "object") {
           const s = JSON.stringify(r.data, null, 2);
           setText(s);
@@ -81,11 +82,13 @@ export function BundleVerifier() {
     [run, locale],
   );
 
-  // 由 ?job= / ?mandate= 显式加载（用户可见的动作等价物：URL 带参数）
+  // 由 ?job= / ?mandate= / ?task= 显式加载（用户可见的动作等价物：URL 带参数）
   useEffect(() => {
     const job = sp.get("job");
     const man = sp.get("mandate");
+    const task = sp.get("task");
     if (job) void load({ job });
+    else if (task) void load({ task });
     else if (man) void load({ mandate: man });
   }, [sp, load]);
   function onEdit(v: string) {
@@ -113,6 +116,7 @@ export function BundleVerifier() {
     const hashes = new Set<string>();
     for (const e of bundle.executions) if (e.txHash) hashes.add(e.txHash);
     for (const s of bundle.mandate?.steps ?? []) if (s.txHash) hashes.add(s.txHash);
+    for (const m of (bundle as TaskEvidenceBundle).mandates ?? []) for (const s of m.steps) if (s.txHash) hashes.add(s.txHash);
     for (const h of hashes) {
       try {
         const rcpt = await client.getTransactionReceipt({ hash: h as `0x${string}` });
@@ -144,6 +148,7 @@ export function BundleVerifier() {
   }
 
   const failed = useMemo(() => checks?.filter((c) => !c.ok).length ?? 0, [checks]);
+  const v3 = useMemo(() => (checks ? v3Groups(checks) : null), [checks]);
   const flipped = (c: BundleCheck) => baseline !== null && baseline[c.id] !== undefined && baseline[c.id] !== c.ok;
 
   return (
@@ -166,6 +171,16 @@ export function BundleVerifier() {
             <input className="field mono max-w-sm py-1 text-xs" value={expectedSigner} onChange={(e) => setExpectedSigner(e.target.value.trim())} placeholder="0x…" />
             <span>{zh ? "（默认读自服务 healthz；包内自带 attestationSigner 时以包为准；○ = 未校验）" : "(defaults to the service healthz; a bundle's own attestationSigner wins; ○ = not verified)"}</span>
           </div>
+          {v3 && (
+            <div className="mb-3 rounded border border-line p-2 text-xs" aria-label={zh ? "任务记录 v3 检查" : "Task record v3 checks"}>
+              <p className="mb-1 font-medium text-fg-1">{zh ? "任务记录 v3：全部授权、步骤与证书、成交归因、额度签名、轮次哈希链、时间线摘要" : "Task record v3: every authorization, step and certificate, fill attribution, allowance signature, run hash chain, timeline digest"}</p>
+              <ul className="flex flex-wrap gap-2">
+                {v3.map((g) => (
+                  <li key={g.key}><Pill tone={g.failed ? "bad" : "ok"}>{zh ? g.zh : g.en} {g.total - g.failed}/{g.total}</Pill></li>
+                ))}
+              </ul>
+            </div>
+          )}
           {!checks ? (
             <p className="text-sm text-fg-2">—</p>
           ) : (
@@ -199,13 +214,30 @@ export function BundleVerifier() {
   );
 }
 
-function LoadBox({ busy, onLoad }: { busy: boolean; onLoad: (ref: { job?: string; mandate?: string }) => Promise<void> }) {
+/** 任务证据包 v3 的检查分组（只在包里出现 v3 检查时显示） */
+const V3_GROUPS: Array<{ key: string; zh: string; en: string; test: (id: string) => boolean }> = [
+  { key: "mandates", zh: "授权签名与摘要", en: "Authorizations", test: (id) => /^mandate_.+_(digest|signature)$/.test(id) && !/_step_/.test(id) },
+  { key: "steps", zh: "步骤与证书", en: "Steps & certificates", test: (id) => /^mandate_.+_step_.+_(digest|cert_binding|cert_signature)$/.test(id) },
+  { key: "fills", zh: "成交归因", en: "Fill attribution", test: (id) => id.endsWith("_fill_attribution") },
+  { key: "permits", zh: "额度签名", en: "Allowance signatures", test: (id) => id.startsWith("permit_") },
+  { key: "runs", zh: "轮次哈希链", en: "Run hash chain", test: (id) => id.startsWith("run_") },
+  { key: "timeline", zh: "时间线摘要", en: "Timeline digest", test: (id) => id.startsWith("timeline_") },
+];
+function v3Groups(checks: BundleCheck[]): Array<{ key: string; zh: string; en: string; total: number; failed: number }> | null {
+  if (!checks.some((c) => c.id.startsWith("timeline_"))) return null;
+  return V3_GROUPS.map((g) => {
+    const hit = checks.filter((c) => g.test(c.id));
+    return { key: g.key, zh: g.zh, en: g.en, total: hit.length, failed: hit.filter((c) => !c.ok).length };
+  }).filter((g) => g.total > 0);
+}
+
+function LoadBox({ busy, onLoad }: { busy: boolean; onLoad: (ref: { job?: string; mandate?: string; task?: string }) => Promise<void> }) {
   const { t, locale } = useI18n();
   const [v, setV] = useState("");
   return (
     <span className="flex gap-2">
-      <input className="field mono max-w-xs" placeholder="job_… / man_…" value={v} onChange={(e) => setV(e.target.value)} />
-      <button className="btn-ghost" disabled={busy || !v.trim()} aria-busy={busy} onClick={() => { const id = v.trim(); void onLoad(id.startsWith("job_") ? { job: id } : { mandate: id }); }}>{busy ? tx(locale, "bundle_loading") : t("vb_load")}</button>
+      <input className="field mono max-w-xs" placeholder="job_… / mnd_… / tsk_…" value={v} onChange={(e) => setV(e.target.value)} />
+      <button className="btn-ghost" disabled={busy || !v.trim()} aria-busy={busy} onClick={() => { const id = v.trim(); void onLoad(id.startsWith("job_") ? { job: id } : id.startsWith("tsk_") ? { task: id } : { mandate: id }); }}>{busy ? tx(locale, "bundle_loading") : t("vb_load")}</button>
     </span>
   );
 }

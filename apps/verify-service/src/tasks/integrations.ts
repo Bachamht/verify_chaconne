@@ -6,9 +6,7 @@
  *  - D 事件台：`TasksReader` / `TaskCommands`（impacts/readers.ts）← TasksService；修订传播调 `recheck`；
  *  - E 决策实验：`TaskReader.readTask` ← verify_tasks + 最近一次求值（含证据记录、上下文、事件版本）；`ConditionEvaluator` ← evaluateConditions。
  */
-import { eq } from "drizzle-orm";
 import type { Db } from "@chaconne/db";
-import { verifyTasks } from "@chaconne/db";
 import {
   applyFieldStatus,
   assessContextStaleness,
@@ -37,6 +35,7 @@ import type { BudgetCoordinator, BudgetReservationRequest, BudgetReservationResu
 import type { TaskNotifier } from "./notify";
 import type { TaskRow, TasksService } from "./service";
 import type { ConditionEvaluationRecord } from "@chaconne/core/verify";
+import { appendTimeline } from "../records/timeline";
 
 /* ---------------- C：资金组 ---------------- */
 
@@ -82,10 +81,8 @@ export class LaneCNotifierAdapter implements TaskNotifier {
 export function taskTimelineSink(db: Db): TimelineSink {
   return {
     async append(e) {
-      const row = (await db.select().from(verifyTasks).where(eq(verifyTasks.id, e.entityId)).limit(1))[0];
-      if (!row) return;
-      const timeline = [...(row.timelineJson as Array<Record<string, unknown>>), { at: e.at, type: e.kind, note: JSON.stringify(e.detail).slice(0, 500) }].slice(-200);
-      await db.update(verifyTasks).set({ timelineJson: timeline }).where(eq(verifyTasks.id, e.entityId));
+      // 任务不存在时 appendTimeline 不写任何行
+      await appendTimeline(db, e.entityId, { at: e.at, type: e.kind, note: JSON.stringify(e.detail).slice(0, 500) }, "system");
     },
   };
 }

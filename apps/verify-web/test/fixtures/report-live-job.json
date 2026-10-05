@@ -1,0 +1,813 @@
+{
+ "job": {
+  "jobId": "job_0119db671568269386db13d8",
+  "clientRequestId": "web-1790039460147-kk1ycn",
+  "requestHash": "0xca8458b999775ebeb3d79ee3608dabc194891e5a14fe081894d435532ba893f7",
+  "job": {
+   "mode": "exactIn",
+   "params": {
+    "maxSlippageBps": 50,
+    "maxPriceImpactBps": 100,
+    "maxReferenceDeviationBps": 300
+   },
+   "policyId": "REFERENCE_CONTEXT",
+   "amountInRaw": "5000000",
+   "ownerAddress": "0xbacb138e0e9e1444bae9b401c4615378c57c0381",
+   "inputAssetKey": "eip155:196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+   "policyVersion": "1.1.0",
+   "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+   "clientRequestId": "web-1790039460147-kk1ycn",
+   "executionChainId": 196,
+   "recipientAddress": "0xbacb138e0e9e1444bae9b401c4615378c57c0381"
+  },
+  "policyDefinitionHash": "0xaa36358277924589142b26b0d077e1ca7f3e864f20ba65d22d5098d8330e84ba",
+  "effectivePolicyHash": "0x8bf4fce5559d1ed6be1f6b9b178bfc8738298539f726af2a67ba8c012fdf9a4a",
+  "registryVersion": "xlayer-registry/1.1.0",
+  "registryHash": "0x8ea0c841891c81598b5eb7c55e4965d40ebc5ee5943bc0a3844289d1fbcc799a",
+  "createdAt": "2026-09-22T01:11:00.337Z",
+  "order": {
+   "orderId": "ord_2b5180070ca90e1437ec4bd8",
+   "state": "DELIVERED",
+   "priceUsd": "0",
+   "network": "eip155:1952",
+   "settledAt": "2026-09-22T01:11:01.007Z",
+   "deliveredAt": "2026-09-22T01:11:01.767Z"
+  },
+  "entitlement": {
+   "expiresAt": "2026-09-22T01:16:01.010Z",
+   "maxRefreshes": 2,
+   "usedRefreshes": 0,
+   "remaining": 2
+  },
+  "latestReport": {
+   "version": 1,
+   "verdict": "eligible",
+   "executionEligible": true,
+   "evaluatedAt": "2026-09-22T01:11:00.337Z",
+   "evidenceHash": "0x4d20b2f9dfe21b77c1c90643167441cd9f129bfe1c77a094c1cc46c5fdc51813"
+  },
+  "executions": [],
+  "evidenceMode": "LIVE"
+ },
+ "report": {
+  "report": {
+   "jobId": "job_0119db671568269386db13d8",
+   "reasons": [
+    {
+     "code": "CLOSE_UNCONFIRMED",
+     "detail": {
+      "closeUsd": "338.98",
+      "tradingDate": "2026-09-21"
+     },
+     "severity": "info",
+     "evidenceIds": [
+      "ev_7701d7eed22123af5c261fd3"
+     ]
+    }
+   ],
+   "verdict": "eligible",
+   "reference": {
+    "kind": "close_last_tick",
+    "priceUsd": "338.98",
+    "sourceId": "finnhub:last_tick",
+    "tradingDate": "2026-09-21",
+    "deviationBps": -4,
+    "underlyingId": "us-equity:AAPL",
+    "sourcePublishedAt": "2026-09-21T20:00:00.000Z"
+   },
+   "evaluatedAt": "2026-09-22T01:11:00.337Z",
+   "evidenceIds": [
+    "ev_7347a6002d89032669b1a40f",
+    "ev_768638cb6a46b9fb79de01fb",
+    "ev_7701d7eed22123af5c261fd3",
+    "ev_7adac2c7bdf54506b079efdf",
+    "ev_a8a66412125c45eb9bf3aeb3",
+    "ev_c48f13eb3c7e808c4b4b7264",
+    "ev_dc9b1db40ce8cbfdda97a73e"
+   ],
+   "requestHash": "0xca8458b999775ebeb3d79ee3608dabc194891e5a14fe081894d435532ba893f7",
+   "evidenceHash": "0x4d20b2f9dfe21b77c1c90643167441cd9f129bfe1c77a094c1cc46c5fdc51813",
+   "registryHash": "0x8ea0c841891c81598b5eb7c55e4965d40ebc5ee5943bc0a3844289d1fbcc799a",
+   "marketSession": "CLOSED",
+   "reportVersion": 1,
+   "schemaVersion": "1",
+   "policySnapshot": {
+    "params": {
+     "maxSlippageBps": 50,
+     "maxPriceImpactBps": 100,
+     "maxReferenceDeviationBps": 300
+    },
+    "definition": {
+     "mode": "exactIn",
+     "version": "1.1.0",
+     "policyId": "REFERENCE_CONTEXT",
+     "paramRanges": {
+      "maxSlippageBps": {
+       "max": 300,
+       "min": 1,
+       "default": 50,
+       "required": true
+      },
+      "maxPriceImpactBps": {
+       "max": 1000,
+       "min": 1,
+       "default": 100,
+       "required": true
+      },
+      "maxReferenceDeviationBps": {
+       "max": 2000,
+       "min": 1,
+       "default": 300,
+       "required": true
+      }
+     },
+     "engineVersion": "verify-engine/1.0.0",
+     "acceptedCloseKinds": [
+      "official_close",
+      "close_cross_verified",
+      "close_last_tick"
+     ],
+     "quoteMaxAgeSeconds": 30,
+     "requireImpactKnown": true,
+     "sessionRequirement": "any",
+     "referenceRequirement": "official_close",
+     "certificateTtlSeconds": 60,
+     "closeMaxSessionsSinceClose": 0,
+     "futureSkewToleranceSeconds": 5,
+     "liveReferenceMaxAgeSeconds": 90,
+     "closeCrossVerifyToleranceBps": 50
+    }
+   },
+   "normalizedQuote": {
+    "minOutRaw": "14681812371158741",
+    "receivedAt": "2026-09-22T01:11:00.520Z",
+    "amountInRaw": "5000000",
+    "requestedAt": "2026-09-22T01:11:00.425Z",
+    "expectedOutRaw": "14755590322772605",
+    "adverseImpactBps": 7,
+    "sourcePublishedAt": null,
+    "priceImpactPercent": "-0.07",
+    "executableUsdPerShare": "338.854623273417"
+   },
+   "comparisonStatus": "official_close",
+   "executionEligible": true,
+   "effectivePolicyHash": "0x8bf4fce5559d1ed6be1f6b9b178bfc8738298539f726af2a67ba8c012fdf9a4a",
+   "policyDefinitionHash": "0xaa36358277924589142b26b0d077e1ca7f3e864f20ba65d22d5098d8330e84ba"
+  },
+  "reportHash": "0xa105ddf8b4d0d3c8d3113acae610623e0af076627b3964ab8c249beefb251e93",
+  "evidence": [
+   {
+    "mode": "LIVE",
+    "time": {
+     "receivedAt": "2026-09-22T01:11:00.520Z",
+     "requestedAt": "2026-09-22T01:11:00.425Z",
+     "sourceTimeKind": "not_provided",
+     "sourcePublishedAt": null
+    },
+    "block": null,
+    "payload": {
+     "kind": "okx_quote",
+     "chainId": 196,
+     "toToken": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+     "fromToken": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+     "amountInRaw": "5000000",
+     "routeSummary": [
+      "to:0x7c5bee2a8091c3ef39072f64f18fac913060aeaf",
+      "selector:0x0c307f76",
+      "dagSwapTo"
+     ],
+     "expectedOutRaw": "14755590322772605",
+     "routeSupported": true,
+     "adverseImpactBps": 7,
+     "priceImpactPercentRaw": "-0.07"
+    },
+    "rawHash": "0xfb3592cdc04579c58f1328a868d7f4c28843543cc1b2a8b96e4482b72aebf105",
+    "endpoint": "aggregator/swap",
+    "provider": "okx-dex",
+    "evidenceId": "ev_768638cb6a46b9fb79de01fb",
+    "parserVersion": "okx-swap/1",
+    "requestFingerprint": "196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a:5000000:guard"
+   },
+   {
+    "mode": "LIVE",
+    "time": {
+     "receivedAt": "2026-09-22T01:11:00.424Z",
+     "requestedAt": "2026-09-22T01:11:00.337Z",
+     "sourceTimeKind": "not_provided",
+     "sourcePublishedAt": null
+    },
+    "block": null,
+    "payload": {
+     "kind": "okx_quote",
+     "chainId": 196,
+     "toToken": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+     "fromToken": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+     "amountInRaw": "5000000",
+     "routeSummary": [],
+     "expectedOutRaw": "14755590322772605",
+     "routeSupported": true,
+     "adverseImpactBps": 7,
+     "priceImpactPercentRaw": "-0.07"
+    },
+    "rawHash": "0x880c532332d11ddf5a0f4403436991cb10d79c68f5cef66ab69599604a01d1b5",
+    "endpoint": "aggregator/quote",
+    "provider": "okx-dex",
+    "evidenceId": "ev_a8a66412125c45eb9bf3aeb3",
+    "parserVersion": "okx-quote/1",
+    "requestFingerprint": "196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a:5000000"
+   },
+   {
+    "mode": "LIVE",
+    "time": {
+     "receivedAt": "2026-09-22T01:11:00.424Z",
+     "requestedAt": "2026-09-22T01:11:00.337Z",
+     "sourceTimeKind": "not_provided",
+     "sourcePublishedAt": null
+    },
+    "block": null,
+    "payload": {
+     "kind": "stablecoin_usd",
+     "method": "okx_quote_from_token_unit_price",
+     "chainId": 196,
+     "usdPerToken": "1",
+     "tokenAddress": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8"
+    },
+    "rawHash": "0x880c532332d11ddf5a0f4403436991cb10d79c68f5cef66ab69599604a01d1b5",
+    "endpoint": "aggregator/quote#fromToken.tokenUnitPrice",
+    "provider": "okx-dex",
+    "evidenceId": "ev_dc9b1db40ce8cbfdda97a73e",
+    "parserVersion": "okx-quote-unitprice/1",
+    "requestFingerprint": "196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8:usd"
+   },
+   {
+    "mode": "LIVE",
+    "time": {
+     "receivedAt": "2026-09-22T01:11:00.626Z",
+     "requestedAt": "2026-09-22T01:11:00.523Z",
+     "sourceTimeKind": "block",
+     "sourcePublishedAt": "2026-09-22T01:11:00.000Z"
+    },
+    "block": {
+     "chainId": 196,
+     "blockHash": "0xa3ac0e9419dcd340af9d6c6de3d3fc11c556e1adfdaa22b3b12d25fd6712af49",
+     "blockNumber": "71270424",
+     "blockTimestamp": "2026-09-22T01:11:00.000Z"
+    },
+    "payload": {
+     "kind": "token_meta",
+     "symbol": "AAPLx",
+     "chainId": 196,
+     "decimals": 18,
+     "multiplier": "1.003269012539818700",
+     "tokenAddress": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+    },
+    "rawHash": "0xb18a52edebd6986e9ebd692006dd3f932799dfcd5ca2fca868236b087919e83f",
+    "endpoint": "eth_call:erc20(decimals,symbol)+getCurrentMultiplier()",
+    "provider": "xlayer-rpc",
+    "evidenceId": "ev_7adac2c7bdf54506b079efdf",
+    "parserVersion": "erc20-meta/2",
+    "requestFingerprint": "196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a:meta"
+   },
+   {
+    "mode": "LIVE",
+    "time": {
+     "receivedAt": "2026-09-22T01:11:00.784Z",
+     "requestedAt": "2026-09-22T01:11:00.626Z",
+     "sourceTimeKind": "not_provided",
+     "sourcePublishedAt": null
+    },
+    "block": null,
+    "payload": {
+     "kind": "okx_rwa_token",
+     "ratio": "1.003269",
+     "issuer": "xStock",
+     "chainId": 196,
+     "priceUsd": "338.6051425",
+     "tokenAddress": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+     "stockPriceUsd": null
+    },
+    "rawHash": "0xe330b4f96545aae956b3455c69b3b5ca0cb5b10fe89fff575ace05e6334d4c7f",
+    "endpoint": "dex/market/rwa/tokens",
+    "provider": "okx-market",
+    "evidenceId": "ev_c48f13eb3c7e808c4b4b7264",
+    "parserVersion": "okx-rwa/2",
+    "requestFingerprint": "196:issuer36"
+   },
+   {
+    "mode": "LIVE",
+    "time": {
+     "receivedAt": "2026-09-22T01:11:00.994Z",
+     "requestedAt": "2026-09-22T01:11:00.801Z",
+     "sourceTimeKind": "published",
+     "sourcePublishedAt": "2026-09-21T20:00:00.000Z"
+    },
+    "block": null,
+    "payload": {
+     "kind": "pyth_reference",
+     "feedId": "finnhub:AAPL",
+     "confBps": null,
+     "priceUsd": "338.98",
+     "tradingDate": "2026-09-21",
+     "underlyingId": "us-equity:AAPL",
+     "sessionAtPublish": "POST"
+    },
+    "rawHash": "0x4057b2aea7bdef717abe48f39146b6a15d71998f071efc8f9b42b4dd432c9e49",
+    "endpoint": "quote#c",
+    "provider": "finnhub",
+    "evidenceId": "ev_7347a6002d89032669b1a40f",
+    "parserVersion": "finnhub-quote/2",
+    "requestFingerprint": "quote:AAPL"
+   },
+   {
+    "mode": "LIVE",
+    "time": {
+     "receivedAt": "2026-09-22T01:11:00.994Z",
+     "requestedAt": "2026-09-22T01:11:00.801Z",
+     "sourceTimeKind": "published",
+     "sourcePublishedAt": "2026-09-21T20:00:00.000Z"
+    },
+    "block": null,
+    "payload": {
+     "kind": "ref_close",
+     "closeUsd": "338.98",
+     "closeSource": "last_tick",
+     "tradingDate": "2026-09-21",
+     "confirmation": null,
+     "underlyingId": "us-equity:AAPL"
+    },
+    "rawHash": "0x4057b2aea7bdef717abe48f39146b6a15d71998f071efc8f9b42b4dd432c9e49",
+    "endpoint": "quote#c@close",
+    "provider": "finnhub",
+    "evidenceId": "ev_7701d7eed22123af5c261fd3",
+    "parserVersion": "finnhub-quote/2",
+    "requestFingerprint": "quote:AAPL"
+   }
+  ]
+ },
+ "bill": {
+  "jobId": "job_0119db671568269386db13d8",
+  "bill": {
+   "serviceFees": [
+    {
+     "label": "verify_once (free)",
+     "asset": "USD",
+     "amountRaw": "0",
+     "amountUsd": "0",
+     "network": "eip155:1952",
+     "txHash": null
+    }
+   ],
+   "principal": [],
+   "gas": [],
+   "selfPayment": false
+  }
+ },
+ "assets": [
+  {
+   "assetKey": "eip155:196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+   "tokenAddress": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+   "tokenDecimals": 6,
+   "displaySymbol": "USDG",
+   "role": "stable_input",
+   "executionAllowed": true,
+   "underlyingId": "fiat:USD"
+  },
+  {
+   "assetKey": "eip155:196:0xb6ceceab302e2e4948951ee7843fc24e92933061",
+   "tokenAddress": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+   "tokenDecimals": 6,
+   "displaySymbol": "USDC",
+   "role": "stable_input",
+   "executionAllowed": true,
+   "underlyingId": "fiat:USD"
+  },
+  {
+   "assetKey": "eip155:196:0x779ded0c9e1022225f8e0630b35a9b54be713736",
+   "tokenAddress": "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+   "tokenDecimals": 6,
+   "displaySymbol": "USD₮0",
+   "role": "stable_input",
+   "executionAllowed": true,
+   "underlyingId": "fiat:USD"
+  },
+  {
+   "assetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+   "tokenAddress": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+   "tokenDecimals": 18,
+   "displaySymbol": "AAPLx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:AAPL"
+  },
+  {
+   "assetKey": "eip155:196:0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+   "tokenAddress": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+   "tokenDecimals": 18,
+   "displaySymbol": "NVDAx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:NVDA"
+  },
+  {
+   "assetKey": "eip155:196:0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48",
+   "tokenAddress": "0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48",
+   "tokenDecimals": 18,
+   "displaySymbol": "SPYx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:SPY"
+  },
+  {
+   "assetKey": "eip155:196:0x68fa48b1c2fe52b3d776e1953e0e782b5044ce28",
+   "tokenAddress": "0x68fa48b1c2fe52b3d776e1953e0e782b5044ce28",
+   "tokenDecimals": 18,
+   "displaySymbol": "SPCXx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:SPCX"
+  },
+  {
+   "assetKey": "eip155:196:0xfebded1b0986a8ee107f5ab1a1c5a813491deceb",
+   "tokenAddress": "0xfebded1b0986a8ee107f5ab1a1c5a813491deceb",
+   "tokenDecimals": 18,
+   "displaySymbol": "CRCLx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:CRCL"
+  },
+  {
+   "assetKey": "eip155:196:0xe1385fdd5ffb10081cd52c56584f25efa9084015",
+   "tokenAddress": "0xe1385fdd5ffb10081cd52c56584f25efa9084015",
+   "tokenDecimals": 18,
+   "displaySymbol": "HOODx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:HOOD"
+  },
+  {
+   "assetKey": "eip155:196:0xe5f6d3b2405abdfe6f660e63202b25d23763160d",
+   "tokenAddress": "0xe5f6d3b2405abdfe6f660e63202b25d23763160d",
+   "tokenDecimals": 18,
+   "displaySymbol": "GMEx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:GME"
+  },
+  {
+   "assetKey": "eip155:196:0x364f210f430ec2448fc68a49203040f6124096f0",
+   "tokenAddress": "0x364f210f430ec2448fc68a49203040f6124096f0",
+   "tokenDecimals": 18,
+   "displaySymbol": "COINx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:COIN"
+  },
+  {
+   "assetKey": "eip155:196:0xae2f842ef90c0d5213259ab82639d5bbf649b08e",
+   "tokenAddress": "0xae2f842ef90c0d5213259ab82639d5bbf649b08e",
+   "tokenDecimals": 18,
+   "displaySymbol": "MSTRx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:MSTR"
+  },
+  {
+   "assetKey": "eip155:196:0xb63efbc28860c8097e341de1fcf59456161e9d98",
+   "tokenAddress": "0xb63efbc28860c8097e341de1fcf59456161e9d98",
+   "tokenDecimals": 18,
+   "displaySymbol": "SNDKx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:SNDK"
+  },
+  {
+   "assetKey": "eip155:196:0xf8a80d1cb9cfd70d03d655d9df42339846f3b3c8",
+   "tokenAddress": "0xf8a80d1cb9cfd70d03d655d9df42339846f3b3c8",
+   "tokenDecimals": 18,
+   "displaySymbol": "INTCx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:INTC"
+  },
+  {
+   "assetKey": "eip155:196:0xaeb681b69e5094e04d11bcef51a71358a374c3ed",
+   "tokenAddress": "0xaeb681b69e5094e04d11bcef51a71358a374c3ed",
+   "tokenDecimals": 18,
+   "displaySymbol": "BMNRx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:BMNR"
+  },
+  {
+   "assetKey": "eip155:196:0xa753a7395cae905cd615da0b82a53e0560f250af",
+   "tokenAddress": "0xa753a7395cae905cd615da0b82a53e0560f250af",
+   "tokenDecimals": 18,
+   "displaySymbol": "QQQx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:QQQ"
+  },
+  {
+   "assetKey": "eip155:196:0xeaad46f4146ded5a47b55aa7f6c48c191deaec88",
+   "tokenAddress": "0xeaad46f4146ded5a47b55aa7f6c48c191deaec88",
+   "tokenDecimals": 18,
+   "displaySymbol": "MRVLx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:MRVL"
+  },
+  {
+   "assetKey": "eip155:196:0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+   "tokenAddress": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+   "tokenDecimals": 18,
+   "displaySymbol": "TSLAx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:TSLA"
+  },
+  {
+   "assetKey": "eip155:196:0x2782df1cc877f720c81b4f6568db64563f1d3aa3",
+   "tokenAddress": "0x2782df1cc877f720c81b4f6568db64563f1d3aa3",
+   "tokenDecimals": 18,
+   "displaySymbol": "DELLx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:DELL"
+  },
+  {
+   "assetKey": "eip155:196:0xf6a873bae4ba1b304e45df52a4b7d176e1c6a8c4",
+   "tokenAddress": "0xf6a873bae4ba1b304e45df52a4b7d176e1c6a8c4",
+   "tokenDecimals": 18,
+   "displaySymbol": "MUx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:MU"
+  },
+  {
+   "assetKey": "eip155:196:0xe92f673ca36c5e2efd2de7628f815f84807e803f",
+   "tokenAddress": "0xe92f673ca36c5e2efd2de7628f815f84807e803f",
+   "tokenDecimals": 18,
+   "displaySymbol": "GOOGLx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:GOOGL"
+  },
+  {
+   "assetKey": "eip155:196:0x548308e91ec9f285c7bff05295badbd56a6e4971",
+   "tokenAddress": "0x548308e91ec9f285c7bff05295badbd56a6e4971",
+   "tokenDecimals": 18,
+   "displaySymbol": "ORCLx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:ORCL"
+  },
+  {
+   "assetKey": "eip155:196:0x3522513e5f146a2006e2901b05f16b2821485e19",
+   "tokenAddress": "0x3522513e5f146a2006e2901b05f16b2821485e19",
+   "tokenDecimals": 18,
+   "displaySymbol": "AMDx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:AMD"
+  },
+  {
+   "assetKey": "eip155:196:0x3557ba345b01efa20a1bddc61f573bfd87195081",
+   "tokenAddress": "0x3557ba345b01efa20a1bddc61f573bfd87195081",
+   "tokenDecimals": 18,
+   "displaySymbol": "AMZNx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:AMZN"
+  },
+  {
+   "assetKey": "eip155:196:0x38bac69cbbd28156796e4163b2b6dcb81e336565",
+   "tokenAddress": "0x38bac69cbbd28156796e4163b2b6dcb81e336565",
+   "tokenDecimals": 18,
+   "displaySymbol": "AVGOx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:AVGO"
+  },
+  {
+   "assetKey": "eip155:196:0x4833e7f4f0460f4b72a3a5879a6c9841bcc5b58b",
+   "tokenAddress": "0x4833e7f4f0460f4b72a3a5879a6c9841bcc5b58b",
+   "tokenDecimals": 18,
+   "displaySymbol": "SLVx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:SLV"
+  },
+  {
+   "assetKey": "eip155:196:0xc0b417e7f83db438631eb5e096684dd742e5294f",
+   "tokenAddress": "0xc0b417e7f83db438631eb5e096684dd742e5294f",
+   "tokenDecimals": 18,
+   "displaySymbol": "ASMLx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:ASML"
+  },
+  {
+   "assetKey": "eip155:196:0x5621737f42dae558b81269fcb9e9e70c19aa6b35",
+   "tokenAddress": "0x5621737f42dae558b81269fcb9e9e70c19aa6b35",
+   "tokenDecimals": 18,
+   "displaySymbol": "MSFTx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:MSFT"
+  },
+  {
+   "assetKey": "eip155:196:0x96702be57cd9777f835117a809c7124fe4ec989a",
+   "tokenAddress": "0x96702be57cd9777f835117a809c7124fe4ec989a",
+   "tokenDecimals": 18,
+   "displaySymbol": "METAx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:META"
+  },
+  {
+   "assetKey": "eip155:196:0x6d482cec5f9dd1f05ccee9fd3ff79b246170f8e2",
+   "tokenAddress": "0x6d482cec5f9dd1f05ccee9fd3ff79b246170f8e2",
+   "tokenDecimals": 18,
+   "displaySymbol": "PLTRx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:PLTR"
+  },
+  {
+   "assetKey": "eip155:196:0x80a77a372c1e12accda84299492f404902e2da67",
+   "tokenAddress": "0x80a77a372c1e12accda84299492f404902e2da67",
+   "tokenDecimals": 18,
+   "displaySymbol": "MCDx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:MCD"
+  },
+  {
+   "assetKey": "eip155:196:0x9e3bf4ecfc44eedd624f26656b6736a3f093b073",
+   "tokenAddress": "0x9e3bf4ecfc44eedd624f26656b6736a3f093b073",
+   "tokenDecimals": 18,
+   "displaySymbol": "TSMx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:TSM"
+  },
+  {
+   "assetKey": "eip155:196:0x12992613fdd35abe95dec5a4964331b1ee23b50d",
+   "tokenAddress": "0x12992613fdd35abe95dec5a4964331b1ee23b50d",
+   "tokenDecimals": 18,
+   "displaySymbol": "BRK.Bx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:BRK.B"
+  },
+  {
+   "assetKey": "eip155:196:0xdcc1a2699441079da889b1f49e12b69cc791129b",
+   "tokenAddress": "0xdcc1a2699441079da889b1f49e12b69cc791129b",
+   "tokenDecimals": 18,
+   "displaySymbol": "KOx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:KO"
+  },
+  {
+   "assetKey": "eip155:196:0xdadfb355c6110eda0908740d52c834d6c2bcddc7",
+   "tokenAddress": "0xdadfb355c6110eda0908740d52c834d6c2bcddc7",
+   "tokenDecimals": 18,
+   "displaySymbol": "IWMx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:IWM"
+  },
+  {
+   "assetKey": "eip155:196:0xd9913208647671fe0f48f7f260076b2c6f310aac",
+   "tokenAddress": "0xd9913208647671fe0f48f7f260076b2c6f310aac",
+   "tokenDecimals": 18,
+   "displaySymbol": "IBMx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:IBM"
+  },
+  {
+   "assetKey": "eip155:196:0x17d8186ed8f68059124190d147174d0f6697dc40",
+   "tokenAddress": "0x17d8186ed8f68059124190d147174d0f6697dc40",
+   "tokenDecimals": 18,
+   "displaySymbol": "MRKx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:MRK"
+  },
+  {
+   "assetKey": "eip155:196:0x39c31fc6038490ea4bf8a21ca18cd18f33b8d3fb",
+   "tokenAddress": "0x39c31fc6038490ea4bf8a21ca18cd18f33b8d3fb",
+   "tokenDecimals": 18,
+   "displaySymbol": "SMCIx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:SMCI"
+  },
+  {
+   "assetKey": "eip155:196:0x7aefc9965699fbea943e03264d96e50cd4a97b21",
+   "tokenAddress": "0x7aefc9965699fbea943e03264d96e50cd4a97b21",
+   "tokenDecimals": 18,
+   "displaySymbol": "WMTx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:WMT"
+  },
+  {
+   "assetKey": "eip155:196:0x58100046a4afcd4ee4fadbd4244f3f895a341c56",
+   "tokenAddress": "0x58100046a4afcd4ee4fadbd4244f3f895a341c56",
+   "tokenDecimals": 18,
+   "displaySymbol": "SKHYx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:SKHY"
+  },
+  {
+   "assetKey": "eip155:196:0xde916b8089cbd5e52551bd933c3ea2ea5c903465",
+   "tokenAddress": "0xde916b8089cbd5e52551bd933c3ea2ea5c903465",
+   "tokenDecimals": 18,
+   "displaySymbol": "ICEx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:ICE"
+  },
+  {
+   "assetKey": "eip155:196:0xefd30445a4ec1f4b3e0a6f4d9bdbd215f805047f",
+   "tokenAddress": "0xefd30445a4ec1f4b3e0a6f4d9bdbd215f805047f",
+   "tokenDecimals": 18,
+   "displaySymbol": "MRNAx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:MRNA"
+  },
+  {
+   "assetKey": "eip155:196:0x7c5e9e93ea0f8fe94ea94eb6283f200ba0b72be0",
+   "tokenAddress": "0x7c5e9e93ea0f8fe94ea94eb6283f200ba0b72be0",
+   "tokenDecimals": 18,
+   "displaySymbol": "NKEx",
+   "role": "stock_output",
+   "executionAllowed": false,
+   "underlyingId": "us-equity:NKE"
+  },
+  {
+   "assetKey": "eip155:196:0x52ce422d81e62a2c4bb87653d66f2235c73b152e",
+   "tokenAddress": "0x52ce422d81e62a2c4bb87653d66f2235c73b152e",
+   "tokenDecimals": 18,
+   "displaySymbol": "RDDTx",
+   "role": "stock_output",
+   "executionAllowed": true,
+   "underlyingId": "us-equity:RDDT"
+  }
+ ],
+ "billConfirmed": {
+  "jobId": "job_f69d4ad27be1c9ad442874aa",
+  "bill": {
+   "serviceFees": [
+    {
+     "label": "verify_once (free)",
+     "asset": "USD",
+     "amountRaw": "0",
+     "amountUsd": "0",
+     "network": "eip155:1952",
+     "txHash": null
+    }
+   ],
+   "principal": [
+    {
+     "label": "execution exe_b77cfa67eb2a37870740d499 spent",
+     "asset": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+     "amountRaw": "5000000",
+     "amountUsd": null,
+     "network": "eip155:196",
+     "txHash": "0xe4a3eead09c6bf54f499265cc2b3888e741f9186be844b153e374d0ddce773b4"
+    }
+   ],
+   "gas": [
+    {
+     "label": "execution exe_b77cfa67eb2a37870740d499 gasUsed (units)",
+     "asset": "gas",
+     "amountRaw": "551153",
+     "amountUsd": null,
+     "network": "eip155:196",
+     "txHash": "0xe4a3eead09c6bf54f499265cc2b3888e741f9186be844b153e374d0ddce773b4"
+    }
+   ],
+   "selfPayment": false
+  }
+ },
+ "rejectedReasons": [
+  {
+   "code": "MARKET_OUTSIDE_REGULAR",
+   "severity": "block"
+  },
+  {
+   "code": "REFERENCE_STALE",
+   "severity": "block"
+  },
+  {
+   "code": "REFERENCE_STALE",
+   "severity": "block"
+  }
+ ]
+}

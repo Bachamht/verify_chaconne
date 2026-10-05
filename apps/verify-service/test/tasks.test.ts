@@ -45,17 +45,22 @@ async function authorize(e: TestEnv, taskId: string) {
   const signature = await OWNER.signTypedData({ domain: draft.typedData.domain, types: draft.typedData.types, primaryType: "TradeMandate", message: { ...m, budgetCap: BigInt(m["budgetCap"]!), perStepCap: BigInt(m["perStepCap"]!), maxSteps: Number(m["maxSteps"]), validFrom: BigInt(m["validFrom"]!), deadline: BigInt(m["deadline"]!), nonce: BigInt(m["nonce"]!) } });
   return { signature, r: await api(e, "POST", `/v1/tasks/${taskId}/authorize`, { signature }) };
 }
-function stepLog(mandateDigest: Hex, stepIndex: number, spent = "100000000") {
+/** v7 R3：事件按真实合约语义带上该步骤的 evidenceHash 与 ≥ minAmountOut 的 received（证据包 v3 检查成交归因） */
+function stepLog(mandateDigest: Hex, stepIndex: number, spent = "100000000", fill: { evidenceHash?: Hex; received?: bigint } = {}) {
   const topics = encodeEventTopics({ abi: PLANGUARD_ABI, eventName: "MandateStep", args: { owner: OWNER.address, mandateDigest, stepIndex } }) as [Hex, ...Hex[]];
-  const data = encodeAbiParameters([{ type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "bytes32" }, { type: "address" }], [FIXTURE_STOCK, BigInt(spent), BigInt(spent), 200_000_000_000_000_000n, 0n, ("0x" + "11".repeat(32)) as Hex, "0x9999999999999999999999999999999999999999"]);
+  const data = encodeAbiParameters([{ type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "bytes32" }, { type: "address" }], [FIXTURE_STOCK, BigInt(spent), BigInt(spent), fill.received ?? 200_000_000_000_000_000n, 0n, fill.evidenceHash ?? (("0x" + "11".repeat(32)) as Hex), "0x9999999999999999999999999999999999999999"]);
   return { address: TEST_PLANGUARD, data, topics };
+}
+function fillOf(view: Record<string, unknown>, stepIndex: number): { evidenceHash?: Hex; received?: bigint } {
+  const rec = (view["stepRecords"] as Array<{ stepIndex: number; state: string; step: { evidenceHash: Hex; minAmountOut: string } }> | undefined)?.filter((s) => s.stepIndex === stepIndex).at(-1);
+  return rec ? { evidenceHash: rec.step.evidenceHash, received: BigInt(rec.step.minAmountOut) + 1n } : {};
 }
 const source = (r: ChainReceipt | null, head: bigint): ReceiptSource => ({ getReceipt: async () => r, headBlock: async () => head });
 const receiptOpts = (e: TestEnv) => ({ guard: TEST_PLANGUARD, confirmations: 6, unknownAfterMs: 600_000, matcher: mandateStepMatcher, now: () => new Date(e.cfgNow()) });
 async function confirmStep(e: TestEnv, mandateId: string, stepIndex: number) {
   const m = await api(e, "GET", `/v1/mandates/${mandateId}`);
   await api(e, "POST", `/v1/mandates/${mandateId}/steps/${stepIndex}/submissions`, { txHash: ("0x" + (stepIndex + 1).toString(16).padStart(2, "0").repeat(32)) as Hex });
-  await verifyReceiptsOnce(e.mandates, source({ status: "success", blockNumber: 100n, blockHash: "0x" + "ab".repeat(32), gasUsed: 620_000n, logs: [stepLog(m.json["mandateDigest"] as Hex, stepIndex)] }, 200n), receiptOpts(e));
+  await verifyReceiptsOnce(e.mandates, source({ status: "success", blockNumber: 100n, blockHash: "0x" + "ab".repeat(32), gasUsed: 620_000n, logs: [stepLog(m.json["mandateDigest"] as Hex, stepIndex, "100000000", fillOf(m.json, stepIndex))] }, 200n), receiptOpts(e));
 }
 const codes = (j: Record<string, unknown>) => ((j["task"] as { blockers: Array<{ code: string }> })?.blockers ?? (j["blockers"] as Array<{ code: string }>)).map((b) => b.code);
 

@@ -3,8 +3,11 @@
  * v2 接口的唯一接入点（E2 定稿）。所有字段名假设集中在此，集成时与 C2 对齐只改这一处。
  * 路径：interfaces.md §10.4；类型：@chaconne/core/verify v2 增补。
  */
-import type { Bill, BudgetAllocation, BudgetGroup, Condition, ConditionSet, DeltaExplanation, EventImpact, EvidenceBundle, MandateEvalStatus, MandateState, MandateStep, MandateStepState, MarketContext, MarketEvent, PersonaId, PlanCandidate, PlanGoal, PlanReport, PlaybookId, PolicyComparison, Product, ReplayRun, ShareStatus, StepCertificate, Task, TaskScope, ThesisCard, TradeMandate, AgentTradeIntent, AgentTurn } from "@chaconne/core/verify";
+import type { Bill, BudgetAllocation, BudgetGroup, Condition, ConditionSet, DeltaExplanation, EventImpact, EvidenceBundle, MandateEvalStatus, MandateState, MandateStep, MandateStepState, MarketContext, MarketEvent, PersonaId, PlanCandidate, PlanGoal, PlanReport, PlaybookId, PolicyComparison, Product, ReplayRun, StepCertificate, Task, TaskScope, ThesisCard, TradeMandate, AgentTradeIntent, AgentTurn } from "@chaconne/core/verify";
 import { api } from "./api";
+/** 公开读取（战报、值守看板）已移到 lib/publicData.ts（不依赖 lib/api → 钱包代码，公开页更轻）；这里保留旧导入路径 */
+export { normalizePublicActivity, normalizePublicReport, pubList, pubReport, pubTaskActivity } from "./publicData";
+export type { PublicActivityItem, PublicActivityView, PublicReport } from "./publicData";
 
 /* ---------- 假设的响应形态（C2 定稿后在此对齐） ---------- */
 export interface PlanView {
@@ -114,22 +117,6 @@ export interface ShareView {
   privacy: { amounts: "exact" | "range" | "hidden"; wallet: "hidden" };
   createdAt: string;
 }
-/** 公开读取（隐私过滤后） */
-export interface PublicReport {
-  shareId: string;
-  kind: "job" | "mandate" | "simulation";
-  status: ShareStatus;
-  persona: { personaId: PersonaId; name: string; tone: "calm" | "playful" | "terse" } | null;
-  headline: { en: string; zh: string } | null;
-  goal: { side: "buy" | "sell"; outputSymbols: string[]; inputSymbol: string; policyId: string; amountDisplay: string | null };
-  result: { verdict: string | null; completionBps: number | null; spentDisplay: string | null; receivedDisplay: string | null; feesDisplay: string | null; reasons: Array<{ code: string; severity: string }>; waitingOn: string | null };
-  evidence: { evidenceHash: string | null; reportHash: string | null; bundleUrl: string | null; txHashes: string[] };
-  /** 单笔核验（kind=job）的公开核验结果：行情事实 + 核验时间；没执行时页面据此说清「这只是核验」 */
-  check?: { executionEligible: boolean; marketSession: string; comparisonStatus: string; evaluatedAt: string; policyId: string; reference: { kind: string; priceUsd: string; deviationBps: number | null; sourcePublishedAt: string | null; tradingDate: string | null } | null; executableUsdPerShare: string | null; adverseImpactBps: number | null; quoteReceivedAt: string | null } | null;
-  templateId: string | null;
-  evidenceMode: "LIVE" | "FIXTURE" | "SIMULATION";
-  createdAt: string;
-}
 
 /* ---------- 响应归一化（服务端 C2 定稿字段 → 页面类型；interfaces §10 两处写法不一致，以服务实际返回为准） ---------- */
 type ApiResult<T> = Awaited<ReturnType<typeof api<T>>>;
@@ -187,12 +174,18 @@ export const plans = {
   get: (id: string) => mapOk<PlanView>(api("GET", `v1/plans/${id}`), normalizePlan),
   toJob: (id: string, candidateId: string) => api<{ jobId: string; error?: string; message?: string }>("POST", `v1/plans/${id}/jobs`, { candidateId, clientRequestId: `web-${Date.now()}` }),
 };
+/** 服务端 GET /v1/mandates/:id 把步骤列表放在 stepRecords，steps 是计数 {done, max}；网页统一读数组 steps（2026-10-03 任务页成交回执因此一直为空） */
+function normalizeMandate(raw: Raw): MandateView {
+  const r = raw as Raw & { steps?: unknown; stepRecords?: unknown };
+  const steps = Array.isArray(r.stepRecords) ? r.stepRecords : Array.isArray(r.steps) ? r.steps : [];
+  return { ...(raw as unknown as MandateView), steps: steps as MandateStepView[] };
+}
 export const mandates = {
   create: (body: { typedData: unknown; signature: `0x${string}`; outputSet: `0x${string}`[]; planId?: string | null; jobId?: string | null; inputAssetKey: string; outputAssetKeys: string[]; policyId: string; policyVersion: string; clientRequestId: string }) => api<MandateView & { error?: string; message?: string; details?: unknown }>("POST", "v1/mandates", body),
-  get: (id: string) => api<MandateView>("GET", `v1/mandates/${id}`),
-  pause: (id: string) => api<MandateView>("POST", `v1/mandates/${id}/pause`),
-  resume: (id: string) => api<MandateView>("POST", `v1/mandates/${id}/resume`),
-  cancel: (id: string) => api<MandateView>("POST", `v1/mandates/${id}/cancel`),
+  get: (id: string) => mapOk<MandateView>(api("GET", `v1/mandates/${id}`), normalizeMandate),
+  pause: (id: string) => mapOk<MandateView>(api("POST", `v1/mandates/${id}/pause`), normalizeMandate),
+  resume: (id: string) => mapOk<MandateView>(api("POST", `v1/mandates/${id}/resume`), normalizeMandate),
+  cancel: (id: string) => mapOk<MandateView>(api("POST", `v1/mandates/${id}/cancel`), normalizeMandate),
   prepareStep: (id: string) => api<PreparedStep>("POST", `v1/mandates/${id}/prepare-step`, { refreshKey: `web-${Date.now()}` }),
   submit: (id: string, n: string, txHash: `0x${string}`) => api<MandateStepView>("POST", `v1/mandates/${id}/steps/${n}/submissions`, { txHash }),
   bundle: (id: string) => api<EvidenceBundle>("GET", `v1/mandates/${id}/bundle`),
@@ -219,71 +212,6 @@ export const shares = {
   create: (body: { kind: "job" | "mandate" | "simulation"; refId: string; public: boolean; privacy: { amounts: "exact" | "range" | "hidden"; wallet: "hidden" } }) => api<ShareView>("POST", "v1/shares", body),
 };
 /** 公开读取走 /api/pub 代理（无 API key） */
-/**
- * 服务端公开战报（C2）与页面类型（E2）字段名不完全一致，在这一处归一化（I2 2026-09-21）：
- * headline 字符串 + headlineZh → {en,zh}；goal.input/output(s)/amount|budget → inputSymbol/outputSymbols/amountDisplay；
- * result.reasonDetails|reasons → [{code,severity}]；execution.txHash → evidence.txHashes。
- */
-export function normalizePublicReport(raw: unknown): PublicReport | null {
-  if (!raw || typeof raw !== "object") return null;
-  const r = raw as Record<string, unknown>;
-  if (typeof r["shareId"] !== "string") return null;
-  const goal = (r["goal"] ?? {}) as Record<string, unknown>;
-  const result = (r["result"] ?? {}) as Record<string, unknown>;
-  const execution = (result["execution"] ?? null) as { txHash?: string | null; received?: string | null } | null;
-  const rec = (result["recommended"] ?? null) as { completionBps?: number } | boolean | null;
-  const headline = typeof r["headline"] === "string" ? { en: r["headline"] as string, zh: (r["headlineZh"] as string | undefined) ?? (r["headline"] as string) } : (r["headline"] as { en: string; zh: string } | null);
-  const outputs = (goal["outputSymbols"] as string[] | undefined) ?? (goal["outputs"] as Array<string | null> | undefined)?.filter((x): x is string => !!x) ?? (typeof goal["output"] === "string" ? [goal["output"] as string] : []);
-  const reasons =
-    (result["reasonDetails"] as Array<{ code: string; severity: string }> | undefined) ??
-    ((result["reasons"] as Array<string | { code: string; severity?: string }> | undefined) ?? []).map((x) => (typeof x === "string" ? { code: x, severity: "info" } : { code: x.code, severity: x.severity ?? "info" })) ??
-    ((result["blockers"] as string[] | undefined) ?? []).map((code) => ({ code, severity: "block" }));
-  const status = r["status"] as ShareStatus;
-  return {
-    shareId: r["shareId"] as string,
-    kind: (r["kind"] as PublicReport["kind"]) ?? "job",
-    status,
-    persona: (r["persona"] as PublicReport["persona"]) ?? null,
-    headline,
-    goal: {
-      side: ((goal["side"] as string) === "sell" ? "sell" : "buy"),
-      outputSymbols: outputs,
-      inputSymbol: (goal["inputSymbol"] as string | undefined) ?? (goal["input"] as string | undefined) ?? "",
-      policyId: (goal["policyId"] as string | undefined) ?? "",
-      amountDisplay: (goal["amountDisplay"] as string | null | undefined) ?? (goal["amount"] as string | null | undefined) ?? (goal["budget"] as string | null | undefined) ?? null,
-    },
-    result: {
-      verdict: (result["verdict"] as string | undefined) ?? (typeof rec === "object" && rec ? "eligible" : null),
-      completionBps: (result["completionBps"] as number | undefined) ?? (typeof rec === "object" && rec && typeof rec.completionBps === "number" ? rec.completionBps : status === "completed" ? 10_000 : null),
-      spentDisplay: (result["spentDisplay"] as string | null | undefined) ?? null,
-      receivedDisplay: (result["receivedDisplay"] as string | null | undefined) ?? execution?.received ?? null,
-      feesDisplay: (result["feesDisplay"] as string | null | undefined) ?? null,
-      reasons,
-      waitingOn: (result["waitingOn"] as string | null | undefined) ?? (typeof result["latestDelta"] === "string" ? (result["latestDelta"] as string) : null),
-    },
-    evidence: (r["evidence"] as PublicReport["evidence"] | undefined) ?? {
-      evidenceHash: (result["evidenceHash"] as string | null | undefined) ?? null,
-      reportHash: (result["reportHash"] as string | null | undefined) ?? (result["planHash"] as string | null | undefined) ?? null,
-      bundleUrl: ((r["verifier"] as { bundleUrl?: string | null } | undefined)?.bundleUrl ?? null),
-      txHashes: execution?.txHash ? [execution.txHash] : [],
-    },
-    check: (result["check"] as PublicReport["check"] | undefined) ?? null,
-    templateId: (r["templateId"] as string | null | undefined) ?? null,
-    evidenceMode: ((r["evidenceMode"] as string | null | undefined) ?? "LIVE") as PublicReport["evidenceMode"],
-    createdAt: (r["createdAt"] as string | undefined) ?? new Date(0).toISOString(),
-  };
-}
-
-export async function pubReport(shareId: string): Promise<{ status: number; data: PublicReport }> {
-  const res = await fetch(`/api/pub/reports/${shareId}`, { cache: "no-store" });
-  const raw = await res.json().catch(() => null);
-  return { status: res.status, data: normalizePublicReport(raw) as PublicReport };
-}
-export async function pubList(): Promise<{ status: number; data: { items: PublicReport[] } }> {
-  const res = await fetch(`/api/pub/reports`, { cache: "no-store" });
-  const raw = (await res.json().catch(() => ({ items: [] }))) as { items?: unknown[] };
-  return { status: res.status, data: { items: (raw.items ?? []).map(normalizePublicReport).filter((x): x is PublicReport => x !== null) } };
-}
 
 export type { PlanCandidate };
 
@@ -410,6 +338,22 @@ export interface RecapView {
   milestones: Array<{ id: string; label: { en: string; zh: string }; at: string; evidence: { refId: string; txHash?: string | null } }>;
   remixable: Array<{ refId: string; refKind: "mandate" | "task"; structure: { side: "buy" | "sell"; inputAssetKey: string; outputAssetKeys: string[]; policyId?: string; steps: number }; remixHref: string }>;
   share: { public: boolean; hideAssets: boolean; hideAmounts: boolean; shareId: string | null; publicUrl: string | null };
+  /** v7 R4：该 owner 在这个纽约交易日的 Agent 段（服务端 recaps/agentJournal.ts AgentJournalDay；旧部署没有） */
+  agent?: AgentJournalDayView;
+}
+/** = apps/verify-service/src/recaps/agentJournal.ts AgentJournalDay（只读视图；页面一律当可选） */
+export interface AgentJournalDayView {
+  date: string;
+  tz: "America/New_York";
+  window: { startUtc: string; endUtc: string };
+  taskIds: string[];
+  runs: { total: number; byState: Record<string, number>; byReason: Record<string, number>; byMode: Record<string, number>; items: Array<{ taskId: string; runId: string; turnVersion: number; reason: string; mode: string; state: string; at: string; model: string | null; action: { kind: string; ref: string; status: string } | null; decisionSummary: string | null; nextCheckAt: string | null; costUsdMicros: string | null }> };
+  actions: { total: number; byType: Record<string, number>; items: Array<{ taskId: string; at: string; type: string; actor: string; note: string | null }> };
+  waits: Array<{ taskId: string; at: string; type: string; actor: string; note: string | null; source: "timeline" | "run"; nextCheckAt: string | null; invalidation: string | null }>;
+  fills: Array<{ taskId: string; mandateId: string; side: "buy" | "sell"; stepIndex: number; at: string; spentRaw: string | null; receivedRaw: string | null; txHash: string | null }>;
+  cost: { totalUsdMicros: string; byMode: Record<string, string>; inputTokens: number; outputTokens: number; cacheReadTokens: number; runsWithoutCost: number };
+  faults: Array<{ taskId: string; at: string; type: string; actor: string; note: string | null }>;
+  recoveries: Array<{ taskId: string; at: string; type: string; actor: string; note: string | null }>;
 }
 export interface RecapPendingView {
   status: "pending";
@@ -447,7 +391,11 @@ export function notReady(r: { status: number; data: unknown }): boolean {
 /** {task:{…}} 或平铺 → Task */
 export function normalizeTask(raw: Raw): Raw {
   const t = isObj(raw["task"]) ? raw["task"] : raw;
-  return { ...raw, task: { ...t, blockers: Array.isArray(t["blockers"]) ? t["blockers"] : [], mandateIds: Array.isArray(t["mandateIds"]) ? t["mandateIds"] : [], executorPresence: t["executorPresence"] ?? "offline", nextCheckAt: t["nextCheckAt"] ?? null }, mandateDraft: raw["mandateDraft"] ?? null, thesisDraft: raw["thesisDraft"] ?? null, budgetAllocation: raw["budgetAllocation"] ?? null };
+  // v7（§12.1）：steps 变成 {buy:{planned,confirmed}, sell:{confirmed}}；原样放进 stepsV7，steps 仍给旧页面需要的 {planned, confirmed}
+  const st = raw["steps"];
+  const v7Steps = isObj(st) && isObj(st["buy"]) ? st : null;
+  const steps = v7Steps ? { planned: Number((v7Steps["buy"] as Raw)["planned"] ?? 0), confirmed: Number((v7Steps["buy"] as Raw)["confirmed"] ?? 0) + Number((isObj(v7Steps["sell"]) ? v7Steps["sell"]["confirmed"] : 0) ?? 0), lastConfirmedAt: null } : st;
+  return { ...raw, ...(v7Steps ? { steps, stepsV7: v7Steps } : {}), task: { ...t, blockers: Array.isArray(t["blockers"]) ? t["blockers"] : [], mandateIds: Array.isArray(t["mandateIds"]) ? t["mandateIds"] : [], executorPresence: t["executorPresence"] ?? "offline", nextCheckAt: t["nextCheckAt"] ?? null }, mandateDraft: raw["mandateDraft"] ?? null, thesisDraft: raw["thesisDraft"] ?? null, budgetAllocation: raw["budgetAllocation"] ?? null };
 }
 function normalizeList<K extends string>(key: K) {
   return (raw: Raw): Raw => ({ ...raw, [key]: Array.isArray(raw[key]) ? raw[key] : Array.isArray(raw["items"]) ? raw["items"] : [] });
@@ -547,3 +495,106 @@ export function contextProvenance(ctx: MarketContext | null | undefined): "live"
   const m = (ctx as { provenance?: { mode?: string } } | null | undefined)?.provenance?.mode;
   return m === "live" || m === "backfill" || m === "sample" ? m : "unknown";
 }
+
+/* ====================================================================== */
+/* v7（Chaconne Agent 决赛升级 · Lane P / P8）——路径按 interfaces §12.8（只含 O 路由），     */
+/* 类型按 contracts.ts「v7 增补」区。冻结契约之外的响应包装形态是页面假设，集中写在这一段，     */
+/* 后端定稿后只改这里。端点未部署（404 not_found / 501 / 502 / 503）→ notReady() 为真，页面显示空态。 */
+/* ====================================================================== */
+export type { Actor, AgentPresence, AgentRunStep, AgentRunSummary, DelegationChecklist, DelegationItem, Eip712TypedData, NeedsOwnerItem, TaskRuntime } from "@chaconne/core/verify";
+import type { Actor as V7Actor, AgentRunStep as V7RunStep, AgentRunSummary as V7RunSummary, AgentMode as V7AgentMode, DelegationChecklist as V7Checklist, Eip712TypedData as V7TypedData, ExecutorMode as V7ExecutorMode, TaskRuntime as V7Runtime } from "@chaconne/core/verify";
+
+/** 时间线 / 活动流的一行（R1/R2：verify_task_timeline 的游标查询；id = 游标） */
+export interface ActivityItem {
+  id: string | number;
+  at: string;
+  actor: V7Actor | string;
+  type: string;
+  ref?: string | null;
+  note?: string | null;
+  data?: Record<string, unknown> | null;
+}
+export interface ActivityPage { items: ActivityItem[]; nextCursor: string | number | null; runtime?: V7Runtime | null }
+export interface TimelinePage { items: ActivityItem[]; nextCursor: string | number | null }
+/** GET /v1/tasks/:id/positions 的一行（§12.8） */
+export interface TaskPosition {
+  assetKey: string;
+  boughtRaw: string;
+  soldRaw: string;
+  netRaw: string;
+  onchainRaw: string | null;
+  sellableRaw: string;
+  avgCostUsd: string | null;
+  coverage?: { coverageBps: number | null; note?: string } | number | null;
+}
+export interface OwnerAllowanceRow {
+  token: `0x${string}`;
+  assetKey: string;
+  onchainRaw: string;
+  requiredRaw: string;
+  /** onchain − required（服务端给；没给时页面自己算） */
+  excessRaw?: string;
+  pendingPermit: boolean;
+}
+export interface OwnerAllowancesView { owner: string; spender?: string; allowances: OwnerAllowanceRow[] }
+/** POST /v1/owners/:owner/allowances/reclaim 的响应：一条 purpose=reclaim 的 ISSUED permit */
+export interface ReclaimIssued { permitRequestId: string; token: `0x${string}`; assetKey?: string; value: string; typedData: V7TypedData; explain?: { zh: string; en: string } }
+export interface PermitAccepted { permitId?: string; jobId?: string; state?: string; checklist?: V7Checklist }
+export interface TaskRunsView { runs: V7RunSummary[]; nextCursor?: string | null }
+export interface TaskRunDetail { run: V7RunSummary; steps: V7RunStep[] }
+export interface MemoryNote { at: string; text: string; by?: string }
+export interface QuoteItem { side: "buy" | "sell"; assetKey: string; amountInRaw: string }
+export interface QuoteResult { executableUsdPerShare: string | null; priceImpactBps: number | null; minOutRaw: string | null; reference: { priceUsd: string | null; kind: string; ageS: number | null } | null; deviationBps: number | null; session: string; evidenceIds: string[] }
+export interface ShareActivityView { shareId: string; url?: string | null; publicUrl?: string | null }
+export interface HandoverBody { agent?: V7AgentMode | null; executor?: V7ExecutorMode }
+/** GET /v1/tasks/:id 的 v7 追加字段（§12.1）；旧部署没有这些字段，页面一律当可选 */
+export interface TaskV7Extras {
+  runtime?: V7Runtime | null;
+  delegation?: Partial<V7Checklist> | null;
+  positions?: TaskPosition[] | null;
+  stepsV7?: { buy: { planned: number; confirmed: number }; sell: { confirmed: number } } | null;
+}
+/** v7 的 steps 是 {buy, sell}；与 v6 的 {planned, confirmed} 区分开 */
+export function taskV7Extras(view: unknown): TaskV7Extras {
+  const v = isObj(view) ? view : {};
+  const st = isObj(v["stepsV7"]) ? v["stepsV7"] : v["steps"];
+  const steps = isObj(st) && isObj(st["buy"]) ? (st as unknown as TaskV7Extras["stepsV7"]) : null;
+  const p = v["positions"];
+  const pos = Array.isArray(p) ? (p as TaskPosition[]) : isObj(p) && Array.isArray(p["items"]) ? (p["items"] as TaskPosition[]) : null;
+  return { runtime: isObj(v["runtime"]) ? (v["runtime"] as unknown as V7Runtime) : null, delegation: isObj(v["delegation"]) ? (v["delegation"] as Partial<V7Checklist>) : null, positions: pos, stepsV7: steps };
+}
+const normActivity = (raw: Raw): Raw => ({ ...raw, items: Array.isArray(raw["items"]) ? raw["items"] : Array.isArray(raw["entries"]) ? raw["entries"] : [], nextCursor: raw["nextCursor"] ?? raw["cursor"] ?? null, runtime: isObj(raw["runtime"]) ? raw["runtime"] : null });
+const normPositions = (raw: Raw): Raw => ({ ...raw, positions: Array.isArray(raw["positions"]) ? raw["positions"] : Array.isArray(raw["items"]) ? raw["items"] : [] });
+const normAllowances = (raw: Raw): Raw => ({ ...raw, allowances: Array.isArray(raw["allowances"]) ? raw["allowances"] : Array.isArray(raw["items"]) ? raw["items"] : [] });
+const normRuns = (raw: Raw): Raw => ({ ...raw, runs: Array.isArray(raw["runs"]) ? raw["runs"] : Array.isArray(raw["items"]) ? raw["items"] : [] });
+const normRun = (raw: Raw): Raw => ({ run: isObj(raw["run"]) ? raw["run"] : raw, steps: Array.isArray(raw["steps"]) ? raw["steps"] : [] });
+const normMemory = (raw: Raw): Raw => ({ ...raw, notes: Array.isArray(raw["notes"]) ? raw["notes"] : Array.isArray(raw["items"]) ? raw["items"] : [] });
+export function normalizeChecklist(raw: Raw): Raw {
+  const c = isObj(raw["delegation"]) ? raw["delegation"] : raw;
+  return { ...c, items: Array.isArray(c["items"]) ? c["items"] : [], counts: isObj(c["counts"]) ? c["counts"] : { signaturesNeeded: 0, signaturesDone: 0, userTransactions: 0 }, allowances: Array.isArray(c["allowances"]) ? c["allowances"] : [], sellReady: isObj(c["sellReady"]) ? c["sellReady"] : {}, buyReady: c["buyReady"] === true, complete: c["complete"] === true };
+}
+
+export const v7 = {
+  /** 委托清单；为需要的 permit 登记 ISSUED 请求（每次 GET 都可能拿到新的 permitRequestId） */
+  delegation: (id: string) => mapOk<V7Checklist>(api("GET", `v1/tasks/${id}/delegation`), normalizeChecklist),
+  /** 签一份授权（买入 = "buy"，卖出 = "sell:<assetKey>"）；clientRequestId 每项固定，重试幂等（§2.4） */
+  authorizeItem: (id: string, body: { itemId: string; typedData: unknown; signature: `0x${string}`; outputSet?: `0x${string}`[] }) => mapOk<TaskCreated & { mandateId?: string; error?: string; message?: string }>(api("POST", `v1/tasks/${id}/authorize`, { ...body, clientRequestId: `${id}:auth:${body.itemId}` }), normalizeTask),
+  submitAllowance: (id: string, body: { permitRequestId: string; signature: `0x${string}` }) => api<PermitAccepted & { error?: string; message?: string }>("POST", `v1/tasks/${id}/allowances`, body),
+  refreshDelegation: (id: string) => mapOk<V7Checklist>(api("POST", `v1/tasks/${id}/delegation/refresh`, {}), normalizeChecklist),
+  ownerAllowances: (owner: string) => mapOk<OwnerAllowancesView>(api("GET", `v1/owners/${owner.toLowerCase()}/allowances`), normAllowances),
+  reclaim: (owner: string, token: string) => api<ReclaimIssued & { error?: string; message?: string }>("POST", `v1/owners/${owner.toLowerCase()}/allowances/reclaim`, { token }),
+  submitReclaim: (owner: string, body: { permitRequestId: string; signature: `0x${string}` }) => api<PermitAccepted & { error?: string; message?: string }>("POST", `v1/owners/${owner.toLowerCase()}/allowances/submit`, body),
+  handover: (id: string, body: HandoverBody) => mapOk<TaskCreated & TaskV7Extras & { error?: string; message?: string }>(api("POST", `v1/tasks/${id}/handover`, body), normalizeTask),
+  /** 增量活动流：since = 上一页的 nextCursor */
+  activity: (id: string, since?: string | number | null, limit = 50) => mapOk<ActivityPage>(api("GET", `v1/tasks/${id}/activity${q({ since: since ?? undefined, limit })}`), normActivity),
+  timeline: (id: string, cursor?: string | number | null, limit = 100) => mapOk<TimelinePage>(api("GET", `v1/tasks/${id}/timeline${q({ cursor: cursor ?? undefined, limit })}`), normActivity),
+  runs: (id: string) => mapOk<TaskRunsView>(api("GET", `v1/tasks/${id}/runs`), normRuns),
+  run: (id: string, runId: string) => mapOk<TaskRunDetail>(api("GET", `v1/tasks/${id}/runs/${runId}`), normRun),
+  positions: (id: string) => mapOk<{ positions: TaskPosition[] }>(api("GET", `v1/tasks/${id}/positions`), normPositions),
+  agentContext: (id: string) => api<Record<string, unknown>>("GET", `v1/tasks/${id}/agent-context`),
+  quotes: (id: string, items: QuoteItem[]) => api<{ quotes: QuoteResult[] }>("POST", `v1/tasks/${id}/quotes`, { items }),
+  memory: (id: string) => mapOk<{ notes: MemoryNote[] }>(api("GET", `v1/tasks/${id}/memory`), normMemory),
+  addMemory: (id: string, text: string) => api<{ notes: MemoryNote[] }>("POST", `v1/tasks/${id}/memory`, { text, clientRequestId: `web-${id}-${Date.now()}` }),
+  shareActivity: (id: string) => api<ShareActivityView & { error?: string }>("POST", `v1/tasks/${id}/share-activity`, {}),
+};
+

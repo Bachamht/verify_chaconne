@@ -9,8 +9,6 @@
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit",
     "probe": "tsx --env-file-if-exists=.env --env-file-if-exists=../../.env scripts/probe.ts",
-    "fork:execute": "tsx --env-file-if-exists=.env scripts/forkExecute.ts",
-    "mainnet:execute": "tsx --env-file-if-exists=../../.qa-live/demo-wallet.env scripts/mainnetExecute.ts",
     "x402:buy": "tsx --env-file-if-exists=../../.qa-live/demo-wallet.env scripts/x402Buy.ts",
     "ops": "tsx --env-file-if-exists=.env scripts/ops.ts",
     "probe:v5": "tsx --env-file-if-exists=.env scripts/probeV5.ts",
@@ -24,6 +22,7 @@
   "dependencies": {
     "@chaconne/core": "workspace:*",
     "@chaconne/db": "workspace:*",
+    "@chaconne/verify-exec": "workspace:*",
     "@okxweb3/x402-core": "0.1.0",
     "@okxweb3/x402-evm": "0.2.1",
     "@okxweb3/x402-express": "0.1.1",

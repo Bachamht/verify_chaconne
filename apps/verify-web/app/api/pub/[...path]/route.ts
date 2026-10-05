@@ -1,8 +1,10 @@
-/** 公开战报代理：/api/pub/reports[/:shareId] → VERIFY_SERVICE_URL/pub/reports…（无 API key、无 cookie；同源便于 CSP） */
+/** 公开战报代理：/api/pub/reports[/:shareId] → VERIFY_SERVICE_URL/pub/reports…（无 API key、无 cookie；同源便于 CSP）
+ *  v7：/api/pub/tasks/:shareId/activity → 公开值守看板（服务端只输出类别与时间，缓存 5 s；这里也只缓存 5 s） */
 import { NextResponse, type NextRequest } from "next/server";
 
 const SERVICE = process.env["VERIFY_SERVICE_URL"] ?? "http://127.0.0.1:8790";
-const ALLOWED = /^reports(\/[A-Za-z0-9_-]+)?$/;
+const ALLOWED = /^(reports(\/[A-Za-z0-9_-]+)?|tasks\/[A-Za-z0-9_-]+\/activity)$/;
+const TASK_ACTIVITY = /^tasks\//;
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   const { path } = await ctx.params;
@@ -16,5 +18,5 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
     return NextResponse.json({ error: "service_unreachable" }, { status: 502 });
   }
   const text = await res.text();
-  return new NextResponse(text, { status: res.status, headers: { "content-type": res.headers.get("content-type") ?? "application/json", "cache-control": "public, max-age=30" } });
+  return new NextResponse(text, { status: res.status, headers: { "content-type": res.headers.get("content-type") ?? "application/json", "cache-control": TASK_ACTIVITY.test(joined) ? "public, max-age=5" : "public, max-age=30" } });
 }

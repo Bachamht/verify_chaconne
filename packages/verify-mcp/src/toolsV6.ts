@@ -73,14 +73,14 @@ export function isNotAvailable(r: HttpResult): boolean {
 function v6(endpoint: string, r: HttpResult, summary: (b: Record<string, unknown>) => string): ToolResult {
   return isNotAvailable(r) ? notAvailable(endpoint, r) : fromHttp(r, summary);
 }
-async function call(c: VerifyClient, endpoint: string, method: "GET" | "POST" | "PUT", path: string, body: unknown, summary: (b: Record<string, unknown>) => string): Promise<ToolResult> {
+export async function call(c: VerifyClient, endpoint: string, method: "GET" | "POST" | "PUT", path: string, body: unknown, summary: (b: Record<string, unknown>) => string): Promise<ToolResult> {
   try {
     return v6(endpoint, await c.call(method, path, body), summary);
   } catch (e) {
     return fail("service_unreachable", `${endpoint}: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`);
   }
 }
-const qs = (q: Record<string, string | number | undefined>) => {
+export const qs = (q: Record<string, string | number | undefined>) => {
   const p = Object.entries(q).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
   return p.length ? `?${p.join("&")}` : "";
 };
@@ -228,8 +228,8 @@ export function registerV6Tools(server: McpServer, d: V6Deps): void {
   );
   server.registerTool(
     "add_thesis_review_item",
-    { title: "Add a thesis review item", description: "POST /v1/theses/:id/review-items. Appends a support/counter item with a source URL to a research premise. Owner/agent only; never triggers execution.", inputSchema: { thesisId: z.string().min(1), premiseId: z.string().min(1), side: z.enum(["support", "counter"]), text: z.string().min(1), sourceUrl: z.string().url() } },
-    async (a) => call(c, "POST /v1/theses/:id/review-items", "POST", `/v1/theses/${a.thesisId}/review-items`, { premiseId: a.premiseId, side: a.side, text: a.text, sourceUrl: a.sourceUrl, addedBy: "agent" }, () => `review item added to ${a.thesisId}`),
+    { title: "Add a thesis review item", description: "POST /v1/theses/:id/review-items. Appends a support/counter item with a source URL to a research premise. Owner/agent only; never triggers execution. Deduplicated by clientRequestId (hosted agent: h:<runId>:<seq>).", inputSchema: { thesisId: z.string().min(1), premiseId: z.string().min(1), side: z.enum(["support", "counter"]), text: z.string().min(1), sourceUrl: z.string().url(), clientRequestId: z.string().regex(/^[A-Za-z0-9_\-:.]{1,128}$/).optional().describe("idempotency key") } },
+    async (a) => call(c, "POST /v1/theses/:id/review-items", "POST", `/v1/theses/${a.thesisId}/review-items`, { premiseId: a.premiseId, side: a.side, text: a.text, sourceUrl: a.sourceUrl, addedBy: "agent", ...(a.clientRequestId ? { clientRequestId: a.clientRequestId } : {}) }, () => `review item added to ${a.thesisId}`),
   );
 
   server.registerTool(
@@ -300,12 +300,26 @@ export function registerV6Tools(server: McpServer, d: V6Deps): void {
     {
       title: "Submit a trade intent with your decision record (CV-D16)",
       description: "POST /v1/tasks/:id/intents. You propose WHAT to buy and HOW MUCH inside the task's signed scope, plus a decision record (rationale + classified claims). Chaconne runs four checks — facts (which claims the trust tier admits; platform_fact claims are matched to evidence ids), scope (asset set, per-step cap, remaining budget, steps, deadline, allowSell, signed hard constraints), execution (same engine as the toolbox: route / quote / price impact / reference by the task policy) and binding (certificate ↔ mandate ↔ task) — and only then signs a step certificate (LIVE) or reports `simulated` (SIMULATION). Any failed check → HTTP 422 with the intent recorded as `rejected` and every reason listed; the decision record is never a pass. Plan conditions do not block an intent; deviations are recorded as planDeviations. A certificate lives ~120 s: execute it right away (execute_trade_intent in agent-wallet mode).",
-      inputSchema: { taskId: z.string().min(1), clientRequestId: z.string().min(1).max(128), kind: z.enum(["buy", "sell"]).default("buy"), outputAssetKey: ASSET_KEY, amountInRaw: UINT.describe("input-token raw amount (≤ scope.perStepCapRaw)"), decision: DECISION },
+      inputSchema: {
+        taskId: z.string().min(1),
+        clientRequestId: z.string().min(1).max(128).describe("idempotency key; hosted agent uses h:<runId>:<seq>"),
+        kind: z.enum(["buy", "sell"]).default("buy"),
+        outputAssetKey: ASSET_KEY.optional().describe("buy: the stock to buy (required for buy); sell: optional, must equal the funding stablecoin"),
+        assetKey: ASSET_KEY.optional().describe("sell: the stock to sell (required for sell); only this task's own position, ≤ sellableRaw"),
+        amountInRaw: UINT.describe("input-token raw amount: stablecoin for buy (≤ scope.perStepCapRaw), stock token for sell (≤ sellableRaw)"),
+        decision: DECISION,
+        turnVersion: z.number().int().min(0).optional().describe("the turn you are answering (from get_turn_context); only that turn is closed"),
+        nextCheckAt: z.string().optional().describe("ISO time for your next check, ≥ now + 60 s and ≤ scope.deadline"),
+      },
     },
     async (a) => {
-      const r = await c.call<Record<string, unknown>>("POST", `/v1/tasks/${a.taskId}/intents`, { clientRequestId: a.clientRequestId, kind: a.kind, outputAssetKey: a.outputAssetKey, amountInRaw: a.amountInRaw, decision: a.decision });
+      if (a.kind === "buy" && !a.outputAssetKey) return fail("input_required", "a buy intent needs outputAssetKey");
+      if (a.kind === "sell" && !a.assetKey) return fail("input_required", "a sell intent needs assetKey (the stock to sell)");
+      const r = await c.call<Record<string, unknown>>("POST", `/v1/tasks/${a.taskId}/intents`, { clientRequestId: a.clientRequestId, kind: a.kind, ...(a.outputAssetKey ? { outputAssetKey: a.outputAssetKey } : {}), ...(a.assetKey ? { assetKey: a.assetKey } : {}), amountInRaw: a.amountInRaw, decision: a.decision, ...(a.turnVersion !== undefined ? { turnVersion: a.turnVersion } : {}), ...(a.nextCheckAt ? { nextCheckAt: a.nextCheckAt } : {}) });
       if (isNotAvailable(r)) return notAvailable("POST /v1/tasks/:id/intents", r);
       if (r.status === 422 && r.body["intent"]) return ok(intentSummary(r.body), { ...r.body, httpStatus: 422 });
+      // v7：托管轮次已有终结动作 → 409 turn_already_answered（带回已记录的动作），不是错误数据，原样告诉调用方
+      if (r.status === 409 && (r.body["error"] === "turn_already_answered" || r.body["error"] === "intent_revision_limit")) return { content: [{ type: "text", text: `${String(r.body["error"])}: ${String(r.body["message"] ?? "")}` }], structuredContent: { status: 409, ...r.body }, isError: true };
       if (r.status !== 200 && r.status !== 201) return fromHttp(r, () => "");
       const mid = (r.body["intent"] as { step?: { mandateId?: string } | null } | undefined)?.step?.mandateId;
       if (mid) d.heartbeat?.watch(mid);
@@ -331,22 +345,24 @@ export function registerV6Tools(server: McpServer, d: V6Deps): void {
     "report_agent_status",
     {
       title: "Take over a task or report your status (accepted / declined / needs evidence / plan revised / ended)",
-      description: "POST /v1/tasks/:id/agent-status. First call `accepted` with your agent name to take the task over (the owner sees who is handling it and your last response time). When the task wakes you (agentTurn.state=awaiting_agent: conditions clear, blockers changed, step confirmed) and you decide NOT to submit an intent, say so — all four are normal outcomes and are recorded on the task timeline and sent to the owner: `declined` (not now, with why), `needs_evidence` (what you want to see), `plan_revised` (new plan conditions — outside the signed scope, so no re-signing; touching a signed hard constraint is refused with scope_locked), `ended` (you are done: the task is paused service-side; the owner cancels / revokes on-chain). Silence past agentTurn.respondBy is recorded as no_response and nothing happens.",
-      inputSchema: { taskId: z.string().min(1), status: z.enum(["accepted", "declined", "needs_evidence", "plan_revised", "ended"]), note: z.string().min(1).max(1000), agent: z.object({ name: z.string().min(1).max(100) }).optional().describe("who you are; REQUIRED for accepted (take over the task), recommended on every report"), requestedEvidence: z.array(z.string().max(300)).max(8).optional(), plan: z.object({ conditions: z.array(CONDITION).min(1).optional(), text: z.string().max(2000).optional().describe("your current plan in plain words: what to research, which assets, how to use the remaining budget") }).optional().describe("plan_revised needs conditions, text or strategy"), strategy: z.string().max(4000).optional().describe("revised strategy text (kept as a new version)") },
+      description: "POST /v1/tasks/:id/agent-status. First call `accepted` with your agent name to take the task over (the owner sees who is handling it and your last response time). When the task wakes you (agentTurn.state=awaiting_agent: conditions clear, blockers changed, step confirmed, scheduled check, actual value arrived, execution failed) and you decide NOT to submit an intent, say so — all four are normal outcomes and are recorded on the task timeline and sent to the owner: `declined` (not now, with why), `needs_evidence` (what you want to see), `plan_revised` (new plan conditions or strategy — outside the signed scope, so no re-signing; touching a signed hard constraint is refused with scope_locked), `ended` (you are convinced the goal is done or not worth continuing: the task is paused service-side with paused_by=agent, no new turns open, and the owner decides to resume or cancel — it is NOT marked completed). Pass turnVersion (the turn you answer; only that turn is closed), clientRequestId (dedupe; hosted agent h:<runId>:<seq>), nextCheckAt (≥ now + 60 s, ≤ scope.deadline: a scheduled turn opens then) and invalidation (what would change your mind). A hosted turn accepts exactly one terminal action; a second returns 409 turn_already_answered with the recorded one. Silence past agentTurn.respondBy is recorded as no_response and nothing happens.",
+      inputSchema: { taskId: z.string().min(1), status: z.enum(["accepted", "declined", "needs_evidence", "plan_revised", "ended"]), note: z.string().min(1).max(1000), agent: z.object({ name: z.string().min(1).max(100) }).optional().describe("who you are; REQUIRED for accepted (take over the task), recommended on every report"), requestedEvidence: z.array(z.string().max(300)).max(8).optional(), plan: z.object({ conditions: z.array(CONDITION).min(1).optional(), text: z.string().max(2000).optional().describe("your current plan in plain words: what to research, which assets, how to use the remaining budget") }).optional().describe("plan_revised needs conditions, text or strategy"), strategy: z.string().max(4000).optional().describe("revised strategy text (kept as a new version)"), turnVersion: z.number().int().min(0).optional().describe("the turn you are answering"), clientRequestId: z.string().regex(/^[A-Za-z0-9_\-:.]{1,128}$/).optional().describe("idempotency key"), nextCheckAt: z.string().optional().describe("ISO time of your next check (≥ now + 60 s, ≤ scope.deadline)"), invalidation: z.string().min(1).max(500).optional().describe("what evidence would change your mind") },
     },
-    async (a) => call(c, "POST /v1/tasks/:id/agent-status", "POST", `/v1/tasks/${a.taskId}/agent-status`, { status: a.status, note: a.note, agent: a.agent, requestedEvidence: a.requestedEvidence, plan: a.plan, strategy: a.strategy }, (b) => `agent ${a.status} recorded (turn ${String((b["agentTurn"] as { version?: number } | undefined)?.version ?? "?")}); task ${String((b["task"] as { status?: string } | undefined)?.status)}${b["note"] ? ` — ${String(b["note"])}` : ""}`),
+    async (a) => call(c, "POST /v1/tasks/:id/agent-status", "POST", `/v1/tasks/${a.taskId}/agent-status`, { status: a.status, note: a.note, agent: a.agent, requestedEvidence: a.requestedEvidence, plan: a.plan, strategy: a.strategy, turnVersion: a.turnVersion, clientRequestId: a.clientRequestId, nextCheckAt: a.nextCheckAt, invalidation: a.invalidation }, (b) => `agent ${a.status} recorded (turn ${String((b["agentTurn"] as { version?: number } | undefined)?.version ?? "?")}); task ${String((b["task"] as { status?: string } | undefined)?.status)}${b["note"] ? ` — ${String(b["note"])}` : ""}`),
   );
 
   server.registerTool(
     "execute_trade_intent",
     {
       title: "Execute a certified trade intent (agent-wallet mode)",
-      description: "Fetches the intent with its live READY body (GET /v1/tasks/:id/intents/:intentId?step=1), runs the same local and on-chain checks as execute_next_step (mandate digest, step index vs PlanGuard.mandateState, per-step cap, validity, output set, chain allowlist), pre-approves perStepCap, sends PlanGuard.executeStep and reports the tx hash. Refuses without agent-wallet mode, or when the certificate has expired (submit a new intent). Signing a certificate never sends a transaction by itself — this tool does.",
+      description: "For tasks executed by the platform (hosted executor) this returns not_applicable: platform executes. Otherwise fetches the intent with its live READY body (GET /v1/tasks/:id/intents/:intentId?step=1), runs the same local and on-chain checks as execute_next_step (mandate digest, step index vs PlanGuard.mandateState, per-step cap, validity, output set, chain allowlist), pre-approves perStepCap, sends PlanGuard.executeStep and reports the tx hash. Refuses without agent-wallet mode, or when the certificate has expired (submit a new intent). Signing a certificate never sends a transaction by itself — this tool does.",
       inputSchema: { taskId: z.string().min(1), intentId: z.string().min(1), dryRun: z.boolean().default(false) },
     },
     async (a) => {
-      if (!d.wallet) return fail("agent_wallet_disabled", "execute_trade_intent needs agent-wallet mode (AGENT_WALLET_PRIVATE_KEY + AGENT_WALLET_MAX_SPEND_USD + AGENT_WALLET_CHAIN_IDS). Otherwise execute the guardCall from submit_trade_intent with the owner's wallet.");
       const r = await c.call<Record<string, unknown>>("GET", `/v1/tasks/${a.taskId}/intents/${a.intentId}?step=1`);
+      // v7（CV-D21）：托管执行的任务由平台执行身份发送，READY 体不交出 → not_applicable（不是错误）
+      if (r.status === 409 && r.body?.["error"] === "platform_executes") return ok(`not_applicable: platform executes this task (hosted executor); track the job with get_task_activity`, { status: "not_applicable", reason: "platform executes", intentId: a.intentId });
+      if (!d.wallet) return fail("agent_wallet_disabled", "execute_trade_intent needs agent-wallet mode (AGENT_WALLET_PRIVATE_KEY + AGENT_WALLET_MAX_SPEND_USD + AGENT_WALLET_CHAIN_IDS). Otherwise execute the guardCall from submit_trade_intent with the owner's wallet.");
       if (isNotAvailable(r)) return notAvailable("GET /v1/tasks/:id/intents/:intentId", r);
       if (r.status !== 200) return fromHttp(r, () => "");
       const ready = r.body["ready"] as Record<string, unknown> | null | undefined;

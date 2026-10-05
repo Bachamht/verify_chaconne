@@ -69,6 +69,9 @@ export class RecapsService {
     const prev = refresh ? await this.d.store.get(id) : null;
     const recap = buildRecap({ id, owner: ownerLc, window: w, now, mandates, evidenceMode: this.d.sources.evidenceMode(), tasks, eventsAvailable: events !== null });
     if (prev) recap.share = prev.recap.share; // 刷新内容不改分享设置
+    // v7 R4：Agent 段（同一纽约交易日窗口）
+    const agent = this.d.sources.agentJournal ? await this.d.sources.agentJournal(callerId, ownerLc, target, w.dayStartUtc, w.dayEndUtc) : null;
+    if (agent) recap.agent = agent;
     await this.d.store.put(callerId, recap);
     return recap;
   }

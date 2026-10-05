@@ -8,7 +8,7 @@ import { ChainBadge, ModeBadge } from "./Header";
 import { LogoMark, Wordmark } from "./Logo";
 
 export function Footer() {
-  const { t, locale, demo, setDemo } = useI18n();
+  const { t, locale } = useI18n();
   return (
     <footer className="verify-footer">
       <div className="verify-footer-inner">
@@ -27,8 +27,6 @@ export function Footer() {
         <div className="verify-footer-bottom">
           <div className="verify-footer-legal"><p>{t("disclaimer")}</p><p>{t("footer_line")} Chaconne · {t("footer_not_official")}</p></div>
           <div className="verify-footer-status">
-            {/* V-46 / V-47：「投屏模式」从导航挪到页脚，并说明它做什么 */}
-            <button type="button" className="verify-demo-toggle" aria-pressed={demo} title={t("demo_mode_hint")} onClick={() => setDemo(!demo)}>{t("demo_mode")} <span className={demo ? "text-brand-300" : "text-fg-3"}>{demo ? "ON" : "OFF"}</span></button>
             <ModeBadge /><span>{t("footer_network")}</span><ChainBadge />
           </div>
         </div>

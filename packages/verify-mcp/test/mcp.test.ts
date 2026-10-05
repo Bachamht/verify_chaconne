@@ -33,7 +33,7 @@ function fakeBackend(opts: { paid?: boolean } = {}) {
       jobs.set(id, { verdict: "eligible" });
       return json(201, { jobId: id, order: { state: opts.paid ? "REPORT_READY" : "PAID", priceUsd: opts.paid ? "0.01" : "0" }, latestReport: { version: 1, verdict: "eligible" }, executions: [] });
     }
-    const m = /\/v1\/jobs\/([^/?]+)(\/(report|prepare-execution))?/.exec(url);
+    const m = /\/v1\/jobs\/([^/?]+)(\/(report))?/.exec(url);
     if (m) {
       const id = m[1]!;
       if (!jobs.has(id)) return json(404, { error: "job_not_found" });
@@ -41,7 +41,6 @@ function fakeBackend(opts: { paid?: boolean } = {}) {
         if (opts.paid && !headers["payment-signature"]) return json(402, { error: "payment_required" }, { "payment-required": "eyJ4NDAyVmVyc2lvbiI6Mn0" });
         return json(200, { report: { reportVersion: 1, verdict: "eligible", comparisonStatus: "live", marketSession: "REGULAR" }, evidence: [{}, {}, {}] }, headers["payment-signature"] ? { "payment-response": "ok" } : {});
       }
-      if (m[3] === "prepare-execution") return json(200, { attemptId: "exe_1", state: "PREPARED", reportVersion: 2, refreshesRemaining: 1, execution: { validUntil: "2026-09-21T00:00:00.000Z", typedData: {}, certificate: {}, guardCall: { to: "0x44" } } });
       return json(200, { jobId: id, order: { state: "PAID" }, latestReport: { version: 1, verdict: "eligible" }, executions: [{ attemptId: "exe_1", state: "SUBMITTED", txHash: null, validUntil: null, reportVersion: 2 }] });
     }
     return json(404, { error: "not_found" });
@@ -82,7 +81,7 @@ describe("MCP 握手与工具发现（I-03）", () => {
 });
 
 describe("工具调用", () => {
-  it("prepare_verification → purchase_verification（免费）→ prepare_guard_trade → get_execution_status；请求带 key 与 caller", async () => {
+  it("prepare_verification → purchase_verification（免费）；请求带 key 与 caller", async () => {
     const { client, backend, close } = await connect();
     const created = await client.callTool({ name: "prepare_verification", arguments: params });
     const sc = created.structuredContent as Record<string, unknown>;
@@ -90,12 +89,10 @@ describe("工具调用", () => {
     expect(created.isError).toBeFalsy();
     const report = await client.callTool({ name: "purchase_verification", arguments: { jobId: "job_r1" } });
     expect((report.structuredContent as { status: number }).status).toBe(200);
-    const prep = await client.callTool({ name: "prepare_guard_trade", arguments: { jobId: "job_r1", refreshKey: "k1" } });
-    const p = prep.structuredContent as Record<string, unknown>;
-    expect(p["state"]).toBe("PREPARED");
-    expect(((prep.content as Array<{ text: string }>)[0]!).text).toContain("owner signs typedData");
-    const st = await client.callTool({ name: "get_execution_status", arguments: { jobId: "job_r1" } });
-    expect(((st.structuredContent as { executions: unknown[] }).executions).length).toBe(1);
+    // 单笔 Guard 执行 10/5 起删除：没有 prepare_guard_trade / get_execution_status
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    expect(names).not.toContain("prepare_guard_trade");
+    expect(names).not.toContain("get_execution_status");
     // 每个请求都带 API key 与调用方地址；prepare_verification 默认 recipient=owner、mode=exactIn
     expect(backend.seen.every((s) => s.headers["x-api-key"] === "k" && s.headers["x-verify-caller"] === params.ownerAddress)).toBe(true);
     const create = backend.seen.find((s) => s.method === "POST" && s.url.endsWith("/v1/jobs"))!;

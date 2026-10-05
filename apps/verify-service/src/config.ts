@@ -31,7 +31,6 @@ const Env = z.object({
   SIGNER_EPOCH: z.coerce.number().int().min(0).optional().default(1),
 
   EXECUTION_CHAIN_ID: z.coerce.number().int().positive().optional().default(196),
-  GUARD_ADDRESS: z.string().optional().default(""),
   ROUTER_ADDRESS: z.string().optional().default(""),
   SPENDER_ADDRESS: z.string().optional().default(""),
 
@@ -116,6 +115,51 @@ const Env = z.object({
   /* ---- v6（Chaconne Agent；每个能力独立开关，缺省 true，interfaces §11.13）---- */
   /** C9 决策实验（Lane E）：explain-wait / compare-policies / replays；关掉 → 503 feature_disabled */
   AGENT_C9_ENABLED: z.enum(["true", "false"]).optional().default("true"),
+  /* ---- v7（interfaces §12.12；全部缺省关闭，部署验收后由运营者打开） ---- */
+  HOSTED_EXECUTOR_ENABLED: z.enum(["true", "false"]).optional().default("false"),
+  HOSTED_AGENT_ENABLED: z.enum(["true", "false"]).optional().default("false"),
+  AGENT_V7_DELEGATION_ENABLED: z.enum(["true", "false"]).optional().default("false"),
+  AGENT_V7_SELL_ENABLED: z.enum(["true", "false"]).optional().default("false"),
+  AGENT_V7_OUTCOMES_ENABLED: z.enum(["true", "false"]).optional().default("false"),
+  AGENT_V7_COMPARE_ENABLED: z.enum(["true", "false"]).optional().default("false"),
+  FAULT_INJECTION_ENABLED: z.enum(["true", "false"]).optional().default("false"),
+  /** 逗号分隔小写地址；空 = 无人；* = 所有人 */
+  HOSTED_OWNER_ALLOWLIST: z.string().optional().default(""),
+  HOSTED_SIM_PER_OWNER_PER_DAY: z.coerce.number().int().min(0).optional().default(3),
+  PERMIT_RELAY_PER_OWNER_PER_HOUR: z.coerce.number().int().min(0).optional().default(6),
+  PERMIT_RELAY_DAILY_MAX: z.coerce.number().int().min(0).optional().default(50),
+  /** 服务 key 只存 SHA-256（hex，64 位）；空 = 该服务身份不可用（D-093） */
+  VERIFY_EXECUTOR_KEY_SHA256: z.string().optional().default(""),
+  VERIFY_HOSTED_AGENT_KEY_SHA256: z.string().optional().default(""),
+  PERMIT_DOMAINS_FILE: z.string().optional().default("config/permit-domains.xlayer.json"),
+  EXECUTION_EXPIRY_MARGIN_S: z.coerce.number().int().min(0).optional().default(15),
+  EXECUTOR_MIN_CERT_REMAINING_S: z.coerce.number().int().min(0).optional().default(8),
+  CHAIN_RECONCILE_INTERVAL_MS: z.coerce.number().int().positive().optional().default(30000),
+  AUTO_RECERTIFY_MAX: z.coerce.number().int().min(0).optional().default(1),
+  AUTO_RECERTIFY_WINDOW_S: z.coerce.number().int().min(0).optional().default(300),
+  POSITION_DUST_RAW: z.string().regex(/^\d+$/).optional().default("1000000000"),
+  /**
+   * 执行身份费用预算（D-089 修订，运营者确认 2026-10-02：主要保护是费用而不是笔数；单位 OKB wei）。
+   * 发送提交点按 gasLimit × maxFeePerGas 预留、回执后按实际费用结算；成功、失败、permit 代付全部计入。缺省值刻意偏小（见 .env.example）。
+   */
+  FEE_BUDGET_PER_OWNER_DAY_WEI: z.string().regex(/^\d+$/).optional().default("5000000000000000"),
+  FEE_BUDGET_PER_TASK_WEI: z.string().regex(/^\d+$/).optional().default("2000000000000000"),
+  FEE_BUDGET_PLATFORM_DAY_WEI: z.string().regex(/^\d+$/).optional().default("20000000000000000"),
+  /** 服务侧每笔上限：解析出的 gasLimit × maxFeePerGas 超过它 → 拒绝（fee_cap_exceeded）；签名交易无法解析时按它预留 */
+  FEE_MAX_PER_TX_WEI: z.string().regex(/^\d+$/).optional().default("200000000000000"),
+  /** 同一 (授权, 步序) 连续付费失败达到 N 次 → 停止自动换新交易重试，交回 Agent（新意图重新计数） */
+  EXECUTION_PAID_FAILURE_PAUSE_N: z.coerce.number().int().min(1).optional().default(2),
+  /** 模型价格（美元 / 百万 token），按官方价目填，不写死；缺失 → 托管 Agent 不启用并告警 */
+  AGENT_PRICE_INPUT_PER_MTOK_USD: z.string().optional().default(""),
+  AGENT_PRICE_OUTPUT_PER_MTOK_USD: z.string().optional().default(""),
+  AGENT_PRICE_CACHE_READ_PER_MTOK_USD: z.string().optional().default(""),
+  /** 写缓存价（可选；缺省按输入价计） */
+  AGENT_PRICE_CACHE_WRITE_PER_MTOK_USD: z.string().optional().default(""),
+  AGENT_DAILY_USD_CAP_PER_TASK: z.string().regex(/^\d+(\.\d+)?$/).optional().default("2"),
+  AGENT_DAILY_USD_CAP_LIVE_TOTAL: z.string().regex(/^\d+(\.\d+)?$/).optional().default("15"),
+  AGENT_DAILY_USD_CAP_SIM_TOTAL: z.string().regex(/^\d+(\.\d+)?$/).optional().default("5"),
+  AGENT_MIN_RUN_INTERVAL_S: z.coerce.number().int().min(0).optional().default(600),
+  OPERATOR_TELEGRAM_CHAT_ID: z.string().optional().default(""),
   /* ---- v6（Chaconne Agent；每个能力独立开关，缺省 true；9/25 验收没绿的关掉并从材料移除） ---- */
   /** C5 Crew / Missions / Recap：false = /v1/recaps* 与 /v1/missions 不挂载（页面显示「尚未就绪」） */
   AGENT_C5_ENABLED: z.enum(["true", "false"]).optional().default("true"),
@@ -157,7 +201,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   if (paid && !isEvmAddress(e.MERCHANT_RECIPIENT_ADDRESS)) problems.push("收费模式需要合法 MERCHANT_RECIPIENT_ADDRESS");
   if (paid && e.PAYMENT_MODE === "okx" && e.EVIDENCE_MODE === "fixture") problems.push("fixture 证据不得与真实收费同时启用（O-01）");
   if (isProd && e.PAYMENT_MODE === "mock") problems.push("生产环境禁止 mock 支付");
-  if (e.GUARD_ADDRESS && !isEvmAddress(e.GUARD_ADDRESS)) problems.push("GUARD_ADDRESS 非法");
   if (e.PLANGUARD_ADDRESS && !isEvmAddress(e.PLANGUARD_ADDRESS)) problems.push("PLANGUARD_ADDRESS 非法");
   for (const a of e.DEMO_SELF_PAYMENT_ADDRESSES.split(",").map((x) => x.trim()).filter(Boolean)) if (!isEvmAddress(a)) problems.push(`DEMO_SELF_PAYMENT_ADDRESSES 含非法地址 ${a}`);
   if (e.ROUTER_ADDRESS && !isEvmAddress(e.ROUTER_ADDRESS)) problems.push("ROUTER_ADDRESS 非法");
@@ -166,6 +209,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   if (e.REGISTRY_MODE === "file" && !e.REGISTRY_FILE) problems.push("REGISTRY_MODE=file 需要 REGISTRY_FILE");
   if (e.EVIDENCE_MODE === "live" && (!e.OKX_API_KEY || !e.OKX_SECRET_KEY || !e.OKX_PASSPHRASE)) problems.push("EVIDENCE_MODE=live 需要 OKX 凭据");
   if (e.EVIDENCE_MODE === "live" && !e.FINNHUB_API_KEY) problems.push("EVIDENCE_MODE=live 需要 FINNHUB_API_KEY（参考价来源，CV-D02）");
+  for (const [k, v] of [["VERIFY_EXECUTOR_KEY_SHA256", e.VERIFY_EXECUTOR_KEY_SHA256], ["VERIFY_HOSTED_AGENT_KEY_SHA256", e.VERIFY_HOSTED_AGENT_KEY_SHA256]] as const) {
+    if (v && !/^[0-9a-f]{64}$/.test(v)) problems.push(`${k} 必须是 64 位小写 hex（SHA-256），绝不能填明文 key`);
+  }
+  for (const k of ["FEE_BUDGET_PER_OWNER_DAY_WEI", "FEE_BUDGET_PER_TASK_WEI", "FEE_BUDGET_PLATFORM_DAY_WEI", "FEE_MAX_PER_TX_WEI"] as const) if (BigInt(e[k]) <= 0n) problems.push(`${k} 必须大于 0（费用预算不能关闭）`);
+  for (const a of e.HOSTED_OWNER_ALLOWLIST.split(",").map((x) => x.trim()).filter((x) => x && x !== "*")) if (!isEvmAddress(a)) problems.push(`HOSTED_OWNER_ALLOWLIST 含非法地址 ${a}`);
   if (problems.length > 0) throw new Error(`配置护栏拒绝启动：${problems.join("；")}`);
 
   return {
@@ -182,6 +230,25 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     selfPaymentAddresses: new Set(e.DEMO_SELF_PAYMENT_ADDRESSES.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean)),
     /* v6 */
     agentC9Enabled: e.AGENT_C9_ENABLED === "true",
+    /* v7 费用预算（interfaces §12.15） */
+    feeBudget: {
+      perOwnerDayWei: BigInt(e.FEE_BUDGET_PER_OWNER_DAY_WEI),
+      perTaskWei: BigInt(e.FEE_BUDGET_PER_TASK_WEI),
+      platformDayWei: BigInt(e.FEE_BUDGET_PLATFORM_DAY_WEI),
+      maxPerTxWei: BigInt(e.FEE_MAX_PER_TX_WEI),
+    },
+    /* v7（interfaces §12.12） */
+    v7: {
+      hostedExecutor: e.HOSTED_EXECUTOR_ENABLED === "true",
+      hostedAgent: e.HOSTED_AGENT_ENABLED === "true",
+      delegation: e.AGENT_V7_DELEGATION_ENABLED === "true",
+      sell: e.AGENT_V7_SELL_ENABLED === "true",
+      outcomes: e.AGENT_V7_OUTCOMES_ENABLED === "true",
+      compare: e.AGENT_V7_COMPARE_ENABLED === "true",
+      faultInjection: e.FAULT_INJECTION_ENABLED === "true",
+      /** null = 所有人（"*"）；空集合 = 无人 */
+      hostedOwnerAllowlist: e.HOSTED_OWNER_ALLOWLIST.trim() === "*" ? null : new Set(e.HOSTED_OWNER_ALLOWLIST.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean)),
+    },
   };
 }
 

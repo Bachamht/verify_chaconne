@@ -2,10 +2,10 @@
  * 授权计划（W2 服务侧，interfaces §10.2 / §10.4）：登记已签 TradeMandate → 持续评估 → READY 时签发步骤证书 → 执行者提交 → 回执核实。
  * 服务端不发交易（D-081）：只校验签名、签证书、返回 calldata。
  */
-import { and, asc, desc, eq, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt } from "drizzle-orm";
 import { verifyTypedData } from "viem";
 import type { Db } from "@chaconne/db";
-import { verifyMandateEvaluations, verifyMandateSteps, verifyMandates } from "@chaconne/db";
+import { verifyExecutionJobs, verifyMandateEvaluations, verifyMandateSteps, verifyMandates } from "@chaconne/db";
 import {
   buildEffectivePolicy,
   buildReport,
@@ -27,6 +27,10 @@ import {
   HARD_BLOCK_CODES,
   effectivePolicyHash as computeEffectivePolicyHash,
   withConditionsHash,
+  attributeStepEvent,
+  issuanceGate,
+  stepRowExpirable,
+  type IssuanceGateDecision,
   type AssetRegistry,
   type Bytes32,
   type IsoUtc,
@@ -55,6 +59,8 @@ import { callerActsFor } from "../http/auth";
 import type { Orders } from "../payments/orders";
 import { PLANGUARD_ABI } from "../execution/planGuardAbi";
 import type { ReceiptAttempt, ReceiptStore } from "../execution/receipts";
+import type { ServiceChain } from "../execution/chain";
+import type { OpsState } from "../execution/ops";
 
 export type MandateRow = typeof verifyMandates.$inferSelect;
 export type EvaluationRow = typeof verifyMandateEvaluations.$inferSelect;
@@ -107,8 +113,33 @@ export interface EvaluateOptions {
   gate?: (input: EvaluateGateInput) => Promise<EvaluateGateResult>;
   /** false = 只评估不签发（任务建立/授权/恢复后的首评）；缺省签发 */
   issue?: boolean;
+  /** v7：任务层内部调用（绕过 task_bound_mandate 守卫） */
+  viaTask?: boolean;
 }
-export type StepConfirmedListener = (args: { mandateId: string; taskId: string | null; stepIndex: number; spentRaw: string; confirmedAt: Date }) => Promise<void>;
+export type StepConfirmedListener = (args: { mandateId: string; taskId: string | null; stepIndex: number; spentRaw: string; confirmedAt: Date; stepId?: string; side?: "buy" | "sell"; receivedRaw?: string }) => Promise<void>;
+
+/**
+ * v7 执行钩子（开发计划 §2.5，CV-D21 / CV-D24；src/index.ts 装配）。v7 生命周期规则（SUPERSEDED、被取走的行永不删除、签名 validUntil 判到期、
+ * 签发闸门、回执按证书字段归因、挂任务授权不可绕过）只在 HOSTED_EXECUTOR_ENABLED 或 AGENT_V7_DELEGATION_ENABLED 打开时生效；
+ * 两个开关都关 = v6 行为（O-04 回滚演练）。
+ */
+export interface MandateExecutionHooks {
+  chain: ServiceChain | null;
+  ops: OpsState | null;
+  /** EXECUTION_EXPIRY_MARGIN_S */
+  marginS: number;
+  /** 步骤行状态变化 → 作业仓储同步 */
+  onStepState?: (stepId: string, state: string) => Promise<void>;
+  /** 链上回填走的回执路径（= withBudgetSettlement 包装后的 store；结算只发生一次） */
+  receiptStore?: ReceiptStore;
+  /** from_block 缺失时回填向前扫多少块 */
+  defaultLookbackBlocks?: bigint;
+}
+export interface StepAttribution {
+  /** 实际被执行的那张证书所在的步骤行 */
+  stepId: string;
+  superseded: boolean;
+}
 
 export interface MandateJson {
   mandate: TradeMandate;
@@ -125,6 +156,8 @@ export interface MandateJson {
   taskId?: string | null;
   /** CV-D16：范围允许的输出资产（买入）；缺省 = legs 的资产 */
   outputAssetKeys?: string[];
+  /** v7：委托清单项 id（"buy" | "sell:<assetKey>"）；只在委托仪式登记时有 */
+  delegationItemId?: string;
 }
 
 /** 这些阻断原因意味着"等条件变化"，不是"授权本身不可行" */
@@ -140,6 +173,64 @@ export class MandatesService implements ReceiptStore {
   setStepConfirmedListener(fn: StepConfirmedListener | null): void {
     this.stepListener = fn;
   }
+  /* ---------- v7 执行钩子与生命周期规则 ---------- */
+  private exec: MandateExecutionHooks | null = null;
+  setExecutionHooks(h: MandateExecutionHooks | null): void {
+    this.exec = h;
+  }
+  get executionHooks(): MandateExecutionHooks | null {
+    return this.exec;
+  }
+  /** v7 生命周期规则是否生效（两个开关都关 = v6 行为） */
+  get v7(): boolean {
+    return this.d.cfg.v7.hostedExecutor || this.d.cfg.v7.delegation;
+  }
+  private get marginS(): number {
+    return this.exec?.marginS ?? this.d.cfg.EXECUTION_EXPIRY_MARGIN_S;
+  }
+  /** 证书里签名的 validUntil（unix 秒）；不用可变的 valid_until 列 */
+  static signedValidUntil(s: Pick<StepRow, "certificateJson" | "validUntil">): number {
+    const v = Number((s.certificateJson as { certificate?: { validUntil?: string } } | null)?.certificate?.validUntil);
+    return Number.isFinite(v) && v > 0 ? v : Math.floor(s.validUntil.getTime() / 1000);
+  }
+  async rowsAt(mandateId: string, stepIndex: number): Promise<StepRow[]> {
+    return this.d.db.select().from(verifyMandateSteps).where(and(eq(verifyMandateSteps.mandateId, mandateId), eq(verifyMandateSteps.stepIndex, stepIndex))).orderBy(asc(verifyMandateSteps.createdAt));
+  }
+  async stepById(id: string): Promise<StepRow | null> {
+    return (await this.d.db.select().from(verifyMandateSteps).where(eq(verifyMandateSteps.id, id)).limit(1))[0] ?? null;
+  }
+  /** 活行（部分唯一索引约束的那一条） */
+  static liveRow(rows: StepRow[]): StepRow | null {
+    return rows.find((r) => ["PREPARED", "SUBMITTED", "REORG_PENDING", "CONFIRMED", "UNKNOWN"].includes(r.state)) ?? null;
+  }
+  private async chainSteps(row: MandateRow): Promise<number | null> {
+    if (!this.exec?.chain) return null;
+    try {
+      return (await this.exec.chain.mandateState(row.planGuardAddress as `0x${string}`, row.mandateDigest as `0x${string}`)).steps;
+    } catch (err) {
+      log.warn("签发闸门读取链上步序失败（跳过第 1 条，闸门 3 / 4 仍生效）", { mandateId: row.id, error: err instanceof Error ? err.message.slice(0, 200) : String(err) });
+      return null;
+    }
+  }
+  /** 签发闸门（§2.5 第 1–5 条）：给授权 M 的第 stepsDone 步签发前调用 */
+  async issuanceGateFor(row: MandateRow): Promise<IssuanceGateDecision> {
+    const rows = await this.rowsAt(row.id, row.stepsDone);
+    const jobs = await this.d.db.select({ state: verifyExecutionJobs.state }).from(verifyExecutionJobs).where(and(eq(verifyExecutionJobs.mandateId, row.id), eq(verifyExecutionJobs.stepIndex, row.stepsDone)));
+    return issuanceGate({ chainSteps: await this.chainSteps(row), stepsDone: row.stepsDone, rows: rows.map((r) => ({ id: r.id, state: r.state, pulled: !!r.pulledAt, signedValidUntil: MandatesService.signedValidUntil(r) })), jobs, nowSec: Math.floor(this.now().getTime() / 1000), marginS: this.marginS });
+  }
+  /** 闸门第 5 条的落库：未被取走的旧行删除，被取走过的旧行标 SUPERSEDED */
+  private async clearForReissue(d: Extract<IssuanceGateDecision, { action: "issue" }>): Promise<void> {
+    const now = this.now();
+    if (d.deleteIds.length) await this.d.db.delete(verifyMandateSteps).where(and(inArray(verifyMandateSteps.id, d.deleteIds), isNull(verifyMandateSteps.pulledAt)));
+    if (d.supersedeIds.length) {
+      await this.d.db.update(verifyMandateSteps).set({ state: "SUPERSEDED", updatedAt: now }).where(and(inArray(verifyMandateSteps.id, d.supersedeIds), isNotNull(verifyMandateSteps.pulledAt)));
+      for (const id of d.supersedeIds) await this.exec?.onStepState?.(id, "SUPERSEDED");
+    }
+  }
+  /** 闸门 WAIT → 原因 */
+  static gateReason(d: Extract<IssuanceGateDecision, { action: "wait" }>, stepIndex: number): Reason {
+    return { code: d.code, severity: "info", evidenceIds: [], detail: { stepIndex, ...(d.nextCheckAtSec ? { nextCheckAt: new Date(d.nextCheckAtSec * 1000).toISOString() } : {}), note: d.code === "EXECUTION_IN_FLIGHT" ? "a certificate for this step was handed out or is being sent; nothing is re-issued until it is settled or its signed validUntil + margin has passed" : "waiting for on-chain confirmation of this step" } };
+  }
 
   private planGuard(): EvmAddress {
     const a = this.d.cfg.PLANGUARD_ADDRESS;
@@ -149,7 +240,7 @@ export class MandatesService implements ReceiptStore {
 
   /* ---------- 登记 ---------- */
 
-  async register(callerId: string, raw: unknown, internal: { taskId?: string } = {}): Promise<{ status: 200 | 201; row: MandateRow }> {
+  async register(callerId: string, raw: unknown, internal: { taskId?: string; delegationItemId?: string; fromBlock?: string | null } = {}): Promise<{ status: 200 | 201; row: MandateRow }> {
     const planGuard = this.planGuard();
     const b = (raw ?? {}) as Partial<RegisterMandateBody>;
     const errors: Array<{ field: string; code: string }> = [];
@@ -260,7 +351,7 @@ export class MandatesService implements ReceiptStore {
     const nowDate = this.now();
     const priceUsd = sku === "monitor_window" ? this.d.cfg.PRODUCT_PRICE_MONITOR_WINDOW_USD : this.d.cfg.PRODUCT_PRICE_TASK_BUNDLE_USD;
     const free = priceUsd === "0" || Number(priceUsd) === 0;
-    const json: MandateJson = { mandate, domain, inputAssetKey: inEntry!.assetKey, legs, outputSet, side, sku, planId: typeof b.planId === "string" ? b.planId : null, jobId: typeof b.jobId === "string" ? b.jobId : null, conditionsHash, taskId: internal.taskId ?? null, ...(scopeKeys && side === "buy" ? { outputAssetKeys: scopeKeys } : {}) };
+    const json: MandateJson = { mandate, domain, inputAssetKey: inEntry!.assetKey, legs, outputSet, side, sku, planId: typeof b.planId === "string" ? b.planId : null, jobId: typeof b.jobId === "string" ? b.jobId : null, conditionsHash, taskId: internal.taskId ?? null, ...(scopeKeys && side === "buy" ? { outputAssetKeys: scopeKeys } : {}), ...(internal.delegationItemId ? { delegationItemId: internal.delegationItemId } : {}) };
     const [row] = await this.d.db
       .insert(verifyMandates)
       .values({
@@ -290,6 +381,10 @@ export class MandatesService implements ReceiptStore {
         updatedAt: nowDate,
         taskId: internal.taskId ?? null,
         conditionsHash,
+        /* v7：方向与 PlanGuard 实际拉取的代币（买入 = 资金币种；卖出 = 股票）；回填器从 from_block 起扫日志 */
+        side,
+        assetKey: side === "sell" ? legs[0]!.outputAssetKey : inEntry!.assetKey,
+        fromBlock: internal.fromBlock ?? null,
       })
       .onConflictDoNothing()
       .returning();
@@ -402,8 +497,10 @@ export class MandatesService implements ReceiptStore {
 
   /* ---------- 链下状态 ---------- */
 
-  async transition(callerId: string, id: string, to: "PAUSED" | "ACTIVE" | "CANCELLED"): Promise<MandateRow> {
+  async transition(callerId: string, id: string, to: "PAUSED" | "ACTIVE" | "CANCELLED", opts: { viaTask?: boolean } = {}): Promise<MandateRow> {
     const row = await this.requireMandate(callerId, id);
+    // v7：挂在任务上的授权不能绕过任务恢复签发（暂停 / 取消仍允许——停止永远可以）
+    if (this.v7 && to === "ACTIVE" && row.taskId && !opts.viaTask) throw new HttpError(409, "task_bound_mandate", "该授权挂在任务上：请经任务恢复（POST /v1/tasks/:id/resume）");
     const from = row.state as MandateState;
     const allowed: Record<string, MandateState[]> = { PAUSED: ["ACTIVE"], ACTIVE: ["PAUSED"], CANCELLED: ["ACTIVE", "PAUSED", "DRAFT"] };
     if (!allowed[to]!.includes(from)) throw new HttpError(409, "invalid_transition", `${from} → ${to} 不允许`);
@@ -411,18 +508,32 @@ export class MandatesService implements ReceiptStore {
     const [updated] = await this.d.db.update(verifyMandates).set({ state: to, updatedAt: now }).where(and(eq(verifyMandates.id, id), eq(verifyMandates.state, from))).returning();
     if (!updated) throw new HttpError(409, "concurrent_update");
     if (to !== "ACTIVE") {
-      // 暂停/取消：未拉取的 PREPARED 步骤作废
-      await this.d.db.update(verifyMandateSteps).set({ state: "EXPIRED", updatedAt: now }).where(and(eq(verifyMandateSteps.mandateId, id), eq(verifyMandateSteps.state, "PREPARED"), isNull(verifyMandateSteps.txHash)));
+      if (this.v7) {
+        // v7：只作废**未被取走**的 PREPARED 行；已取走的行保持在途直到签名 validUntil + margin（D-088：它仍可能被执行）
+        const voided = await this.d.db.update(verifyMandateSteps).set({ state: "EXPIRED", updatedAt: now }).where(and(eq(verifyMandateSteps.mandateId, id), eq(verifyMandateSteps.state, "PREPARED"), isNull(verifyMandateSteps.txHash), isNull(verifyMandateSteps.pulledAt))).returning({ id: verifyMandateSteps.id });
+        for (const v of voided) await this.exec?.onStepState?.(v.id, "EXPIRED");
+      } else {
+        // 暂停/取消：未拉取的 PREPARED 步骤作废
+        await this.d.db.update(verifyMandateSteps).set({ state: "EXPIRED", updatedAt: now }).where(and(eq(verifyMandateSteps.mandateId, id), eq(verifyMandateSteps.state, "PREPARED"), isNull(verifyMandateSteps.txHash)));
+      }
     }
     return updated;
   }
 
   /* ---------- 评估（monitor 与 prepare-step 共用） ---------- */
 
+  /** v7 委托仪式登记的卖出授权（挂在任务上、side=sell、带 delegationItemId） */
+  static isDelegationSell(row: Pick<MandateRow, "taskId" | "mandateJson">): boolean {
+    const j = row.mandateJson as MandateJson;
+    return !!row.taskId && j.side === "sell" && !!j.delegationItemId;
+  }
+
   /** 下一步的目标腿：按 stepIndex 轮转 */
   private nextStepJob(row: MandateRow): { job: NormalizedJob; outputToken: EvmAddress; amountIn: bigint } | null {
     const json = row.mandateJson as MandateJson;
     const policy = row.policySnapshot as { definition: EffectivePolicy["definition"]; params: EffectivePolicy["params"] };
+    // v7（D-092）：委托仪式里签的卖出授权只按意图签发，绝不按计划（否则会按 sellCapRaw 一次卖光，绕过 sellableRaw）
+    if (MandatesService.isDelegationSell(row)) return null;
     const remaining = BigInt(row.budgetCap) - BigInt(row.spent);
     if (remaining <= 0n || row.stepsDone >= row.maxSteps) return null;
     const leg = json.legs[row.stepsDone % json.legs.length]!;
@@ -454,6 +565,23 @@ export class MandatesService implements ReceiptStore {
   /** 过期未执行的步骤作废（M-13） */
   async expireSteps(): Promise<number> {
     const now = this.now();
+    if (this.v7) {
+      // v7：到期只认证书里签名的 validUntil；被取走过的行要再过 margin，且有 SENDING / SENT 作业时不动
+      const cands = await this.d.db.select().from(verifyMandateSteps).where(and(eq(verifyMandateSteps.state, "PREPARED"), isNull(verifyMandateSteps.txHash)));
+      if (cands.length === 0) return 0;
+      const inflight = new Set((await this.d.db.select({ stepId: verifyExecutionJobs.stepId }).from(verifyExecutionJobs).where(and(inArray(verifyExecutionJobs.state, ["SENDING", "SENT"]), inArray(verifyExecutionJobs.stepId, cands.map((c) => c.id))))).map((j) => j.stepId));
+      const nowSec = Math.floor(now.getTime() / 1000);
+      let n = 0;
+      for (const c of cands) {
+        if (!stepRowExpirable({ pulled: !!c.pulledAt, signedValidUntil: MandatesService.signedValidUntil(c), nowSec, marginS: this.marginS, hasInflightJob: inflight.has(c.id) })) continue;
+        const [u] = await this.d.db.update(verifyMandateSteps).set({ state: "EXPIRED", updatedAt: now }).where(and(eq(verifyMandateSteps.id, c.id), eq(verifyMandateSteps.state, "PREPARED"), isNull(verifyMandateSteps.txHash))).returning({ id: verifyMandateSteps.id });
+        if (u) {
+          n += 1;
+          await this.exec?.onStepState?.(u.id, "EXPIRED");
+        }
+      }
+      return n;
+    }
     const rows = await this.d.db.update(verifyMandateSteps).set({ state: "EXPIRED", updatedAt: now }).where(and(eq(verifyMandateSteps.state, "PREPARED"), isNull(verifyMandateSteps.txHash), lt(verifyMandateSteps.validUntil, now))).returning({ id: verifyMandateSteps.id });
     return rows.length;
   }
@@ -485,6 +613,11 @@ export class MandatesService implements ReceiptStore {
     const policy = row.policySnapshot as { definition: EffectivePolicy["definition"]; params: EffectivePolicy["params"] };
     const eff: EffectivePolicy = { definition: policy.definition, params: policy.params, policyDefinitionHash: row.policyDefinitionHash as `0x${string}`, effectivePolicyHash: row.effectivePolicyHash as `0x${string}` };
 
+    if (!next && MandatesService.isDelegationSell(row)) {
+      // 卖出授权不走计划评估：记一条 WAIT，不改授权状态
+      const [evaluation] = await this.d.db.insert(verifyMandateEvaluations).values({ id: newId("evl"), mandateId: row.id, evaluatedAt: nowDate, status: "WAIT", reportJson: null, reportHash: null, evidenceJson: [], reasonsJson: [], deltaJson: null, preparedStepIndex: null }).returning();
+      return { evaluation: evaluation!, step: null };
+    }
     if (!next) {
       const [evaluation] = await this.d.db.insert(verifyMandateEvaluations).values({ id: newId("evl"), mandateId: row.id, evaluatedAt: nowDate, status: "DONE", reportJson: null, reportHash: null, evidenceJson: [], reasonsJson: [], deltaJson: null, preparedStepIndex: null }).returning();
       if (row.state === "ACTIVE" || row.state === "PAUSED") await this.d.db.update(verifyMandates).set({ state: "COMPLETED", updatedAt: nowDate }).where(eq(verifyMandates.id, row.id));
@@ -523,7 +656,19 @@ export class MandatesService implements ReceiptStore {
       .returning();
 
     let step: StepRow | null = null;
-    if (status === "READY" && row.state === "ACTIVE" && opts.issue !== false) {
+    if (status === "READY" && row.state === "ACTIVE" && opts.issue !== false && this.v7) {
+      const picked = await this.v7PickStep(row, false, () => this.issueStep(row, evaluation!, next, collected.route!, report, collected.evidence));
+      if (picked.wait) {
+        const reasons2 = [...reasons, picked.wait];
+        await this.d.db.update(verifyMandateEvaluations).set({ status: "WAIT", reasonsJson: reasons2 }).where(eq(verifyMandateEvaluations.id, evaluation!.id));
+        return { evaluation: { ...evaluation!, status: "WAIT", reasonsJson: reasons2 }, step: null };
+      }
+      step = picked.step;
+      if (step) {
+        await this.d.db.update(verifyMandateEvaluations).set({ preparedStepIndex: step.stepIndex }).where(eq(verifyMandateEvaluations.id, evaluation!.id));
+        evaluation!.preparedStepIndex = step.stepIndex;
+      }
+    } else if (status === "READY" && row.state === "ACTIVE" && opts.issue !== false) {
       // 已有未过期的 PREPARED 步骤（同 index）→ 复用，不重复签发
       const existing = (await this.d.db.select().from(verifyMandateSteps).where(and(eq(verifyMandateSteps.mandateId, row.id), eq(verifyMandateSteps.stepIndex, row.stepsDone))).limit(1))[0];
       if (existing && (existing.state === "SUBMITTED" || existing.state === "REORG_PENDING" || existing.state === "CONFIRMED")) step = existing;
@@ -563,8 +708,8 @@ export class MandatesService implements ReceiptStore {
     const sd = stepDigest(domain, step);
     const cert: StepCertificate = { stepDigest: sd, evidenceHash: report.evidenceHash, policyDefinitionHash: row.policyDefinitionHash as `0x${string}`, effectivePolicyHash: row.effectivePolicyHash as `0x${string}`, issuedAt: String(issuedAt), validUntil: String(validUntil), signerEpoch: String(this.d.signer.epoch) };
     const signed = await this.d.signer.signStepCertificate(row.chainId, planGuard, cert);
-    // 同 index 旧的 PREPARED/EXPIRED 行：删除后重签（唯一约束 (mandate, stepIndex)）
-    await this.d.db.delete(verifyMandateSteps).where(and(eq(verifyMandateSteps.mandateId, row.id), eq(verifyMandateSteps.stepIndex, row.stepsDone), inArray(verifyMandateSteps.state, ["PREPARED", "EXPIRED"]), isNull(verifyMandateSteps.txHash)));
+    // 同 index 旧的 PREPARED/EXPIRED 行：删除后重签（唯一约束 (mandate, stepIndex)）。v7：被取走过的行永不删除（闸门已把它们标 SUPERSEDED）
+    await this.d.db.delete(verifyMandateSteps).where(and(eq(verifyMandateSteps.mandateId, row.id), eq(verifyMandateSteps.stepIndex, row.stepsDone), inArray(verifyMandateSteps.state, ["PREPARED", "EXPIRED"]), isNull(verifyMandateSteps.txHash), ...(this.v7 ? [isNull(verifyMandateSteps.pulledAt)] : [])));
     const [inserted] = await this.d.db
       .insert(verifyMandateSteps)
       .values({ id: newId("stp"), mandateId: row.id, stepIndex: row.stepsDone, evaluationId: evaluation.id, state: "PREPARED", stepJson: { step, routerCalldata: route.calldata, domain, reportHash: reportHash(report), outputSet: json.outputSet, mandate: json.mandate, mandateSignature: row.signature }, stepDigest: sd, certificateJson: { certificate: cert, signer: this.d.signer.address }, certificateSignature: signed.signature, validUntil: new Date(validUntil * 1000), pulledAt: null, txHash: null, receiptJson: null, createdAt: nowDate, updatedAt: nowDate })
@@ -573,10 +718,102 @@ export class MandatesService implements ReceiptStore {
     return inserted!;
   }
 
+  /**
+   * v7 选步骤：活行已提交 → 复用（evaluate）或 WAIT（意图）；未过期的 PREPARED 活行 → 复用（evaluate）；
+   * 否则过签发闸门：链上超前 → 先回填；在途 → WAIT EXECUTION_IN_FLIGHT；通过 → 清旧行后重签。
+   */
+  private async v7PickStep(row: MandateRow, alwaysReissue: boolean, issue: () => Promise<StepRow>): Promise<{ step: StepRow | null; wait: Reason | null }> {
+    const rows = await this.rowsAt(row.id, row.stepsDone);
+    const live = MandatesService.liveRow(rows);
+    const nowSec = Math.floor(this.now().getTime() / 1000);
+    if (live && ["SUBMITTED", "REORG_PENDING", "CONFIRMED", "UNKNOWN"].includes(live.state)) {
+      if (!alwaysReissue) return { step: live, wait: null };
+      return { step: null, wait: { code: "STEP_AWAITING_CONFIRMATION", severity: "info", evidenceIds: [], detail: { stepIndex: live.stepIndex, txHash: live.txHash, state: live.state } } };
+    }
+    if (!alwaysReissue && live && live.state === "PREPARED" && MandatesService.signedValidUntil(live) > nowSec) return { step: live, wait: null };
+    const d = await this.issuanceGateFor(row);
+    if (d.action === "backfill") {
+      await this.backfillMandate(row).catch((err) => log.warn("链上回填失败", { mandateId: row.id, error: err instanceof Error ? err.message.slice(0, 200) : String(err) }));
+      return { step: null, wait: { code: "STEP_AWAITING_CONFIRMATION", severity: "info", evidenceIds: [], detail: { stepIndex: row.stepsDone, note: "the chain is ahead of our records (executed elsewhere); backfilled from MandateStep logs, re-evaluate" } } };
+    }
+    if (d.action === "wait") return { step: null, wait: MandatesService.gateReason(d, row.stepsDone) };
+    await this.clearForReissue(d);
+    return { step: await issue(), wait: null };
+  }
+
+  /**
+   * 链上回填（§2.5）：mandateState.steps > stepsDone → eth_getLogs(MandateStep, owner, digest)（from_block 起，2 000 块分页）
+   * → 缺失的 index 按证书字段归因到真正被执行的那一行 → 走同一回执路径（withBudgetSettlement 包装，结算只发生一次）。幂等。
+   */
+  async backfillMandate(row0: MandateRow): Promise<{ backfilled: number }> {
+    const chain = this.exec?.chain;
+    if (!chain) return { backfilled: 0 };
+    const row = (await this.byId(row0.id)) ?? row0;
+    const st = await chain.mandateState(row.planGuardAddress as `0x${string}`, row.mandateDigest as `0x${string}`);
+    if (st.steps <= row.stepsDone) return { backfilled: 0 };
+    const head = await chain.head();
+    const lookback = this.exec?.defaultLookbackBlocks ?? 200_000n;
+    const fromBlock = row.fromBlock ? BigInt(row.fromBlock) : head.number > lookback ? head.number - lookback : 0n;
+    const logs = await chain.mandateStepLogs(row.planGuardAddress as `0x${string}`, row.ownerAddress as `0x${string}`, row.mandateDigest as `0x${string}`, fromBlock, head.number);
+    const store = this.exec?.receiptStore ?? this;
+    let n = 0;
+    for (const l of logs.sort((a, b) => Number(a.event.stepIndex) - Number(b.event.stepIndex))) {
+      const idx = Number(l.event.stepIndex);
+      const rows = await this.rowsAt(row.id, idx);
+      if (rows.some((r) => r.state === "CONFIRMED")) continue;
+      const live = MandatesService.liveRow(rows);
+      const target = this.attribute(l.event, rows);
+      if (!target) {
+        this.exec?.ops?.alert("integrity_alert", { taskId: row.taskId, mandateId: row.id, detail: `MandateStep ${idx} (tx ${l.txHash}) matches no issued certificate (evidenceHash/amountIn/outputToken)` });
+        continue;
+      }
+      const confirmations = Number(head.number - l.blockNumber + 1n);
+      // 与回执核实器同一确认深度（RECEIPT_CONFIRMATIONS）：太新的成交这一轮不记 CONFIRMED（链上步序仍超前 → 签发闸门保持 WAIT，不会重签），下一轮再回填
+      if (confirmations < this.d.cfg.RECEIPT_CONFIRMATIONS) continue;
+      const receipt = { txHash: l.txHash, blockNumber: l.blockNumber.toString(), status: "success", confirmations, event: l.event, backfilled: true, checkedAt: this.now().toISOString() };
+      // 被执行的不是活行：活行转 SUPERSEDED（保留证书），成交记到旧行
+      if (live && live.id !== target.id && live.state !== "CONFIRMED") {
+        await this.d.db.update(verifyMandateSteps).set({ state: "SUPERSEDED", updatedAt: this.now() }).where(eq(verifyMandateSteps.id, live.id));
+        await this.exec?.onStepState?.(live.id, "SUPERSEDED");
+      }
+      await this.d.db.update(verifyMandateSteps).set({ txHash: l.txHash.toLowerCase(), updatedAt: this.now() }).where(eq(verifyMandateSteps.id, target.id));
+      await store.applyReceipt(target.id, "CONFIRMED", receipt);
+      n += 1;
+    }
+    return { backfilled: n };
+  }
+
+  /** 回执归因：事件的 evidenceHash / amountIn / outputToken 与哪一行的证书一致（活行优先，再看 SUPERSEDED 与其它被取走过的行） */
+  private attribute(ev: { evidenceHash: string; amountIn: string; outputToken: string }, rows: StepRow[]): StepRow | null {
+    const cand = (r: StepRow) => {
+      const st = (r.stepJson as { step: MandateStep }).step;
+      return { id: r.id, state: r.state, evidenceHash: st.evidenceHash, amountIn: st.amountIn, outputToken: st.outputToken };
+    };
+    const live = MandatesService.liveRow(rows);
+    const others = rows.filter((r) => r !== live && r.state !== "CONFIRMED");
+    const a = attributeStepEvent(ev, live ? cand(live) : null, others.map(cand));
+    if (a.kind === "integrity_alert") return null;
+    return rows.find((r) => r.id === a.id) ?? null;
+  }
+
+  /** 作业制：sent 事件 → 步骤 SUBMITTED（内部；不走带调用方鉴权、按 index 查找、对 EXPIRED 抛 409 的 recordSubmission） */
+  async recordJobSubmission(stepId: string, txHash: string): Promise<StepRow | null> {
+    const step = await this.stepById(stepId);
+    if (!step) return null;
+    if (step.txHash && step.txHash.toLowerCase() !== txHash.toLowerCase()) {
+      this.exec?.ops?.alert("tx_hash_conflict", { mandateId: step.mandateId, detail: `step ${stepId} already has ${step.txHash}, executor reported ${txHash}` });
+      return step;
+    }
+    const [u] = await this.d.db.update(verifyMandateSteps).set({ txHash: txHash.toLowerCase(), state: step.state === "PREPARED" ? "SUBMITTED" : step.state, updatedAt: this.now() }).where(eq(verifyMandateSteps.id, stepId)).returning();
+    return u ?? step;
+  }
+
   /* ---------- prepare-step / submissions ---------- */
 
   async prepareStep(callerId: string, id: string, opts: EvaluateOptions = {}) {
     const row = await this.requireMandate(callerId, id);
+    // v7：挂在任务上的授权不能绕过任务前置链直接签发
+    if (this.v7 && row.taskId && !opts.viaTask) throw new HttpError(409, "task_bound_mandate", "该授权挂在任务上：经任务签发（POST /v1/tasks/:id/intents 或 /prepare-step）");
     if (!["ACTIVE", "PAUSED"].includes(row.state)) throw new HttpError(409, "mandate_not_active", `授权计划状态 ${row.state}`);
     if (row.state === "PAUSED") return { status: "WAIT" as const, reasons: [], delta: null, message: "mandate is paused; no step certificate is issued while paused", step: null, stepIndex: row.stepsDone };
     await this.expireSteps();
@@ -601,6 +838,11 @@ export class MandatesService implements ReceiptStore {
   /** 把一个已签发的 PREPARED 步骤交给执行者（标 pulledAt），返回 READY 体（guardCall / approval / 证书） */
   async pullStep(row: MandateRow, step: StepRow, evaluation: EvaluationRow) {
     if (!step.pulledAt) await this.d.db.update(verifyMandateSteps).set({ pulledAt: this.now(), updatedAt: this.now() }).where(eq(verifyMandateSteps.id, step.id));
+    return this.readyBody(row, step, evaluation);
+  }
+
+  /** READY 体（不标 pulledAt）：作业制任务建作业时放进 payload，由执行身份领取时原子取走 */
+  readyBody(row: MandateRow, step: StepRow, evaluation: EvaluationRow | null) {
     const sv = this.stepView(step);
     const sj = step.stepJson as { outputSet: EvmAddress[]; mandate: TradeMandate; mandateSignature: string };
     return {
@@ -618,7 +860,7 @@ export class MandatesService implements ReceiptStore {
       validUntil: sv.validUntil,
       mandate: sj.mandate,
       mandateSignature: sj.mandateSignature,
-      evaluation: this.evalView(evaluation),
+      evaluation: evaluation ? this.evalView(evaluation) : null,
       guardCall: { to: row.planGuardAddress, functionName: "executeStep", abi: PLANGUARD_ABI, args: { m: sj.mandate, mandateSig: sj.mandateSignature, outputSet: sj.outputSet, s: sv.step, c: sv.certificate, certSig: sv.certificateSignature, routerCalldata: sv.routerCalldata }, argOrder: ["m", "mandateSig", "outputSet", "s", "c", "certSig", "routerCalldata"], value: "0", gasHint: "650000" },
       approval: { token: (row.mandateJson as MandateJson).mandate.inputToken, spender: row.planGuardAddress, amount: sv.step.amountIn, note: "执行者需确保 owner 已向 PlanGuard 授权 ≥ amountIn（一次授权 budgetCap 即可）" },
     };
@@ -629,17 +871,22 @@ export class MandatesService implements ReceiptStore {
    * 与 evaluate() 同一套取证 / 报告 / 状态规则 + 条件闸门（硬约束）；READY 且 ACTIVE 且 issue 才签发。
    * 前提（资产在输出集内、金额 ≤ perStepCap、剩余额度、步数、期限）由调用方（IntentsService 的 scope 核验）先查；这里再兜一次底。
    */
-  async issueIntentStep(row0: MandateRow, a: { outputAssetKey: string; amountIn: bigint; gate?: EvaluateOptions["gate"]; issue: boolean }): Promise<{ evaluation: EvaluationRow; step: StepRow | null; report: VerifyReport | null; evidence: EvidenceRecord[]; reasons: Reason[]; status: MandateEvalStatus }> {
+  async issueIntentStep(row0: MandateRow, a: { outputAssetKey: string; amountIn: bigint; gate?: EvaluateOptions["gate"]; issue: boolean; side?: "buy" | "sell" }): Promise<{ evaluation: EvaluationRow; step: StepRow | null; report: VerifyReport | null; evidence: EvidenceRecord[]; reasons: Reason[]; status: MandateEvalStatus }> {
+    const wantSide = a.side ?? "buy";
     const row = (await this.byId(row0.id)) ?? row0;
     const nowDate = this.now();
     const nowIso = nowDate.toISOString();
     const json = row.mandateJson as MandateJson;
     const policy = row.policySnapshot as { definition: EffectivePolicy["definition"]; params: EffectivePolicy["params"] };
     const eff: EffectivePolicy = { definition: policy.definition, params: policy.params, policyDefinitionHash: row.policyDefinitionHash as `0x${string}`, effectivePolicyHash: row.effectivePolicyHash as `0x${string}` };
-    const outEntry = findEntry(this.d.registry, a.outputAssetKey);
+    // 卖出（v7 X7）：意图给的是股票（a.outputAssetKey 传股票 assetKey），链上输入 = 股票，输出 = 资金币种（registerBody 约定：json.inputAssetKey 存资金币种、legs[0] 存股票）
+    const sell = wantSide === "sell";
+    const inputKey = sell ? json.legs[0]!.outputAssetKey : json.inputAssetKey;
+    const outEntry = findEntry(this.d.registry, sell ? json.inputAssetKey : a.outputAssetKey);
     const remaining = BigInt(row.budgetCap) - BigInt(row.spent);
     const guardReasons: Reason[] = [];
-    if (json.side !== "buy") guardReasons.push({ code: "INTENT_OUT_OF_SCOPE", severity: "block", evidenceIds: [], detail: { field: "kind", note: "mandate is a sell authorization" } });
+    if (json.side !== wantSide) guardReasons.push({ code: "INTENT_OUT_OF_SCOPE", severity: "block", evidenceIds: [], detail: { field: "kind", note: `mandate is a ${json.side} authorization` } });
+    if (sell && a.outputAssetKey.toLowerCase() !== inputKey.toLowerCase()) guardReasons.push({ code: "INTENT_OUT_OF_SCOPE", severity: "block", evidenceIds: [], detail: { field: "assetKey", note: "not the asset of this sell authorization" } });
     if (!outEntry || !json.outputSet.map((t) => t.toLowerCase()).includes(outEntry.tokenAddress.toLowerCase())) guardReasons.push({ code: "INTENT_OUT_OF_SCOPE", severity: "block", evidenceIds: [], detail: { field: "outputAssetKey", note: "not in the authorized output set" } });
     if (a.amountIn <= 0n || a.amountIn > BigInt(json.mandate.perStepCap)) guardReasons.push({ code: "INTENT_OUT_OF_SCOPE", severity: "block", evidenceIds: [], detail: { field: "amountInRaw", note: `must be in (0, perStepCap=${json.mandate.perStepCap}]` } });
     if (a.amountIn > remaining) guardReasons.push({ code: "INTENT_OUT_OF_SCOPE", severity: "block", evidenceIds: [], detail: { field: "amountInRaw", note: `exceeds remaining budget ${remaining}` } });
@@ -650,7 +897,10 @@ export class MandatesService implements ReceiptStore {
       const [evaluation] = await this.d.db.insert(verifyMandateEvaluations).values({ id: newId("evl"), mandateId: row.id, evaluatedAt: nowDate, status: "BLOCKED", reportJson: null, reportHash: null, evidenceJson: [], reasonsJson: guardReasons, deltaJson: null, preparedStepIndex: null }).returning();
       return { evaluation: evaluation!, step: null, report: null, evidence: [], reasons: guardReasons, status: "BLOCKED" };
     }
-    const job: NormalizedJob = { clientRequestId: `${row.id}:intent:${row.stepsDone}:${nowDate.getTime()}`, ownerAddress: row.ownerAddress as EvmAddress, recipientAddress: normalizeAddress(json.mandate.recipient), executionChainId: row.chainId, inputAssetKey: json.inputAssetKey, outputAssetKey: outEntry!.assetKey, amountInRaw: a.amountIn.toString(), mode: "exactIn", policyId: policy.definition.policyId, policyVersion: policy.definition.version, params: policy.params };
+    // 卖出的路由金额：amountIn − SELL_INPUT_TOLERANCE_WEI（rebasing 输入少到 1 wei 时路由不会多拉）；步骤 amountIn 仍为全额
+    const tol = BigInt(this.d.cfg.SELL_INPUT_TOLERANCE_WEI);
+    const routeAmount = sell && a.amountIn > tol ? a.amountIn - tol : a.amountIn;
+    const job: NormalizedJob = { clientRequestId: `${row.id}:intent:${row.stepsDone}:${nowDate.getTime()}`, ownerAddress: row.ownerAddress as EvmAddress, recipientAddress: normalizeAddress(json.mandate.recipient), executionChainId: row.chainId, inputAssetKey: inputKey, outputAssetKey: outEntry!.assetKey, amountInRaw: routeAmount.toString(), mode: "exactIn", policyId: policy.definition.policyId, policyVersion: policy.definition.version, params: policy.params, ...(sell ? { side: "sell" as const } : {}) };
     let collected: Awaited<ReturnType<EvidenceProvider["collect"]>>;
     try {
       collected = await this.d.evidence.collect(job, this.d.registry, nowIso, { executorContract: row.planGuardAddress as EvmAddress });
@@ -677,7 +927,17 @@ export class MandatesService implements ReceiptStore {
     const prev = await this.latestEvaluation(row.id);
     const [evaluation] = await this.d.db.insert(verifyMandateEvaluations).values({ id: newId("evl"), mandateId: row.id, evaluatedAt: nowDate, status, reportJson: report, jobJson: job, reportHash: reportHash(report), evidenceJson: collected.evidence, reasonsJson: reasons, deltaJson: explainDelta((prev?.reportJson as VerifyReport | null) ?? null, report), preparedStepIndex: null }).returning();
     let step: StepRow | null = null;
-    if (status === "READY" && row.state === "ACTIVE" && a.issue) {
+    if (status === "READY" && row.state === "ACTIVE" && a.issue && this.v7) {
+      const picked = await this.v7PickStep(row, true, () => this.issueStep(row, evaluation!, { job, outputToken: outEntry!.tokenAddress, amountIn: a.amountIn }, collected.route!, report, collected.evidence));
+      if (picked.wait) {
+        reasons = [...reasons, picked.wait];
+        await this.d.db.update(verifyMandateEvaluations).set({ reasonsJson: reasons, status: "WAIT" }).where(eq(verifyMandateEvaluations.id, evaluation!.id));
+        return { evaluation: { ...evaluation!, status: "WAIT", reasonsJson: reasons }, step: null, report, evidence: collected.evidence, reasons, status: "WAIT" };
+      }
+      step = picked.step!;
+      await this.d.db.update(verifyMandateEvaluations).set({ preparedStepIndex: step.stepIndex }).where(eq(verifyMandateEvaluations.id, evaluation!.id));
+      evaluation!.preparedStepIndex = step.stepIndex;
+    } else if (status === "READY" && row.state === "ACTIVE" && a.issue) {
       const existing = (await this.d.db.select().from(verifyMandateSteps).where(and(eq(verifyMandateSteps.mandateId, row.id), eq(verifyMandateSteps.stepIndex, row.stepsDone))).limit(1))[0];
       if (existing && (existing.state === "SUBMITTED" || existing.state === "REORG_PENDING" || existing.state === "CONFIRMED")) {
         reasons = [...reasons, { code: "STEP_AWAITING_CONFIRMATION", severity: "info", evidenceIds: [], detail: { stepIndex: existing.stepIndex, txHash: existing.txHash, state: existing.state } }];
@@ -695,7 +955,9 @@ export class MandatesService implements ReceiptStore {
   async recordSubmission(callerId: string, id: string, stepIndex: number, txHash: string): Promise<StepRow> {
     if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) throw new HttpError(400, "invalid_tx_hash");
     await this.requireMandate(callerId, id);
-    const step = (await this.d.db.select().from(verifyMandateSteps).where(and(eq(verifyMandateSteps.mandateId, id), eq(verifyMandateSteps.stepIndex, stepIndex))).limit(1))[0];
+    const atIndex = await this.rowsAt(id, stepIndex);
+    // v7：同 index 可能有 SUPERSEDED 旧行；按 txHash 优先、再取活行
+    const step = atIndex.find((r) => r.txHash && r.txHash.toLowerCase() === txHash.toLowerCase()) ?? MandatesService.liveRow(atIndex) ?? atIndex[atIndex.length - 1];
     if (!step) throw new HttpError(404, "step_not_found");
     if (step.txHash && step.txHash.toLowerCase() !== txHash.toLowerCase()) throw new HttpError(409, "tx_hash_conflict");
     if (step.state === "EXPIRED" && !step.txHash) throw new HttpError(409, "step_expired", "该步骤证书已过期，需重新 prepare-step");
@@ -713,12 +975,35 @@ export class MandatesService implements ReceiptStore {
 
   async applyReceipt(stepId: string, state: "CONFIRMED" | "REVERTED" | "UNKNOWN" | "REORG_PENDING" | "SUBMITTED", receipt: Record<string, unknown>): Promise<void> {
     const now = this.now();
-    const step = (await this.d.db.select().from(verifyMandateSteps).where(eq(verifyMandateSteps.id, stepId)).limit(1))[0];
+    let step = (await this.d.db.select().from(verifyMandateSteps).where(eq(verifyMandateSteps.id, stepId)).limit(1))[0];
     if (!step) return;
+    // v7 回执归因（CV-D24 第 5 点）：事件还要核对 evidenceHash / amountIn / outputToken；与本行不符 → 在同 index 的旧证书里找真正被执行的那张
+    if (this.v7 && state === "CONFIRMED" && step.state !== "CONFIRMED") {
+      const ev = receipt["event"] as { evidenceHash?: string; amountIn?: string; outputToken?: string } | undefined;
+      if (ev?.evidenceHash && ev.amountIn && ev.outputToken) {
+        const rows = await this.rowsAt(step.mandateId, step.stepIndex);
+        const target = this.attribute({ evidenceHash: ev.evidenceHash, amountIn: ev.amountIn, outputToken: ev.outputToken }, rows);
+        if (!target) {
+          this.exec?.ops?.alert("integrity_alert", { mandateId: step.mandateId, detail: `MandateStep ${step.stepIndex} in ${String(receipt["txHash"] ?? "?")} matches no issued certificate for this index` });
+          await this.d.db.update(verifyMandateSteps).set({ state: "UNKNOWN", receiptJson: { ...receipt, reason: "event_attribution_mismatch" }, updatedAt: now }).where(eq(verifyMandateSteps.id, stepId));
+          return;
+        }
+        if (target.id !== step.id) {
+          // 成交记到旧证书那一行；本行（活行）转 SUPERSEDED，保留证书
+          await this.d.db.update(verifyMandateSteps).set({ state: "SUPERSEDED", updatedAt: now }).where(eq(verifyMandateSteps.id, step.id));
+          await this.exec?.onStepState?.(step.id, "SUPERSEDED");
+          await this.d.db.update(verifyMandateSteps).set({ txHash: (receipt["txHash"] as string | undefined)?.toLowerCase() ?? target.txHash, updatedAt: now }).where(eq(verifyMandateSteps.id, target.id));
+          log.info("回执归因到旧证书", { mandateId: step.mandateId, stepIndex: step.stepIndex, executed: target.id, superseded: step.id });
+          step = target;
+          stepId = target.id;
+        }
+      }
+    }
     const wasConfirmed = step.state === "CONFIRMED";
     await this.d.db.update(verifyMandateSteps).set({ state, receiptJson: receipt, updatedAt: now }).where(eq(verifyMandateSteps.id, stepId));
+    if (state !== step.state) await this.exec?.onStepState?.(stepId, state);
     if (state === "CONFIRMED" && !wasConfirmed) {
-      const ev = receipt["event"] as { spent?: string } | undefined;
+      const ev = receipt["event"] as { spent?: string; received?: string } | undefined;
       const row = await this.byId(step.mandateId);
       if (!row) return;
       const spent = (BigInt(row.spent) + BigInt(ev?.spent ?? "0")).toString();
@@ -729,7 +1014,7 @@ export class MandatesService implements ReceiptStore {
       const done = stepsDone >= row.maxSteps || remaining <= 0n || remaining < (minStep < BigInt(json.mandate.perStepCap) ? minStep : BigInt(json.mandate.perStepCap)) / 10n;
       await this.d.db.update(verifyMandates).set({ spent, stepsDone, state: done && (row.state === "ACTIVE" || row.state === "PAUSED") ? "COMPLETED" : row.state, updatedAt: now }).where(eq(verifyMandates.id, row.id));
       log.info("授权计划步骤已确认", { mandateId: row.id, stepIndex: step.stepIndex, spent, stepsDone, completed: done });
-      if (this.stepListener) await this.stepListener({ mandateId: row.id, taskId: row.taskId ?? null, stepIndex: step.stepIndex, spentRaw: ev?.spent ?? "0", confirmedAt: now }).catch((err) => log.warn("任务步骤确认监听失败", { error: err instanceof Error ? err.message : String(err) }));
+      if (this.stepListener) await this.stepListener({ mandateId: row.id, taskId: row.taskId ?? null, stepIndex: step.stepIndex, spentRaw: ev?.spent ?? "0", confirmedAt: now, stepId, side: json.side, receivedRaw: ev?.received ?? "0" }).catch((err) => log.warn("任务步骤确认监听失败", { error: err instanceof Error ? err.message : String(err) }));
     }
   }
 

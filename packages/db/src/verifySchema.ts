@@ -4,17 +4,20 @@
  * 金额一律 text（十进制整数串）；时间 timestamptz；JSON 用 jsonb。
  */
 import {
+  bigserial,
   boolean,
   check,
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   serial,
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -253,6 +256,12 @@ export const verifyMandates = pgTable(
     taskId: text("task_id"),
     /** 授权承诺的条件集哈希（进 effectivePolicyHash 展开参数 → 证书与证据包，K-10） */
     conditionsHash: text("conditions_hash"),
+    /* ---- v7（迁移 0025） ---- */
+    side: text("side").notNull().default("buy"), // buy | sell
+    /** = PlanGuard 实际拉取的代币：买入为资金币种、卖出为股票 */
+    assetKey: text("asset_key"),
+    /** 登记时的区块号（链上回填 eth_getLogs 的起点） */
+    fromBlock: text("from_block"),
   },
   (t) => [unique("verify_mandates_caller_req_uq").on(t.callerId, t.clientRequestId), index("verify_mandates_state_idx").on(t.state), index("verify_mandates_task_idx").on(t.taskId)],
 );
@@ -296,7 +305,11 @@ export const verifyMandateSteps = pgTable(
     createdAt: ts("created_at").notNull(),
     updatedAt: ts("updated_at").notNull(),
   },
-  (t) => [unique("verify_mandate_steps_mandate_step_uq").on(t.mandateId, t.stepIndex), index("verify_mandate_steps_state_idx").on(t.state)],
+  (t) => [
+    /* v7（CV-D24）：只约束「活」状态；SUPERSEDED / EXPIRED / REVERTED 可与一条活行同 index 共存 */
+    uniqueIndex("verify_mandate_steps_live_step_uq").on(t.mandateId, t.stepIndex).where(sql`${t.state} IN ('PREPARED','SUBMITTED','REORG_PENDING','CONFIRMED','UNKNOWN')`),
+    index("verify_mandate_steps_state_idx").on(t.state),
+  ],
 );
 
 /* ---------- 模拟任务：跑规划与规则，不签证书不执行 ---------- */
@@ -434,6 +447,13 @@ export const verifyTasks = pgTable(
     deadline: ts("deadline").notNull(),
     createdAt: ts("created_at").notNull(),
     updatedAt: ts("updated_at").notNull(),
+    /* ---- v7（迁移 0025） ---- */
+    agentMode: text("agent_mode"), // hosted | byo | null
+    executorMode: text("executor_mode"), // hosted | agent_wallet | browser | null
+    nextAgentCheckAt: ts("next_agent_check_at"),
+    delegationJson: jsonb("delegation_json"), // 卖出草案与各委托项状态
+    sellStepsConfirmed: integer("sell_steps_confirmed").notNull().default(0),
+    pausedBy: text("paused_by"), // owner | agent | system | null
   },
   (t) => [unique("verify_tasks_caller_req_uq").on(t.callerId, t.clientRequestId), index("verify_tasks_owner_idx").on(t.ownerAddress), index("verify_tasks_status_idx").on(t.status, t.nextCheckAt)],
 );
@@ -460,6 +480,12 @@ export const verifyTaskIntents = pgTable(
     evidenceIdsJson: jsonb("evidence_ids_json").notNull(),
     createdAt: ts("created_at").notNull(),
     updatedAt: ts("updated_at").notNull(),
+    /* ---- v7（迁移 0025） ---- */
+    assetKey: text("asset_key"),
+    turnVersion: integer("turn_version"),
+    attempts: integer("attempts").notNull().default(1),
+    jobId: text("job_id"),
+    nextCheckAt: ts("next_check_at"),
   },
   (t) => [unique("verify_task_intents_task_req_uq").on(t.taskId, t.clientRequestId), index("verify_task_intents_task_idx").on(t.taskId, t.createdAt)],
 );
@@ -786,6 +812,12 @@ export const verifyEvents = pgTable(
     eventJson: jsonb("event_json").notNull(),
     createdAt: ts("created_at").notNull(),
     updatedAt: ts("updated_at").notNull(),
+    /* ---- v7（迁移 0025，CV-D22） ---- */
+    outcomeJson: jsonb("outcome_json"), // EventOutcome | null
+    outcomeHash: text("outcome_hash"),
+    /** 服务端派生：首次附上 = 0，之后 outcome 规范化哈希每变一次 +1 */
+    outcomeRevision: integer("outcome_revision").notNull().default(0),
+    outcomeReceivedAt: ts("outcome_received_at"),
   },
   (t) => [index("verify_events_kind_date_idx").on(t.kind, t.dateLocal), index("verify_events_status_idx").on(t.status)],
 );
@@ -896,3 +928,227 @@ export const verifyApiKeys = pgTable(
   },
   (t) => [unique("verify_api_keys_hash_uq").on(t.keyHash), unique("verify_api_keys_nonce_uq").on(t.nonce), index("verify_api_keys_owner_idx").on(t.ownerAddress)],
 );
+
+/* =====================================================================================
+ * v7（迁移 0025_v7_delegation_runtime，开发计划 §2.11）
+ * ===================================================================================== */
+
+/* ---------- 执行作业：平台执行身份的 permit / execute_step 尝试（步骤行是事实来源） ---------- */
+export const verifyExecutionJobs = pgTable(
+  "verify_execution_jobs",
+  {
+    id: text("id").primaryKey(), // exj_<hex>
+    kind: text("kind").notNull(), // permit | execute_step
+    taskId: text("task_id"),
+    mandateId: text("mandate_id"),
+    stepId: text("step_id").unique("verify_execution_jobs_step_uq"),
+    stepIndex: integer("step_index"),
+    ownerAddress: text("owner_address").notNull(),
+    tokenAddress: text("token_address"),
+    payloadJson: jsonb("payload_json").notNull(), // PermitJobPayload | ExecuteStepJobPayload
+    state: text("state").notNull(), // ExecutionJobState
+    attempt: integer("attempt").notNull().default(0),
+    leaseUntil: ts("lease_until"),
+    claimedBy: text("claimed_by"), // 执行者地址
+    instanceId: text("instance_id"),
+    rawTx: text("raw_tx"),
+    rawTxHash: text("raw_tx_hash"),
+    txHash: text("tx_hash"),
+    txNonce: text("tx_nonce"),
+    validUntil: ts("valid_until"),
+    faultJson: jsonb("fault_json"),
+    resultJson: jsonb("result_json"),
+    errorCode: text("error_code"),
+    errorDetail: text("error_detail"),
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [
+    index("verify_execution_jobs_state_lease_idx").on(t.state, t.leaseUntil),
+    index("verify_execution_jobs_task_idx").on(t.taskId),
+    index("verify_execution_jobs_mandate_step_idx").on(t.mandateId, t.stepIndex),
+    uniqueIndex("verify_execution_jobs_permit_inflight_uq").on(t.ownerAddress, t.tokenAddress).where(sql`${t.kind} = 'permit' AND ${t.state} IN ('QUEUED','CLAIMED','SENDING','SENT')`),
+  ],
+);
+
+/* ---------- permit 请求与提交（D-091 额度账本） ---------- */
+export const verifyPermits = pgTable(
+  "verify_permits",
+  {
+    id: text("id").primaryKey(), // prm_<hex>
+    taskId: text("task_id"),
+    itemId: text("item_id"),
+    ownerAddress: text("owner_address").notNull(),
+    tokenAddress: text("token_address").notNull(),
+    spender: text("spender").notNull(),
+    value: text("value").notNull(),
+    nonce: text("nonce").notNull(),
+    deadline: text("deadline").notNull(),
+    typedDataJson: jsonb("typed_data_json").notNull(),
+    signature: text("signature"),
+    purpose: text("purpose").notNull(), // delegation | reclaim
+    jobId: text("job_id"),
+    state: text("state").notNull(), // PermitState
+    txHash: text("tx_hash"),
+    allowanceAfter: text("allowance_after"),
+    /** 0026：签名提交（ISSUED → SUBMITTED）的时刻；代付限频按它计数 */
+    submittedAt: ts("submitted_at"),
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [index("verify_permits_owner_token_idx").on(t.ownerAddress, t.tokenAddress, t.state), index("verify_permits_task_idx").on(t.taskId), index("verify_permits_submitted_idx").on(t.ownerAddress, t.submittedAt)],
+);
+
+/* ---------- 0026 执行身份费用账本（D-089 修订：每笔广播的 OKB 费用；预留 → 结算） ---------- */
+export const verifyFeeLedger = pgTable(
+  "verify_fee_ledger",
+  {
+    id: text("id").primaryKey(), // fee_<hex>
+    jobId: text("job_id").notNull(),
+    kind: text("kind").notNull(), // permit | execute_step
+    taskId: text("task_id"),
+    ownerAddress: text("owner_address").notNull(),
+    mandateId: text("mandate_id"),
+    stepIndex: integer("step_index"),
+    executor: text("executor"),
+    /** 预留时刻的 UTC 日期 YYYY-MM-DD（每日预算按它归属） */
+    day: text("day").notNull(),
+    state: text("state").notNull(), // RESERVED | SETTLED | HELD | RELEASED
+    reservedWei: numeric("reserved_wei", { precision: 78, scale: 0 }).notNull(),
+    actualWei: numeric("actual_wei", { precision: 78, scale: 0 }),
+    /** raw_tx = 解析签名交易的 gas × maxFeePerGas；per_tx_cap = 无法解析时按 FEE_MAX_PER_TX_WEI 预留 */
+    reserveBasis: text("reserve_basis").notNull(),
+    gasLimit: text("gas_limit"),
+    maxFeePerGas: text("max_fee_per_gas"),
+    rawTxHash: text("raw_tx_hash"),
+    txHash: text("tx_hash"),
+    gasUsed: text("gas_used"),
+    effectiveGasPrice: text("effective_gas_price"),
+    l1Fee: text("l1_fee"),
+    outcome: text("outcome"), // confirmed | reverted | unknown_after_send | …
+    createdAt: ts("created_at").notNull(),
+    settledAt: ts("settled_at"),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [
+    unique("verify_fee_ledger_job_uq").on(t.jobId),
+    index("verify_fee_ledger_owner_day_idx").on(t.ownerAddress, t.day),
+    index("verify_fee_ledger_task_idx").on(t.taskId),
+    index("verify_fee_ledger_day_idx").on(t.day),
+    index("verify_fee_ledger_state_idx").on(t.state),
+  ],
+);
+
+/* ---------- 托管 Agent 轮次（每个 (taskId, turnVersion) 一行；哈希链覆盖带动作的轮次） ---------- */
+export const verifyAgentRuns = pgTable(
+  "verify_agent_runs",
+  {
+    id: text("id").primaryKey(), // run_<hex>
+    taskId: text("task_id").notNull(),
+    turnVersion: integer("turn_version").notNull(),
+    reason: text("reason").notNull(),
+    mode: text("mode").notNull(), // LIVE | SIMULATION
+    state: text("state").notNull(), // AgentRunState
+    attempt: integer("attempt").notNull().default(1),
+    runTokenHash: text("run_token_hash"),
+    leaseUntil: ts("lease_until"),
+    worker: text("worker"),
+    model: text("model"),
+    promptHash: text("prompt_hash"),
+    /** 续跑用的完整模型消息（≤ 256 KB），不进证据包、不对外 */
+    messagesJson: jsonb("messages_json"),
+    actionJson: jsonb("action_json"),
+    decisionSummary: text("decision_summary"),
+    nextCheckAt: ts("next_check_at"),
+    invalidation: text("invalidation"),
+    usageJson: jsonb("usage_json"),
+    costUsdMicros: text("cost_usd_micros"),
+    prevRunHash: text("prev_run_hash"),
+    runHash: text("run_hash"),
+    startedAt: ts("started_at"),
+    endedAt: ts("ended_at"),
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [unique("verify_agent_runs_task_turn_uq").on(t.taskId, t.turnVersion), index("verify_agent_runs_state_lease_idx").on(t.state, t.leaseUntil)],
+);
+
+export const verifyAgentRunSteps = pgTable(
+  "verify_agent_run_steps",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    runId: text("run_id").notNull(),
+    attempt: integer("attempt").notNull(),
+    seq: integer("seq").notNull(),
+    kind: text("kind").notNull(), // model | tool
+    name: text("name"),
+    argsHash: text("args_hash"),
+    resultHash: text("result_hash"),
+    /** ≤ 2 KB，写入前过密钥扫描（SEC-05） */
+    argsPreview: text("args_preview"),
+    resultPreview: text("result_preview"),
+    tokensIn: integer("tokens_in"),
+    tokensOut: integer("tokens_out"),
+    latencyMs: integer("latency_ms").notNull(),
+    error: text("error"),
+    at: ts("at").notNull(),
+  },
+  (t) => [unique("verify_agent_run_steps_uq").on(t.runId, t.attempt, t.seq)],
+);
+
+export const verifyAgentMemory = pgTable("verify_agent_memory", {
+  taskId: text("task_id").primaryKey(),
+  notesJson: jsonb("notes_json").notNull(), // Array<{ at, text, clientRequestId }>，≤ 20 条 × 2 KB
+  updatedAt: ts("updated_at").notNull(),
+});
+
+export const verifyAgentWorkers = pgTable("verify_agent_workers", {
+  worker: text("worker").primaryKey(),
+  version: text("version"),
+  model: text("model"),
+  lastHeartbeatAt: ts("last_heartbeat_at").notNull(),
+});
+
+/* ---------- 分页时间线（替代 timeline_json 的 200 条裁剪；每条带操作者） ---------- */
+export const verifyTaskTimeline = pgTable(
+  "verify_task_timeline",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    taskId: text("task_id").notNull(),
+    at: ts("at").notNull(),
+    actor: text("actor").notNull(), // Actor
+    type: text("type").notNull(),
+    ref: text("ref"),
+    note: text("note"),
+    dataJson: jsonb("data_json"),
+  },
+  (t) => [index("verify_task_timeline_task_idx").on(t.taskId, t.id)],
+);
+
+/* ---------- 任务 15 分钟内看过的平台证据（CV-D23：事实分拣承认它们） ---------- */
+export const verifyTaskEvidence = pgTable(
+  "verify_task_evidence",
+  {
+    taskId: text("task_id").notNull(),
+    evidenceId: text("evidence_id").notNull(),
+    kind: text("kind").notNull(),
+    source: text("source").notNull(), // agent_context | quotes
+    recordJson: jsonb("record_json").notNull(),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [unique("verify_task_evidence_uq").on(t.taskId, t.evidenceId)],
+);
+
+/* ---------- 执行身份状态（单实例租约、gas、链头） ---------- */
+export const verifyExecutorStatus = pgTable("verify_executor_status", {
+  executor: text("executor").primaryKey(), // 执行者地址
+  mode: text("mode"), // eoa | okx_agentic
+  activeInstance: text("active_instance"),
+  instanceLeaseUntil: ts("instance_lease_until"),
+  lastHeartbeatAt: ts("last_heartbeat_at"),
+  gasBalanceWei: text("gas_balance_wei"),
+  chainHead: text("chain_head"),
+  version: text("version"),
+  updatedAt: ts("updated_at").notNull(),
+});
+

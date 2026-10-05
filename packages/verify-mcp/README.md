@@ -11,8 +11,6 @@ Thin MCP (stdio) wrapper over the Chaconne Verify HTTP service. By default it **
 | `prepare_verification` | `POST /v1/jobs` | creates a fixed-intent task; no payment, no trade permission |
 | `purchase_verification` | `GET /v1/jobs/:id/report` | unpaid → returns the x402 challenge (`paymentRequired`), host pays and calls again with `paymentSignature`; never charges twice |
 | `get_verification` | `GET /v1/jobs/:id` (+report) | status only, never initiates payment |
-| `prepare_guard_trade` | `POST /v1/jobs/:id/prepare-execution` | returns typed data for the owner to sign + service certificate + exact approval + Guard call params |
-| `get_execution_status` | `GET /v1/jobs/:id` + RPC receipt | decodes `GuardedExecution`; submission ≠ fill |
 
 ## Tools (v2 — plans, mandates, evidence bundles, Club)
 

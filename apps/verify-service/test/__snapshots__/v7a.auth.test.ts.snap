@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SEC-02 / SEC-03：枚举 express 上注册的全部路由 > 白名单只含 §2.8 H 路由、agent_write 路由、免费端点与 /v1/agent/*（快照） 1`] = `
+[
+  "GET /healthz",
+  "GET /openapi.json",
+  "GET /llms.txt",
+  "GET /.well-known/*",
+  "GET /pub/*",
+  "GET /v1/assets",
+  "GET /v1/policies",
+  "GET /v1/products",
+  "GET /v1/playbooks",
+  "GET /v1/events",
+  "GET /v1/events/:id/revisions",
+  "GET /v1/context",
+  "POST /v1/agent/claim",
+  "POST /v1/agent/heartbeat",
+  "POST /v1/agent/runs/:runId/checkpoint",
+  "POST /v1/agent/runs/:runId/complete",
+  "GET /v1/tasks/:id/delegation",
+  "GET /v1/tasks/:id/activity",
+  "GET /v1/tasks/:id/timeline",
+  "GET /v1/tasks/:id/runs",
+  "GET /v1/tasks/:id/runs/:runId",
+  "GET /v1/tasks/:id/positions",
+  "GET /v1/tasks/:id/agent-context",
+  "GET /v1/tasks/:id/memory",
+  "GET /v1/tasks/:id/explain-wait",
+  "POST /v1/tasks/:id/quotes",
+  "POST /v1/tasks/:id/memory",
+  "POST /v1/tasks/:id/intents",
+  "POST /v1/tasks/:id/intents/:intentId/withdraw",
+  "POST /v1/tasks/:id/agent-status",
+  "GET /v1/theses/:id",
+  "POST /v1/theses/:id/review-items",
+]
+`;

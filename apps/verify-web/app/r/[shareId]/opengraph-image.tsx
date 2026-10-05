@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-import { normalizePublicReport } from "@/lib/api-v2";
+import { normalizePublicReport } from "@/lib/publicData";
 
 const SERVICE = process.env["VERIFY_SERVICE_URL"] ?? "http://127.0.0.1:8790";
 const COLORS: Record<string, string> = { completed: "#22c55e", partial: "#f59e0b", waiting: "#a3a3a3", rejected: "#f04e5e", simulation: "#8b5cf6" };

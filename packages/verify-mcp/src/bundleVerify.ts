@@ -1,10 +1,11 @@
 /**
- * 证据包验证（W3 客户端/CLI 版）：离线检查全部委托给 `@chaconne/core/verify` 的 `verifyBundleOffline`
- * （签名恢复由本模块注入 viem 的 verifyTypedData / verifyMessage），再可选做联网回执比对。
- * 任一字段被改动都会让对应检查项失败并指出层级（id 前缀：bundle_ / evidence_ / registry_ / policy_ / report_ / plan_ / cert_ / intent_ / mandate_ / receipt_）。
+ * 证据包验证（W3 客户端/CLI 版）：离线检查全部委托给 `@chaconne/core/verify` 的 `verifyEvidenceBundle`
+ * （= verifyBundleOffline + 任务附加复算 + 任务证据包 v3 检查，与 /verify-bundle 页面同一入口；签名恢复由本模块注入 viem 的 verifyTypedData / verifyMessage），再可选做联网回执比对。
+ * 任一字段被改动都会让对应检查项失败并指出层级（id 前缀：bundle_ / evidence_ / registry_ / policy_ / report_ / plan_ / cert_ / intent_ / mandate_ / receipt_；
+ * v3 另有 permit_ / run_ / timeline_ 与 mandate_<id>_step_<i>_{digest,cert_binding,fill_attribution,cert_signature}）。
  */
 import { createPublicClient, decodeEventLog, http, verifyMessage, verifyTypedData, type Hex } from "viem";
-import { verifyBundleOffline, type BundleCheck, type EvidenceBundle, type VerifyBundleOptions } from "@chaconne/core/verify";
+import { verifyEvidenceBundle, type BundleCheck, type EvidenceBundle, type VerifyBundleOptions } from "@chaconne/core/verify";
 import { GUARD_ABI } from "./guardAbi";
 import { PLAN_GUARD_ABI } from "./planGuardAbi";
 
@@ -61,7 +62,7 @@ export async function verifyReceiptsOnline(bundle: EvidenceBundle, rpcUrl: strin
 }
 
 export async function verifyBundle(bundle: EvidenceBundle, opts: BundleVerifyOptions = {}): Promise<BundleVerifyResult> {
-  const checks = await verifyBundleOffline(bundle, { ...viemVerifiers, ...(opts.expectedSigner ? { expectedSigner: opts.expectedSigner } : {}) });
+  const checks = await verifyEvidenceBundle(bundle, { ...viemVerifiers, ...(opts.expectedSigner ? { expectedSigner: opts.expectedSigner } : {}) });
   if (opts.rpcUrl) checks.push(...(await verifyReceiptsOnline(bundle, opts.rpcUrl)));
   const passed = checks.filter((c) => c.ok).length;
   const failedLayers = [...new Set(checks.filter((c) => !c.ok).map((c) => c.id.split("_")[0]!))];

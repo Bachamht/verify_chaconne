@@ -2,7 +2,7 @@
  * 证据包（W3，interfaces §10.3）：任务或授权计划的全部可复核材料 + bundleHash + 证明身份 EIP-191 签名。
  * 第三方用 core `verifyBundleOffline` 离线复核；联网复核用 executions[].txHash。
  */
-import { bundleHash as computeBundleHash, EIP712_TYPES, EIP712_TYPES_V2, makeDomain, type EffectivePolicy, type EvidenceBundle, type EvidenceRecord, type MandateStepRecord, type NormalizedJob, type PlanGoal, type PlanReport, type VerifyReport } from "@chaconne/core/verify";
+import { bundleHash as computeBundleHash, EIP712_TYPES, EIP712_TYPES_V2, makeDomain, type TaskMandateSegment, type EffectivePolicy, type EvidenceBundle, type EvidenceRecord, type MandateStepRecord, type NormalizedJob, type PlanGoal, type PlanReport, type VerifyReport } from "@chaconne/core/verify";
 import type { AssetRegistry } from "@chaconne/core/verify";
 import type { VerifyConfig } from "../config";
 import type { AttestationSigner } from "../attestation/signer";
@@ -80,6 +80,20 @@ export async function buildJobBundle(d: BundleDeps, callerId: string, jobId: str
 
 export async function buildMandateBundle(d: BundleDeps, callerId: string, mandateId: string): Promise<EvidenceBundle> {
   if (!d.signer) throw new HttpError(503, "attestation_disabled");
+  const base = await mandateBundleBase(d, callerId, mandateId);
+  const h = computeBundleHash(base);
+  return { ...base, bundleHash: h, bundleSignature: await d.signer.signBundleHash(h) };
+}
+
+/** v7 R3：任务证据包 v3 的「授权段」——复用 v5 授权包的 mandate / certificates / executions（全部步骤，含 SUPERSEDED） */
+export async function mandateSegment(d: BundleDeps, callerId: string, mandateId: string): Promise<TaskMandateSegment> {
+  const base = await mandateBundleBase(d, callerId, mandateId);
+  const row = (await d.mandates.byId(mandateId))!;
+  return { mandateId, side: row.side === "sell" ? "sell" : "buy", assetKey: row.assetKey ?? null, state: row.state, typedData: base.mandate!.typedData, signature: base.mandate!.signature, steps: base.mandate!.steps, certificates: base.certificates, executions: base.executions };
+}
+
+async function mandateBundleBase(d: BundleDeps, callerId: string, mandateId: string): Promise<Omit<EvidenceBundle, "bundleHash" | "bundleSignature">> {
+  if (!d.signer) throw new HttpError(503, "attestation_disabled");
   const row = await d.mandates.requireMandate(callerId, mandateId);
   const json = row.mandateJson as MandateJson;
   const snap = row.policySnapshot as { definition: EffectivePolicy["definition"]; params: EffectivePolicy["params"] };
@@ -153,8 +167,7 @@ export async function buildMandateBundle(d: BundleDeps, callerId: string, mandat
     executions: steps.filter((s) => s.txHash).map((s) => ({ attemptId: s.id, txHash: s.txHash as `0x${string}`, chainId: row.chainId, receiptSummary: s.receiptJson ?? null })),
     bill,
   };
-  const h = computeBundleHash(base);
-  return { ...base, bundleHash: h, bundleSignature: await d.signer.signBundleHash(h) };
+  return base;
 }
 
 import { requestHash as requestHashOf } from "@chaconne/core/verify";

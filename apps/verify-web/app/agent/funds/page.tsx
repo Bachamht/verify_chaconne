@@ -1,10 +1,6 @@
 import { Suspense } from "react";
-import { Funds } from "@/components/agent/funds/Funds";
+import { FundsRoute } from "@/components/routes/FundsRoute";
 
 export default function AgentFundsPage() {
-  return (
-    <Suspense fallback={null}>
-      <Funds />
-    </Suspense>
-  );
+  return <Suspense fallback={null}><FundsRoute /></Suspense>;
 }

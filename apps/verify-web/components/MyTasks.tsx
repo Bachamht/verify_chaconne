@@ -67,7 +67,9 @@ export function RecordsList({ account }: { account: string }) {
       const amount = per ? `${formatAmount(per, dec(it.inputAssetKey), sym(it.inputAssetKey))}${steps && steps > 1 ? ` × ${steps}` : ""}` : "";
       return [playbookTitle(it.playbookId ?? "", locale), outs, amount].filter(Boolean).join(" · ");
     }
-    if (it.kind === "mandate") return `${zh ? "授权" : "Mandate"} · ${outs} · ${formatAmount(it.budgetCap ?? null, dec(it.inputAssetKey), sym(it.inputAssetKey))} · ${it.stepsDone ?? 0}/${it.maxSteps ?? "?"}`;
+    if (it.kind === "mandate") return it.side === "sell"
+      ? `${zh ? "卖出授权" : "Sell mandate"} · ${sym(it.inputAssetKey)} → ${outs} · ${zh ? "最多卖" : "up to"} ${formatAmount(it.budgetCap ?? null, dec(it.inputAssetKey), sym(it.inputAssetKey))} · ${it.stepsDone ?? 0}/${it.maxSteps ?? "?"}`
+      : `${zh ? "授权" : "Mandate"} · ${outs} · ${formatAmount(it.budgetCap ?? null, dec(it.inputAssetKey), sym(it.inputAssetKey))} · ${it.stepsDone ?? 0}/${it.maxSteps ?? "?"}`;
     const amount = it.amountInRaw ? formatAmount(it.amountInRaw, dec(it.inputAssetKey), sym(it.inputAssetKey)) : "";
     return [side, outs, amount].filter(Boolean).join(" · ");
   };

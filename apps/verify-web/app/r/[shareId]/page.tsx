@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PublicReportClient } from "@/components/PublicReportClient";
+import { PublicReportRoute } from "@/components/routes/PublicReportRoute";
 
 export async function generateMetadata({ params }: { params: Promise<{ shareId: string }> }): Promise<Metadata> {
   const { shareId } = await params;
@@ -8,5 +8,5 @@ export async function generateMetadata({ params }: { params: Promise<{ shareId: 
 
 export default async function SharePage({ params }: { params: Promise<{ shareId: string }> }) {
   const { shareId } = await params;
-  return <PublicReportClient shareId={shareId} />;
+  return <PublicReportRoute shareId={shareId} />;
 }

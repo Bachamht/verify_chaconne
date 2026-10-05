@@ -33,3 +33,18 @@ describe("api()", () => {
     vi.restoreAllMocks();
   });
 });
+
+describe("mandates.get：步骤列表（2026-10-03 任务页成交回执为空的回归）", () => {
+  it("服务端把步骤放在 stepRecords、steps 是计数 → 归一成 steps 数组；旧形状（steps 数组）原样保留", async () => {
+    const { mandates } = await import("../lib/api-v2");
+    const rec = { stepIndex: "0", state: "CONFIRMED", step: null, stepDigest: null, validUntil: null, txHash: "0xabc", receipt: { event: { spent: "1000000", received: "5" } } };
+    globalThis.fetch = (async () => new Response(JSON.stringify({ mandateId: "mnd_1", steps: { done: 1, max: 2 }, stepRecords: [rec] }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
+    const a = await mandates.get("mnd_1");
+    expect(Array.isArray(a.data.steps)).toBe(true);
+    expect(a.data.steps[0]!.txHash).toBe("0xabc");
+    globalThis.fetch = (async () => new Response(JSON.stringify({ mandateId: "mnd_2", steps: [rec] }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
+    expect((await mandates.get("mnd_2")).data.steps).toHaveLength(1);
+    globalThis.fetch = (async () => new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: { "content-type": "application/json" } })) as typeof fetch;
+    expect((await mandates.get("mnd_3")).status).toBe(404);
+  });
+});

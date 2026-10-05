@@ -129,19 +129,16 @@ describe("商品与账单（U-01 / U-02）", () => {
     expect(products[2]!["validitySeconds"]).toBe(86400);
   });
 
-  it("U-02 账单：服务费/本金/gas 分列；自付地址标 selfPayment", async () => {
+  it("U-02 账单：核验单只有服务费；自付地址标 selfPayment", async () => {
     env = await createTestEnv({ env: { DEMO_SELF_PAYMENT_ADDRESSES: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } });
     const jobId = (await api(env, "POST", "/v1/jobs", (await import("./helpers")).jobBody())).json["jobId"] as string;
-    const prep = await api(env, "POST", `/v1/jobs/${jobId}/prepare-execution`, { refreshKey: "b1" });
-    const attemptId = prep.json["attemptId"] as string;
-    await api(env, "POST", `/v1/jobs/${jobId}/submissions`, { attemptId, txHash: "0x" + "cd".repeat(32) });
-    await env.service.applyReceipt(attemptId, "CONFIRMED", { status: "success", gasUsed: "551123", txHash: "0x" + "cd".repeat(32), event: { spent: "100000000", received: "400000000000000000", refunded: "0" } });
     const r = await api(env, "GET", `/v1/jobs/${jobId}/bill`);
     expect(r.status).toBe(200);
     const bill = r.json["bill"] as { serviceFees: unknown[]; principal: Array<{ amountRaw: string }>; gas: Array<{ amountRaw: string }>; selfPayment: boolean };
     expect(bill.serviceFees.length).toBe(1);
-    expect(bill.principal[0]!.amountRaw).toBe("100000000");
-    expect(bill.gas[0]!.amountRaw).toBe("551123");
+    // 单笔 Guard 执行 10/5 起删除：核验单只有服务费，没有本金与 gas
+    expect(bill.principal).toEqual([]);
+    expect(bill.gas).toEqual([]);
     expect(bill.selfPayment).toBe(true);
   });
 });

@@ -1,10 +1,6 @@
 import { Suspense } from "react";
-import { Journal } from "@/components/agent/journal/Journal";
+import { JournalSwitch } from "@/components/routes/JournalSwitch";
 
 export default function AgentJournalPage() {
-  return (
-    <Suspense fallback={null}>
-      <Journal />
-    </Suspense>
-  );
+  return <Suspense fallback={null}><JournalSwitch /></Suspense>;
 }

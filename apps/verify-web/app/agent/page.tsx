@@ -1,10 +1,6 @@
 import { Suspense } from "react";
-import { AgentHome } from "@/components/agent/home/AgentHome";
+import { TodayRoute } from "@/components/routes/TodayRoute";
 
 export default function AgentPage() {
-  return (
-    <Suspense fallback={null}>
-      <AgentHome />
-    </Suspense>
-  );
+  return <Suspense fallback={null}><TodayRoute /></Suspense>;
 }

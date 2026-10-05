@@ -16,6 +16,8 @@ import { Pill } from "@/components/ui";
 import { ModeTag, NotReady, OwnerField, useOwnerInput } from "../shared";
 import { EXAMPLE_STRATEGIES } from "../home/entries";
 import { takeGoalDraft } from "./taskDraft";
+import { V7_UI } from "@/lib/v7";
+import { ModeChoice, type ModeChoiceValue } from "./v7/ModeChoice";
 
 const WATCH_KINDS = [
   { id: "MACRO_TIER1", zh: "一级宏观数据（CPI、非农、FOMC）", en: "Tier-1 macro (CPI, jobs, FOMC)" },
@@ -50,6 +52,9 @@ export function GoalTaskForm({ assets, assetsSource, onRetryAssets }: { assets: 
   const [msg, setMsg] = useState<string | null>(null);
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [nr, setNr] = useState<number | null>(null);
+  /** v7（P7）：谁来决策、谁来执行、允许减仓；只在 NEXT_PUBLIC_V7_UI=1 时进请求体 */
+  const [v7Mode, setV7Mode] = useState<ModeChoiceValue>({ agent: "hosted", executor: "hosted", allowSell: false });
+  const [hostedClosed, setHostedClosed] = useState(false);
   const stable = assetByKey(stables, inputKey) ?? defaultStable(assets);
   const decimals = stable?.tokenDecimals ?? null;
   useEffect(() => { if (stocks.length && assetKeys.length === 0) setAssetKeys([stocks[0]!.assetKey]); }, [stocks, assetKeys.length]);
@@ -97,9 +102,15 @@ export function GoalTaskForm({ assets, assetsSource, onRetryAssets }: { assets: 
       params: { policyId: "QUOTE_ONLY", maxPriceImpactBps: impactBps },
       scope: { objective: objective.trim().slice(0, 500), inputAssetKey: stable.assetKey, outputAssetKeys: assetKeys, budgetCapRaw: totalRaw!, perStepCapRaw: perRaw!, maxSteps: stepsN, deadline, trustTier, issuance: "agent", ...(regularOnly ? { hardConditions: [{ type: "session", allow: ["US_REGULAR"] }] } : {}) },
     };
+    if (V7_UI) {
+      Object.assign(body, { agent: { mode: v7Mode.agent }, ...(mode === "LIVE" ? { executor: { mode: v7Mode.executor } } : {}) });
+      if (body.scope) body.scope.allowSell = v7Mode.allowSell;
+      setHostedClosed(false);
+    }
     const r = await agentTasks.create(body).catch(() => null);
     setBusy(false);
     if (!r) return setMsg(t("ag_service_unreachable"));
+    if (V7_UI && r.status === 403 && (r.data as { error?: string } | null)?.error === "hosted_not_allowed") { setHostedClosed(true); return; }
     if (r.status === 400) {
       const fe = fieldErrors(r.data.details, locale);
       if (Object.keys(fe).length) { setErrs(fe); return setMsg(t("ag_fix_fields")); }
@@ -156,12 +167,17 @@ export function GoalTaskForm({ assets, assetsSource, onRetryAssets }: { assets: 
           <OwnerField owner={owner} connected={connected} />
         </div>
       </section>
+      {V7_UI && <ModeChoice value={v7Mode} onChange={setV7Mode} live={mode === "LIVE"} assetCount={assetKeys.length} hostedClosed={hostedClosed} onUseSimulation={() => { setMode("SIMULATION"); setHostedClosed(false); }} />}
       <div className="ag-actions">
         <button className="btn" disabled={busy || !valid || !stable || Object.keys(local).length > 0} onClick={submit}>{busy ? t("ag_creating") : mode === "SIMULATION" ? (zh ? "创建 Agent 任务（模拟）" : "Create agent task (simulation)") : (zh ? "创建 Agent 任务（真实）" : "Create agent task (live)")}</button>
         <ModeTag mode={mode} />
         {mode === "LIVE" && !connected && <Pill tone="warn">{zh ? "真实任务需要 owner 钱包签授权" : "A live task needs the owner wallet to sign"}</Pill>}
       </div>
-      <p className="ag-note">{zh ? "建好后：真实任务先签一次授权（范围）；然后你的 Agent 用 MCP 工具接管（report_agent_status accepted）、被唤醒、研究、提交交易意图。没有交易也是一轮完整决策。" : "After creation: a live task needs one signature (the scope); then your agent takes over via MCP (report_agent_status accepted), gets woken, researches and submits trade intents. A round with no trade is still a complete decision."}</p>
+      <p className="ag-note">{V7_UI
+        ? mode === "LIVE"
+          ? (zh ? "建好后，在任务页按委托清单逐项完成授权；签名、额度与剩余步骤以清单为准。所选 Agent 和执行方式就绪后，才会在授权范围内运行，每笔仍需核验。" : "After creation, complete the delegation checklist on the task page. It shows the required signatures, allowances and remaining steps. The selected agent and executor must be ready before running within your authorization; every trade still needs verification.")
+          : (zh ? "建好后，在任务页查看所选 Agent 的就绪状态与模拟决策；模拟不会执行真实交易。没有交易也是一轮完整决策。" : "After creation, open the task page to see the selected agent's readiness and simulated decisions. Simulation executes no real trades. A round with no trade is still a complete decision.")
+        : (zh ? "建好后：真实任务先签一次授权（范围）；然后你的 Agent 用 MCP 工具接管（report_agent_status accepted）、被唤醒、研究、提交交易意图。没有交易也是一轮完整决策。" : "After creation: a live task needs one signature (the scope); then your agent takes over via MCP (report_agent_status accepted), gets woken, researches and submits trade intents. A round with no trade is still a complete decision.")}</p>
       {msg && <p className="text-sm text-bad" role="alert">{msg}</p>}
     </div>
   );

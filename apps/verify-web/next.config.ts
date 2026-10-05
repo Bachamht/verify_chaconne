@@ -21,14 +21,21 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/play", destination: "/start", permanent: false },
-      { source: "/agent/lab", destination: "/agent/tasks", permanent: false },
+      // v8 把实验页接回来（诊断 / 对照 / 回放）；只在 v8 关闭时继续转向
+      ...(process.env["NEXT_PUBLIC_V8_UI"] !== "1" ? [{ source: "/agent/lab", destination: "/agent/tasks", permanent: false }] : []),
       { source: "/me", destination: "/agent/tasks", permanent: false },
     ];
   },
-  output: "standalone",
+  // 本地 Windows 没有建符号链接的权限时用 VERIFY_WEB_NO_STANDALONE=1 跳过 standalone 产物；服务器发版不设，行为不变
+  ...(process.env["VERIFY_WEB_NO_STANDALONE"] === "1" ? {} : { output: "standalone" as const }),
   // 零空窗发版（同主站 FIX-150）：旁路构建到 NEXT_DIST_DIR 再切目录，避免原地构建那 ~2 分钟 chunk 404
   distDir: process.env["NEXT_DIST_DIR"] || ".next",
   poweredByHeader: false,
+  // v8 开关缺省 "0"：没设时也要被内联成字面量，路由开关（components/routes/*）的死分支才会在构建期删掉；
+  // 否则线上 v7 构建会把 v8 代码一起打包（/start 314 → 417 kB）
+  env: { NEXT_PUBLIC_V8_UI: process.env["NEXT_PUBLIC_V8_UI"] ?? "0" },
+  // v8：shadcn 从 radix-ui 总包按名导入；让 Next 按需改写成子包导入，避免整包进 bundle（D8）
+  experimental: { optimizePackageImports: ["radix-ui", "lucide-react"] },
   async headers() {
     return [
       {

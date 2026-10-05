@@ -100,14 +100,7 @@ export const COMPLEX_TASKS: ComplexTask[] = [
     assets: 2, steps: 4, days: 10, watch: ["MACRO_TIER1"], trustTier: "platform_only",
     sampleIntent: { rationale: { en: "The first name trades closest to reference with the lower impact and nothing is due this hour; one tranche now.", zh: "第一只最接近参考价、冲击更低，这一小时没有数据发布，现在买一笔。" }, claim: { en: "premium 0.1% vs 0.6% for the other name (Chaconne quote)", zh: "溢价 0.1%，另一只 0.6%（Chaconne 报价）" } },
   },
-  {
-    id: "thesis_and_cost", title: { en: "Thesis-tracked adds with a cost discipline", zh: "跟踪投资理由的加仓，兼顾成本与现金下限" },
-    space: { en: "Re-tests my thesis against new earnings and macro data, sizes each add against my tracked cost and the budget group's cash floor, and stops with reasons when the thesis weakens.", zh: "用新的财报与宏观数据检验我的理由，按持仓成本和资金组现金下限决定每笔大小，理由变弱就停下来说明。" },
-    objective: { en: "Over the next month, keep adding to one name while my investment thesis holds, without breaching my cash floor; stop and explain when it weakens.", zh: "未来一个月，只要我的投资理由仍成立就持续加仓一只股票，不能击穿现金下限；理由变弱就停下来解释。" },
-    strategy: { en: "My thesis: (write it here). Before each tranche: read the portfolio (get_portfolio) for the current holding and tracked cost, the budget group for the cash floor, and the latest EARNINGS / MACRO_TIER1 events. Add one tranche per week while the thesis holds; if the on-chain price is more than 10% above my tracked cost, halve the tranche; if a datapoint contradicts the thesis, halve again and log it in the thesis review; after two contradictions stop and end the task. Never propose a tranche that would take cash below the floor. Research conclusions are allowed as a basis in this task, but label them.", zh: "我的理由是：（写在这里）。每笔前：读组合（get_portfolio）拿当前持仓与跟踪成本，读资金组拿现金下限，读最新的财报与一级宏观事件。理由成立就每周加一笔；链上价高于我的跟踪成本 10% 以上就把这笔减半；有一条数据与理由矛盾再减半并写进理由卡复核；两条矛盾就停止并结束任务。任何一笔都不能让现金低于下限。这个任务允许以研究结论为依据，但要标注。" },
-    assets: 1, steps: 8, days: 30, watch: ["EARNINGS", "MACRO_TIER1", "FED_SPEECH"], trustTier: "agent_research",
-    sampleIntent: { rationale: { en: "No datapoint contradicts the thesis this week, price is within 10% of tracked cost and cash stays above the floor; weekly tranche.", zh: "本周没有数据与理由矛盾，价格在跟踪成本 10% 以内，现金仍高于下限，按计划加本周的一笔。" }, claim: { en: "Channel checks still show growing demand (own research)", zh: "渠道调研仍显示需求在增长（自己的研究）" } },
-  },
+
   {
     id: "calm_regime", title: { en: "Build only in a calm regime, regular hours signed", zh: "只在平静时建仓，常规时段写进签名" },
     space: { en: "Judges VIX, Fed blackout, drift verdict and the calendar itself; the only hard rule is US regular hours, signed into the scope.", zh: "VIX、联储静默期、上下文的漂移判断、事件日历都由 agent 自己权衡；唯一硬约束是美股常规时段，写进签名。" },

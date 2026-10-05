@@ -8,56 +8,21 @@
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { ownerFromBody, resolveCaller } from "@/lib/proxyOwner";
+import { ACTIVITY_LIMIT_PER_MIN, createRateLimiter, isActivityPath, ownerFromPath, proxyAllowed } from "@/lib/proxyAllow";
 import { SESSION_COOKIE, sessionAddress, sessionSecret } from "@/lib/sessionToken";
 
 const SERVICE = process.env["VERIFY_SERVICE_URL"] ?? "http://127.0.0.1:8790";
 const KEY = process.env["VERIFY_WEB_API_KEY"] ?? "";
-const ALLOWED = new RegExp(
-  "^(" +
-    [
-      "v1/assets",
-      "v1/policies",
-      "v1/products",
-      "healthz",
-      "v1/jobs(/[A-Za-z0-9_]+(/(report|prepare-execution|submissions|bundle|bill))?)?",
-      "v1/plans(/[A-Za-z0-9_]+(/jobs)?)?",
-      "v1/mandates(/[A-Za-z0-9_]+(/(pause|resume|cancel|prepare-step|bundle|bill|steps/[0-9]+/submissions))?)?",
-      "v1/simulations(/[A-Za-z0-9_]+)?",
-      "v1/profiles/me",
-      "v1/templates(/[A-Za-z0-9_]+)?",
-      "v1/shares",
-      /* v6（interfaces §11.7）：Lane B/C/D/E 端点一次放行，未部署时服务回 404，页面显示「尚未就绪」 */
-      "v1/context",
-      "v1/events(/[A-Za-z0-9_.:-]+/revisions)?",
-      "v1/event-impacts",
-      "v1/tasks(/[A-Za-z0-9_]+(/(pause|resume|cancel|authorize|prepare-step|explain-wait|compare-policies|conditions|agent-status|brief|bundle|intents(/[A-Za-z0-9_]+(/withdraw)?)?))?)?",
-      "v1/theses(/[A-Za-z0-9_]+(/review-items)?)?",
-      "v1/budget-groups(/[A-Za-z0-9_]+(/allocations)?)?",
-      "v1/portfolio/0x[0-9a-fA-F]{40}(/cost-overrides)?",
-      "v1/notify/(webhooks(/[A-Za-z0-9_]+)?|telegram/link|test)",
-      "v1/replays(/[A-Za-z0-9_]+)?",
-      "v1/rebalance/(preview|plans(/[A-Za-z0-9_]+)?)",
-      "v1/recaps(/[A-Za-z0-9_]+(/share)?)?",
-      "v1/missions",
-      /* 钱包账户化：按 owner 列出该钱包的全部记录（任务 / 授权 / 规划 / 核验 / 模拟） */
-      "v1/records",
-      /* FIX-175：钱包签发的 Agent API key（签发 / 列出 / 吊销） */
-      "v1/keys(/[A-Za-z0-9_]+)?",
-      /* Lane D 的动作与覆盖端点、Lane C 的执行器端点（F 的名单漏了这三条） */
-      "v1/event-impacts/actions",
-      "v1/events/earnings/coverage",
-      "v1/mandates/[A-Za-z0-9_]+/executor(/heartbeat)?",
-    ].join("|") +
-    ")$",
-);
 /** 这些 POST 的 body 带 ownerAddress（或已签 mandate 的 owner）→ 写 owner cookie（按钱包隔离任务） */
 const OWNER_SETTERS = new Set(["v1/jobs", "v1/plans", "v1/simulations", "v1/mandates", "v1/profiles/me", "v1/tasks", "v1/budget-groups", "v1/theses"]);
 const COOKIE = "verify_owner";
+/** v7：活动流轮询单列限频（每 owner 120 次 / 分钟），不挤占其它请求 */
+const activityLimiter = createRateLimiter(ACTIVITY_LIMIT_PER_MIN);
 
 async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   const { path } = await ctx.params;
   const joined = path.join("/");
-  if (!ALLOWED.test(joined)) return NextResponse.json({ error: "not_allowed" }, { status: 404 });
+  if (!proxyAllowed(joined)) return NextResponse.json({ error: "not_allowed" }, { status: 404 });
   const url = new URL(req.url);
   const target = `${SERVICE}/${joined}${url.search}`;
 
@@ -69,10 +34,15 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
     sessionOwner: secret ? sessionAddress(jar.get(SESSION_COOKIE)?.value, secret, Date.now()) : null,
     cookieOwner: jar.get(COOKIE)?.value,
     queryOwner: url.searchParams.get("owner"),
-    pathOwner: /^v1\/portfolio\/(0x[0-9a-fA-F]{40})/.exec(joined)?.[1],
+    pathOwner: ownerFromPath(joined),
     bodyOwner: bodyText !== undefined ? ownerFromBody(bodyText) : null,
   }, { ownerSetter: OWNER_SETTERS.has(joined) });
   if (denied) return NextResponse.json({ error: "wallet_signin_required", address: denied, message: "Sign in with this wallet first (one signature, no transaction)." }, { status: 401, headers: { "cache-control": "private, no-store" } });
+  if (isActivityPath(joined)) {
+    const key = owner || `ip:${req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"}`;
+    const hit = activityLimiter.hit(key);
+    if (!hit.ok) return NextResponse.json({ error: "rate_limited", message: `Activity feed limit (${ACTIVITY_LIMIT_PER_MIN}/min) reached; retry shortly.`, retryAfterSeconds: hit.retryAfterS }, { status: 429, headers: { "retry-after": String(hit.retryAfterS), "cache-control": "private, no-store" } });
+  }
   const headers: Record<string, string> = { "content-type": "application/json", "x-api-key": KEY };
   if (owner) headers["x-verify-caller"] = owner;
   const ps = req.headers.get("payment-signature");

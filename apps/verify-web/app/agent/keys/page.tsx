@@ -1,5 +1,6 @@
-import { ApiKeys } from "@/components/agent/keys/ApiKeys";
+import { Suspense } from "react";
+import { KeysRoute } from "@/components/routes/KeysRoute";
 
 export default function AgentKeysPage() {
-  return <ApiKeys />;
+  return <Suspense fallback={null}><KeysRoute /></Suspense>;
 }

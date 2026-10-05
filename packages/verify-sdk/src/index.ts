@@ -183,9 +183,6 @@ export function createClient(o: ClientOptions) {
       get: (jobId: string) => h.request("GET", `/v1/jobs/${enc(jobId)}`),
       /** 未付且无 signer → 402（body.paymentRequired 头可交给外部钱包）；有 signer → 自动付款 */
       report: (jobId: string, version?: number, extraHeaders: Record<string, string> = {}) => h.request<{ report: VerifyReport; reportHash: Hex; evidence: unknown[] }>("GET", `/v1/jobs/${enc(jobId)}/report${version ? `?version=${version}` : ""}`, undefined, extraHeaders),
-      prepareExecution: (jobId: string, refreshKey: string) => h.request("POST", `/v1/jobs/${enc(jobId)}/prepare-execution`, { refreshKey }),
-      /** intentSignature：owner 对 TradeIntent 的签名；传了才会进证据包（bundle 校验 cert_N_intent_digest 依赖它） */
-      submit: (jobId: string, attemptId: string, txHash: Hex, intentSignature?: Hex) => h.request("POST", `/v1/jobs/${enc(jobId)}/submissions`, { attemptId, txHash, ...(intentSignature ? { intentSignature } : {}) }),
       bundle: (jobId: string) => h.request<EvidenceBundle>("GET", `/v1/jobs/${enc(jobId)}/bundle`),
       /** 线上形状是 {jobId, bill}（interfaces §10 C2 定稿），不是裸 Bill */
       bill: (jobId: string) => h.request<{ jobId: string; bill: Bill }>("GET", `/v1/jobs/${enc(jobId)}/bill`),

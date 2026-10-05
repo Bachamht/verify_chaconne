@@ -4,8 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Check } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { ErrorV8 } from "@/components/features/public/StatusPages";
 
-export default function ErrorPage({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function ErrorPage(props: { error: Error & { digest?: string }; reset: () => void }) {
+  if (process.env.NEXT_PUBLIC_V8_UI === "1") return <ErrorV8 {...props} />;
+  return <LegacyErrorPage {...props} />;
+}
+
+function LegacyErrorPage({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   useEffect(() => {

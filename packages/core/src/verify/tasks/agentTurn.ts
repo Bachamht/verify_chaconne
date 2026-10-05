@@ -6,9 +6,13 @@
  * 这些都是**正常结果**，不是失败；超过 respondBy 没回应记 no_response（信息项），下次观察变化再叫。
  * 轮次与 agent 是谁无关（webhook / Telegram / MCP 轮询 get_task 都能拿到）；平台从不替 agent 做决定。
  */
-import type { Condition, IsoUtc } from "../contracts";
+import { V7_AGENT_TURN_REASONS, type Condition, type IsoUtc } from "../contracts";
 
-export const AGENT_TURN_REASONS = ["observation_changed", "ready_for_intent", "step_confirmed", "authorized", "event"] as const;
+/**
+ * v7（CV-D25，Lane A 并入）：assigned = SIMULATION 观察任务创建时 / 切换为托管 Agent 时；scheduled = 到达 Agent 自定的 nextCheckAt；
+ * data_arrived = 关注事件的实际值入库；execution_failed = 执行作业终态失败且未被自动重签消化。
+ */
+export const AGENT_TURN_REASONS = ["observation_changed", "ready_for_intent", "step_confirmed", "authorized", "event", ...V7_AGENT_TURN_REASONS] as const;
 export type AgentTurnReason = (typeof AGENT_TURN_REASONS)[number];
 export const AGENT_TURN_STATES = ["awaiting_agent", "intent_received", "accepted", "declined", "needs_evidence", "plan_revised", "ended", "no_response"] as const;
 export type AgentTurnState = (typeof AGENT_TURN_STATES)[number];
@@ -28,6 +32,15 @@ export interface AgentStatusReport {
   agent?: { name: string };
   /** 修订后的策略文本（agent 版本；留历史） */
   strategy?: string;
+  /* ---- v7（CV-D25）：轮次绑定、去重、下次检查与失效条件 ---- */
+  /** 回答的是哪一轮；服务端只关闭同版本的轮次（托管 Agent 必填） */
+  turnVersion?: number;
+  /** 去重键：服务端按 (taskId, clientRequestId) 去重；托管 Agent 一律 h:<runId>:<seq> */
+  clientRequestId?: string;
+  /** 下次检查（ISO，∈ [now+60 s, scope.deadline]）；到点开 scheduled 轮次 */
+  nextCheckAt?: IsoUtc;
+  /** 什么情况会让我改主意（≤ 500 字） */
+  invalidation?: string;
 }
 
 export interface AgentTurn {
@@ -46,6 +59,11 @@ export interface AgentTurn {
   response: AgentStatusReport | null;
   /** 事件观察键（批次 6）：关注的事件 `${id}@${revision}:${upcoming|released}` 列表；变化 = 事件驱动的轮次（reason=event） */
   eventsKey?: string;
+  /* ---- v7（CV-D25） ---- */
+  /** 特殊轮次的触发键（assigned / sched:<iso> / data:<eventId>@<rev> / exec:<jobId>）；同键不重复开；observationKey 保持评估口径不变 */
+  triggerKey?: string;
+  /** 已处理过的 clientRequestId（状态报告去重，最近 20 个） */
+  answeredRequestIds?: string[];
 }
 
 /**
@@ -78,9 +96,59 @@ export const EVENT_WATCH_AHEAD_MS = 48 * 3600_000;
 /** 默认回应窗口：30 分钟（过了只记 no_response，不做任何动作） */
 export const AGENT_TURN_RESPOND_MS = 30 * 60_000;
 
-export function resolveAgentStatusReport(raw: unknown): { ok: true; report: AgentStatusReport } | { ok: false; errors: Array<{ field: string; code: string }> } {
+/** nextCheckAt 至少在 60 s 之后（避免空转） */
+export const NEXT_CHECK_MIN_MS = 60_000;
+export const INVALIDATION_MAX_CHARS = 500;
+export const CLIENT_REQUEST_ID_RE = /^[A-Za-z0-9_\-:.]{1,128}$/;
+
+/** 轮次绑定字段的校验选项：给了 nowMs / deadline 才校验 nextCheckAt 的区间 */
+export interface TurnBindingOptions {
+  nowMs?: number;
+  /** scope.deadline（ISO） */
+  deadline?: string | null;
+}
+export interface TurnBinding {
+  turnVersion?: number;
+  clientRequestId?: string;
+  nextCheckAt?: IsoUtc;
+  invalidation?: string;
+}
+
+/**
+ * 交易意图与状态报告共用的 v7 字段（CV-D25）：turnVersion（非负整数）、clientRequestId、nextCheckAt（ISO，∈ [now+60 s, deadline]）、invalidation（≤ 500 字）。
+ * 全部可选；缺省 = v6 行为（关闭当前轮次）。
+ */
+export function resolveTurnBinding(raw: unknown, opts: TurnBindingOptions = {}): { ok: true; binding: TurnBinding } | { ok: false; errors: Array<{ field: string; code: string }> } {
   const errors: Array<{ field: string; code: string }> = [];
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const binding: TurnBinding = {};
+  if (o["turnVersion"] !== undefined && o["turnVersion"] !== null) {
+    if (typeof o["turnVersion"] !== "number" || !Number.isSafeInteger(o["turnVersion"]) || o["turnVersion"] < 0) errors.push({ field: "turnVersion", code: "expected_non_negative_integer" });
+    else binding.turnVersion = o["turnVersion"];
+  }
+  if (o["clientRequestId"] !== undefined && o["clientRequestId"] !== null) {
+    if (typeof o["clientRequestId"] !== "string" || !CLIENT_REQUEST_ID_RE.test(o["clientRequestId"])) errors.push({ field: "clientRequestId", code: "expected_[A-Za-z0-9_-:.]{1,128}" });
+    else binding.clientRequestId = o["clientRequestId"];
+  }
+  if (o["nextCheckAt"] !== undefined && o["nextCheckAt"] !== null) {
+    const ms = typeof o["nextCheckAt"] === "string" ? Date.parse(o["nextCheckAt"]) : NaN;
+    if (!Number.isFinite(ms)) errors.push({ field: "nextCheckAt", code: "expected_iso_datetime" });
+    else if (opts.nowMs !== undefined && ms < opts.nowMs + NEXT_CHECK_MIN_MS) errors.push({ field: "nextCheckAt", code: "must_be_at_least_60s_ahead" });
+    else if (opts.deadline && ms > Date.parse(opts.deadline)) errors.push({ field: "nextCheckAt", code: "after_scope_deadline" });
+    else binding.nextCheckAt = new Date(ms).toISOString();
+  }
+  if (o["invalidation"] !== undefined && o["invalidation"] !== null) {
+    if (typeof o["invalidation"] !== "string" || !o["invalidation"].trim() || o["invalidation"].length > INVALIDATION_MAX_CHARS) errors.push({ field: "invalidation", code: `expected_string_1_to_${INVALIDATION_MAX_CHARS}` });
+    else binding.invalidation = o["invalidation"].trim();
+  }
+  return errors.length ? { ok: false, errors } : { ok: true, binding };
+}
+
+export function resolveAgentStatusReport(raw: unknown, opts: TurnBindingOptions = {}): { ok: true; report: AgentStatusReport } | { ok: false; errors: Array<{ field: string; code: string }> } {
+  const errors: Array<{ field: string; code: string }> = [];
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const tb = resolveTurnBinding(o, opts);
+  if (!tb.ok) errors.push(...tb.errors);
   const status = (AGENT_STATUS_REPORTS as readonly unknown[]).includes(o["status"]) ? (o["status"] as AgentStatusKind) : null;
   if (!status) errors.push({ field: "status", code: `expected_${AGENT_STATUS_REPORTS.join("|")}` });
   const note = typeof o["note"] === "string" ? o["note"].trim() : "";
@@ -114,5 +182,5 @@ export function resolveAgentStatusReport(raw: unknown): { ok: true; report: Agen
     else strategy = o["strategy"].trim();
   }
   if (errors.length) return { ok: false, errors };
-  return { ok: true, report: { status: status!, note, ...(requestedEvidence ? { requestedEvidence } : {}), ...(plan ? { plan } : {}), ...(agent ? { agent } : {}), ...(strategy ? { strategy } : {}) } };
+  return { ok: true, report: { status: status!, note, ...(requestedEvidence ? { requestedEvidence } : {}), ...(plan ? { plan } : {}), ...(agent ? { agent } : {}), ...(strategy ? { strategy } : {}), ...(tb.ok ? tb.binding : {}) } };
 }

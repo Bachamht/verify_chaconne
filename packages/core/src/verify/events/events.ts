@@ -4,14 +4,16 @@
  * 时间语义（§11.1）：scheduledAtUtc = 事件发生；firstKnownAt = 首次可知；sourceFetchedAt = 抓取。
  * 窗口不由 producer 决定：每个任务按自己的条件参数在这里算窗口。
  */
-import { EVENT_KINDS, type EventKind, type IsoUtc, type MarketEvent, type MarketEventEvidence } from "../contracts";
+import { EVENT_KINDS, type EventKind, type EventOutcome, type IsoUtc, type MarketEvent, type MarketEventEvidence, type MarketEventV7 } from "../contracts";
 import { zonedDayBoundsUtcMs } from "../conditions/calendarUtil";
+import { validateEventOutcome } from "./outcome";
 
 export interface EventSchemaError {
   path: string;
   code: string;
 }
-export type EventSchemaResult = { ok: true; event: MarketEvent } | { ok: false; errors: EventSchemaError[] };
+/** v7：event 可带 producer 给的 `outcome`；outcomeRevision / dataStatus 由服务端派生，producer 给了也剥离 */
+export type EventSchemaResult = { ok: true; event: MarketEventV7 } | { ok: false; errors: EventSchemaError[] };
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -50,8 +52,14 @@ export function validateMarketEvent(raw: unknown): EventSchemaResult {
   if (!ISO_RE.test(String(o["firstKnownAt"]))) errors.push({ path: "firstKnownAt", code: "expected_iso" });
   if (o["releasedAt"] !== undefined && !ISO_RE.test(String(o["releasedAt"]))) errors.push({ path: "releasedAt", code: "expected_iso" });
   if (typeof o["tz"] !== "string" || !/^[A-Za-z_]+\/[A-Za-z_]+(\/[A-Za-z_]+)?$|^UTC$/.test(o["tz"])) errors.push({ path: "tz", code: "expected_iana_tz" });
+  let outcome: EventOutcome | undefined;
+  if (o["outcome"] !== undefined) {
+    const r = validateEventOutcome(o["outcome"]);
+    if (r.ok) outcome = r.outcome;
+    else errors.push(...r.errors);
+  }
   if (errors.length > 0) return { ok: false, errors };
-  const event: MarketEvent = {
+  const event: MarketEventV7 = {
     id: o["id"] as string,
     kind: o["kind"] as EventKind,
     name: o["name"] as string,
@@ -68,6 +76,7 @@ export function validateMarketEvent(raw: unknown): EventSchemaResult {
     firstKnownAt: o["firstKnownAt"] as string,
     ...(o["releasedAt"] !== undefined ? { releasedAt: o["releasedAt"] as string } : {}),
     tz: o["tz"] as string,
+    ...(outcome ? { outcome } : {}),
   };
   return { ok: true, event };
 }

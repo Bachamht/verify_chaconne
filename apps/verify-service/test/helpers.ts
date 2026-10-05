@@ -61,6 +61,7 @@ import { RecapsService } from "../src/recaps/service";
 import { dbRecapSources, type RecapSources } from "../src/recaps/sources";
 import { MemoryRecapStore } from "../src/recaps/store";
 import type { AgentTasksDeps } from "../src/http/a2mcpAgentTasks";
+import type { V7Handles } from "../src/http/routes";
 
 export const TEST_API_KEY = "vk_test_alpha";
 export const TEST_CALLER = "caller-alpha";
@@ -121,6 +122,8 @@ export interface TestEnvOptions {
   /* v6 Lane F：Lane B/D 钩子（默认不接 → coverage unavailable / 回放任务） */
   recapHooks?: Pick<RecapSources, "tasksForOwner" | "eventsBetween">;
   agentHooks?: Pick<AgentTasksDeps, "impacts" | "events">;
+  /** v7：各 lane 的服务句柄装配（缺省不挂 v7 路由）；ctx 给出与 index.ts 相同的依赖 */
+  v7?: (ctx: { cfg: VerifyConfig; db: Db; registry: AssetRegistry; mandates: MandatesService; tasks: TasksService; orders: Orders; stepReceipts: ReceiptStore; now: () => Date }) => V7Handles | undefined;
   /** /healthz 的完整对象（index.ts 形态）；缺省 {} */
   health?: () => Record<string, unknown>;
 }
@@ -180,7 +183,6 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
     EVIDENCE_MODE: "fixture",
     REGISTRY_MODE: "fixture",
     EXECUTION_CHAIN_ID: "196",
-    GUARD_ADDRESS: opts.withGuard === false ? "" : TEST_GUARD,
     PLANGUARD_ADDRESS: opts.withPlanGuard === false ? "" : TEST_PLANGUARD,
     ATTESTATION_PRIVATE_KEY: opts.withSigner === false ? "" : TEST_ATTESTATION_KEY,
     VERIFY_API_KEYS: `${TEST_API_KEY}:${TEST_CALLER},${OTHER_API_KEY}:${OTHER_CALLER}${opts.extraKeys ? "," + opts.extraKeys : ""}`,
@@ -248,7 +250,8 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
     ? new LabService({ db, cfg, registry, evaluator: laneBConditionEvaluator(), taskReader: taskReaderForLaneE(tasks), archive: new DbReplayArchive(db), now })
     : new LabService({ db, cfg, registry, evaluator: opts.labEvaluator ?? createReferenceEvaluator(), taskReader: labTasks, archive: labArchive, now });
   const recaps = new RecapsService({ sources: dbRecapSources(db, () => "FIXTURE", opts.recapHooks ?? {}), store: new MemoryRecapStore(), now });
-  const app = createApp({ cfg, service, keys, paywall, plans, mandates, club, signer, market: opts.market ?? null, context, crowsnest, events, tasks, theses, playbooks, laneD, budget, portfolio, rebalance, notify, lab, recaps, agentHooks: opts.agentHooks, now, health: opts.health ?? (() => ({})) });
+  const v7 = opts.v7?.({ cfg, db, registry, mandates, tasks, orders, stepReceipts: withBudgetSettlement(db, mandates, budget.coordinator), now });
+  const app = createApp({ cfg, service, keys, paywall, plans, mandates, club, signer, market: opts.market ?? null, context, crowsnest, events, tasks, theses, playbooks, laneD, budget, portfolio, rebalance, notify, lab, recaps, agentHooks: opts.agentHooks, now, health: opts.health ?? (() => ({})), ...(v7 ? { v7 } : {}) });
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((r) => server.once("listening", () => r()));
   const { port } = server.address() as AddressInfo;

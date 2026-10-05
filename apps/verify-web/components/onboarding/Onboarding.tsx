@@ -21,7 +21,14 @@ import { stashGoalDraft } from "../agent/tasks/taskDraft";
 import { DecisionTimeline } from "../agent/tasks/DecisionTimeline";
 import { turnReasonLabel, turnStateLabel } from "../agent/tasks/decisionTimelineLabels";
 import { buildGoalRequest, isSimulationTask, liveGoalDraft, splitSimulationBudget, type SimulationTask } from "./model";
+import { V7_UI } from "@/lib/v7";
+import { OnboardingV7 } from "./OnboardingV7";
+import { OnboardingEntryV7 } from "./OnboardingEntryV7";
+import { FX_OWNER } from "@/lib/v7fixtures";
 import "./onboarding.css";
+
+/** v7（NEXT_PUBLIC_V7_UI=1）：/start 走新三步；原「我来扮演 Agent」降为教学入口 /start?mode=play（P-08）。开关关闭时路径与行为不变。 */
+const PLAY_BASE = V7_UI ? "/start?mode=play" : "/start";
 
 const ICONS = [Activity, CalendarClock, Scale, BookOpenCheck, ShieldCheck];
 const PRESETS = ["100", "500", "1000"];
@@ -34,6 +41,10 @@ function Character({ busy = false }: { busy?: boolean }) {
 export function Onboarding() {
   const { locale } = useI18n();
   const zh = locale === "zh";
+  const sp = useSearchParams();
+  // 本地预览不需要钱包，流程数据来自 fixture，不创建真实任务或请求签名。
+  if (V7_UI && sp.get("mode") !== "play" && sp.get("v7fixture") === "1") return <OnboardingV7 account={FX_OWNER} />;
+  if (V7_UI && sp.get("mode") !== "play") return <OnboardingEntryV7 />;
   return <WalletGate title={zh ? "连接钱包，把一个任务交给 Agent" : "Connect a wallet to hand a task to an agent"} description={zh ? "钱包地址就是你的账户，模拟任务会记在它名下。连接不会签名、不会花钱。" : "Your wallet address is your account; the simulation is recorded under it. Connecting never signs or spends."}>{(account) => <OnboardingFlow account={account} />}</WalletGate>;
 }
 
@@ -83,7 +94,7 @@ function OnboardingFlow({ account }: { account: string }) {
     if (mounted.current) { setAssets(value); setLoadingAssets(false); }
   }, []);
   useEffect(() => { void reloadAssets(); }, [reloadAssets]);
-  useEffect(() => { if (stage === "result" && !result) router.replace("/start"); }, [stage, result, router]);
+  useEffect(() => { if (stage === "result" && !result) router.replace(PLAY_BASE); }, [stage, result, router]);
   useEffect(() => {
     if (!busy) { setSlow(false); return; }
     const timer = setTimeout(() => setSlow(true), 10_000);
@@ -125,7 +136,7 @@ function OnboardingFlow({ account }: { account: string }) {
         setIntentAsset(chosen[0]!.assetKey);
         setHoldNote(zh ? "还没拿到实际数据，先持币；想看：下一次发布的实际值与预期。" : "No actual data yet; keep cash. I want the next release's actual value versus expectations.");
         setPlanText(zh ? "先只买一笔试探，其余预算等下一份数据再分配。" : "Take one probing tranche only; allocate the rest after the next release.");
-        router.push("/start?step=result");
+        router.push(`${PLAY_BASE}${PLAY_BASE.includes("?") ? "&" : "?"}step=result`);
         void refresh(id);
       }
     } catch {
@@ -147,7 +158,7 @@ function OnboardingFlow({ account }: { account: string }) {
         const r = await agentTasks.submitIntent(id, { clientRequestId: "web-start-" + crypto.randomUUID(), outputAssetKey: intentAsset || result.task.id, amountInRaw: String(result.request.scope?.perStepCapRaw ?? "0"), decision: { rationale: rationale.trim() || result.task.sampleIntent.rationale[locale], claims: claim.trim() ? [{ kind: result.task.trustTier === "platform_only" ? "platform_fact" : result.task.trustTier === "agent_research" ? "agent_research" : "agent_data", text: claim.trim(), ...(result.task.trustTier === "platform_only" ? { source: { evidenceId: "unknown" } } : { source: { name: zh ? "扮演 agent 的访客" : "visitor playing the agent" } }) }] : [], alternatives: [zh ? "再等一轮" : "wait one more round"] } });
         if (r.status !== 201 && r.status !== 200 && r.status !== 422) { fail(apiError(r, locale)); return; }
         const verdict = (r.data as { intent?: { status?: string } } | null)?.intent?.status;
-        setOutcome({ kind, ok: true, text: verdict === "rejected" ? (zh ? "意图已提交，四道核验没通过——原因在下方时间线。" : "Intent submitted; it failed the four checks. See the timeline below.") : (zh ? "意图已提交并核验，结果在下方时间线。" : "Intent submitted and verified. See the timeline below.") });
+        setOutcome({ kind, ok: true, text: verdict === "rejected" ? (zh ? "意图已提交，四道核验没通过，原因在下方时间线。" : "Intent submitted; it failed the four checks. See the timeline below.") : (zh ? "意图已提交并核验，结果在下方时间线。" : "Intent submitted and verified. See the timeline below.") });
       } else if (kind === "hold") {
         const r = await agentTasks.agentStatus(id, { status: "needs_evidence", note: holdNote.trim() || "hold", requestedEvidence: [zh ? "下一次发布的实际值 vs 预期" : "next release: actual vs expected"], agent: { name: ROLE_NAME[locale] } });
         if (r.status !== 200) { fail(apiError(r, locale)); return; }
@@ -188,7 +199,7 @@ function OnboardingFlow({ account }: { account: string }) {
   const nowMs = Date.now();
   const watched = events.filter((e) => cTask.watch.includes(e.kind)).map((e) => ({ e, at: Date.parse(e.scheduledAtUtc ?? `${e.dateLocal}T13:30:00.000Z`) })).filter(({ at }) => at >= nowMs - 6 * 3600_000 && at <= nowMs + 48 * 3600_000).sort((a, b) => a.at - b.at).slice(0, 5);
   const summary = <aside className="start-summary">
-    <div className="start-summary-head"><span className="start-overline">YOUR AGENT&apos;S BRIEF</span><h2>{cTask.title[locale]}</h2></div>
+    <div className="start-summary-head">{zh ? null : <span className="start-overline">YOUR AGENT&apos;S BRIEF</span>}<h2>{cTask.title[locale]}</h2></div>
     <div className="start-summary-body">
       <p>{cTask.objective[locale]}</p>
       <div className="start-values"><div><span>{zh ? "总额（签名）" : "Total (signed)"}</span><strong>{formatMoney(cTotal)}</strong></div><div><span>{zh ? "每笔上限（签名）" : "Per-step cap (signed)"}</span><strong>{formatMoney(cPer)}</strong></div></div>
@@ -201,9 +212,9 @@ function OnboardingFlow({ account }: { account: string }) {
 
   return <div className="start-page">
     {(current ? current.view.evidenceMode === "FIXTURE" : assets.evidenceMode === "FIXTURE") && <p className="start-registry-note" role="status">{zh ? "测试数据模式：当前服务返回的是预设数据，不代表实时市场。" : "Fixture data: the service is returning test data, not live market evidence."}</p>}
-    <div className="start-topline"><Link href={stage === "setup" ? "/" : "/start"} onClick={stage !== "setup" ? (event) => { event.preventDefault(); setError(null); router.back(); } : undefined} className="start-back"><ArrowLeft size={14} aria-hidden />{stage === "setup" ? (zh ? "首页" : "Home") : (zh ? "换一个任务" : "Change task")}</Link><ol className="start-progress" aria-label={zh ? "步骤" : "Steps"}>{["setup", "result"].map((step, i) => <li key={step} aria-current={stage === step ? "step" : undefined}><span>0{i + 1}</span>{(zh ? ["选任务", "扮演 Agent"] : ["Choose", "Play the agent"])[i]}</li>)}</ol></div>
+    <div className="start-topline"><Link href={stage === "setup" ? (V7_UI ? "/start" : "/") : PLAY_BASE} onClick={stage !== "setup" ? (event) => { event.preventDefault(); setError(null); router.back(); } : undefined} className="start-back"><ArrowLeft size={14} aria-hidden />{stage === "setup" ? (zh ? "首页" : "Home") : (zh ? "换一个任务" : "Change task")}</Link><ol className="start-progress" aria-label={zh ? "步骤" : "Steps"}>{["setup", "result"].map((step, i) => <li key={step} aria-current={stage === step ? "step" : undefined}><span>0{i + 1}</span>{(zh ? ["选任务", "扮演 Agent"] : ["Choose", "Play the agent"])[i]}</li>)}</ol></div>
     {stage === "setup" && <>
-      <header className="start-heading"><span className="start-overline">YOUR FIRST AGENT TASK</span><h1 ref={heading} tabIndex={-1}>{zh ? "把一个任务交给你的 Agent。" : "Hand a task to your agent."}</h1><p>{zh ? "任务 = 目标 + 策略 + 你签的范围，没有条件规则。Agent 用 Chaconne 的事件日历、上下文、报价与组合数据自己决定何时买、买哪只、买多少；每一笔经四道核验才签证书。建好后先由你扮演一轮 Agent，看核验怎么反应。" : "A task is an objective, a strategy and a scope you sign; there are no rules. The agent uses Chaconne's calendar, context, quotes and portfolio data to decide when, which name and how much; every tranche passes four checks before a certificate is signed. After creating one, play the agent for a round and watch the checks respond."}</p></header>
+      <header className="start-heading">{zh ? null : <span className="start-overline">YOUR FIRST AGENT TASK</span>}<h1 ref={heading} tabIndex={-1}>{zh ? "把一个任务交给你的 Agent。" : "Hand a task to your agent."}</h1><p>{zh ? "任务 = 目标 + 策略 + 你签的范围，没有条件规则。Agent 用 Chaconne 的事件日历、上下文、报价与组合数据自己决定何时买、买哪只、买多少；每一笔经四道核验才签证书。建好后先由你扮演一轮 Agent，看核验怎么反应。" : "A task is an objective, a strategy and a scope you sign; there are no rules. The agent uses Chaconne's calendar, context, quotes and portfolio data to decide when, which name and how much; every tranche passes four checks before a certificate is signed. After creating one, play the agent for a round and watch the checks respond."}</p></header>
       <div className="start-grid">
         <form id="start-plan-form" onSubmit={(event) => { event.preventDefault(); void simulate(); }}>
           <fieldset disabled={busy} className="start-fields"><legend className="start-label">{zh ? "交给 Agent 什么任务？" : "Which task?"}</legend><div className="start-templates">{COMPLEX_TASKS.map((option, i) => { const Icon = ICONS[i] ?? Target; return <button key={option.id} type="button" className="start-template" aria-pressed={taskIndex === i} onClick={() => { setTaskIndex(i); setAssetKeys(null); setError(null); }}><Icon size={22} aria-hidden /><span><strong>{option.title[locale]}</strong><small>{option.space[locale]}</small></span><span className="start-radio" aria-hidden /></button>; })}</div>

@@ -2,11 +2,11 @@
  * 回执 → 资金组账目（B-02 / B-03）：包装授权计划的 ReceiptStore，
  *   步骤 CONFIRMED → coordinator.settle(mandateId, stepIndex, event.spent)（幂等）
  *   步骤 REVERTED  → coordinator.unpend（只解除在途占用；预留仍在，等授权本身链上到期/撤销才释放）
- * 只在回执核实器之后追加动作，不改 MandatesService。
+ * 只在回执核实器之后追加动作，不改 MandatesService。卖出授权（side=sell）的步骤直接跳过（v7 D-092）。
  */
 import { eq } from "drizzle-orm";
 import type { Db } from "@chaconne/db";
-import { verifyMandateSteps } from "@chaconne/db";
+import { verifyMandateSteps, verifyMandates } from "@chaconne/db";
 import type { ReceiptStore } from "../execution/receipts";
 import type { BudgetCoordinator } from "./coordinator";
 import { log } from "../log";
@@ -19,6 +19,9 @@ export function withBudgetSettlement(db: Db, store: ReceiptStore, coordinator: B
       if (state !== "CONFIRMED" && state !== "REVERTED") return;
       const step = (await db.select({ mandateId: verifyMandateSteps.mandateId, stepIndex: verifyMandateSteps.stepIndex, stepJson: verifyMandateSteps.stepJson }).from(verifyMandateSteps).where(eq(verifyMandateSteps.id, stepId)).limit(1))[0];
       if (!step) return;
+      // v7（D-092）：卖出授权从不触碰资金组账目——股票单位的数额不能记进稳定币预算
+      const m = (await db.select({ side: verifyMandates.side }).from(verifyMandates).where(eq(verifyMandates.id, step.mandateId)).limit(1))[0];
+      if (m?.side === "sell") return;
       try {
         if (state === "CONFIRMED") {
           const spent = (receipt["event"] as { spent?: string } | undefined)?.spent ?? "0";

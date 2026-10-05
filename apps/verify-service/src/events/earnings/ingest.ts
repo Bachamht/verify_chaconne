@@ -9,6 +9,7 @@ import { log } from "../../log";
 import type { EarningsCalendarSource } from "./finnhubEarnings";
 import { buildEarningsDraft, underlyingSymbol } from "./mapping";
 import type { EventStore, EventUpsertResult, EvidenceSink, IngestRun } from "./store";
+import type { OutcomeHookRegistry } from "../outcomes";
 
 export interface IngestDeps {
   source: EarningsCalendarSource;
@@ -23,6 +24,8 @@ export interface IngestDeps {
   calendar?: MarketCalendar;
   /** 每次 upsert 后回调（修订传播挂这里） */
   onChange?: (r: EventUpsertResult) => Promise<void>;
+  /** v7：财报实际值首次入库 / 修订后的回调（Lane A 的 data_arrived 轮次） */
+  outcomeHooks?: OutcomeHookRegistry;
 }
 
 export interface IngestSummary {
@@ -103,6 +106,7 @@ export class EarningsIngestor {
         await this.d.evidence.write(record, { refId: r.event.id, version: r.event.revision });
         evidenceIds.push(record.evidenceId);
         if (this.d.onChange) await this.d.onChange(r);
+        if (this.d.outcomeHooks && r.outcome?.change) await this.d.outcomeHooks.emit({ eventId: r.event.id, revision: r.event.revision, outcomeRevision: r.outcome.revision, change: r.outcome.change, receivedAt: call.time.receivedAt, provider: "finnhub" });
       }
     }
     const run: IngestRun = {
@@ -139,7 +143,7 @@ export class EarningsIngestor {
           const { run, results } = await this.ingestSymbol(list[i]!);
           summary.runs.push(run);
           if (!run.ok) summary.errors++;
-          for (const r of results) summary[r.change === "created" ? "created" : r.change === "revised" ? "revised" : r.change === "released" ? "released" : "unchanged"]++;
+          for (const r of results) summary[r.change === "created" ? "created" : r.change === "revised" ? "revised" : r.change === "released" || r.change === "data_arrived" ? "released" : "unchanged"]++;
         } catch (e) {
           summary.errors++;
           log.warn("财报摄入单只失败", { symbol: list[i]!.symbol, error: e instanceof Error ? e.message : String(e) });

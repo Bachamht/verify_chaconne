@@ -29,7 +29,7 @@ export function checkLabel(id: string, locale: Locale): string {
 
 export function intentStatusLabel(status: AgentTradeIntent["status"], locale: Locale): string {
   const zh = locale === "zh";
-  return ({ certified: zh ? "已签证书" : "certified", simulated: zh ? "模拟通过" : "simulated", rejected: zh ? "被拒" : "rejected", withdrawn: zh ? "已撤回" : "withdrawn", expired: zh ? "已过期" : "expired" } as Record<string, string>)[status] ?? status;
+  return ({ certified: zh ? "已签证书" : "certified", simulated: zh ? "模拟通过" : "simulated", rejected: zh ? "被拒" : "rejected", withdrawn: zh ? "已撤回" : "withdrawn", expired: zh ? "已过期" : "expired", superseded: zh ? "被新意图取代" : "superseded" } as Record<string, string>)[status] ?? status;
 }
 
 export function turnStateLabel(state: AgentTurn["state"], locale: Locale): string {

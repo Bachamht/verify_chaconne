@@ -13,7 +13,7 @@ export function productCatalog(cfg: VerifyConfig): Product[] {
       priceUsd: cfg.REPORT_PRICE_USD,
       network: net,
       validitySeconds: null,
-      delivery: { en: "One immutable, evidence-hashed report (eligible / limited / rejected) with reason codes and source times, plus re-verification credits for Guard execution.", zh: "一份不可变、带证据哈希的报告（eligible / limited / rejected），含原因码与源时间；附 Guard 执行用的再核验额度。" },
+      delivery: { en: "One immutable, evidence-hashed report (eligible / limited / rejected) with reason codes and source times.", zh: "一份不可变、带证据哈希的报告（eligible / limited / rejected），含原因码与源时间。" },
       noResultIs: { en: "A rejected or limited verdict is a delivered verification and is not refunded.", zh: "rejected / limited 判定就是已交付的核验，不退款。" },
     },
     {

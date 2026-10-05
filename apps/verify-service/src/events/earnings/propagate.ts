@@ -1,5 +1,6 @@
 /**
- * 修订传播（Lane D）：事件 revision 变化 → 重算受影响任务的 nextCheckAt 与阻塞 → 发 `event.revised`（已发布 → `event.released`）。
+ * 修订传播（Lane D）：事件 revision 变化 → 重算受影响任务的 nextCheckAt 与阻塞 → 发 `event.revised`（已发布 → `event.released`；
+ * v7 实际值首次入库 → `event.data_arrived`，恰一次——幂等键按事件 revision，同一修订不会重复）。
  * 通知只是唤醒（D-087）：载荷只含 id/类型/版本/摘要/链接；幂等键 `${type}:${entityId}:${version}`。
  * 任务读写与通知入队都是注入接口（readers.ts）；未就绪时只发通知、记录"未能应用"，不伪装已重算。
  */
@@ -42,7 +43,7 @@ export class EventRevisionPropagator {
     const ev = r.event;
     const base: PropagationResult = { eventId: ev.id, revision: ev.revision, type: null, notified: false, tasksStatus: "ok", tasks: [] };
     if (r.change === "unchanged" || r.change === "created") return base;
-    const type: NotificationType = r.change === "released" ? "event.released" : "event.revised";
+    const type: NotificationType = r.change === "released" ? "event.released" : r.change === "data_arrived" ? "event.data_arrived" : "event.revised";
     const now = (this.d.clock ?? (() => new Date()))().toISOString();
 
     // 1) 受影响任务：重算 nextCheckAt 与阻塞（按各任务自己的条件参数）
@@ -62,7 +63,15 @@ export class EventRevisionPropagator {
     // 2) 通知（每个事件版本一条；不携带权限）
     const from = r.previous ? `${r.previous.dateLocal}${r.previous.sessionHint ? " " + r.previous.sessionHint : ""}` : "";
     const to = `${ev.dateLocal}${ev.sessionHint ? " " + ev.sessionHint : ""}`;
-    const summary = type === "event.released" ? `${ev.name} released (rev ${ev.revision})` : `${ev.name} rescheduled: ${from} → ${to} (rev ${ev.revision}, ${ev.status}/${ev.datePrecision})`;
+    const timeChanged = r.changedFields.some((f) => f !== "outcome" && f !== "status");
+    const summary =
+      type === "event.released"
+        ? `${ev.name} released (rev ${ev.revision})`
+        : type === "event.data_arrived"
+          ? `${ev.name}: actual values received (rev ${ev.revision})`
+          : !timeChanged && r.changedFields.includes("outcome")
+            ? `${ev.name}: actual values revised (rev ${ev.revision})`
+            : `${ev.name} rescheduled: ${from} → ${to} (rev ${ev.revision}, ${ev.status}/${ev.datePrecision})`;
     const payload: NotificationPayload = {
       type,
       entityId: ev.id,

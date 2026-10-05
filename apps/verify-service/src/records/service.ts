@@ -73,7 +73,13 @@ export async function listRecords(db: Db, owner: string): Promise<RecordItem[]> 
     ...mandates.map((r): RecordItem => {
       const m = obj(r.mandateJson);
       const outputs = Array.isArray(m["outputAssetKeys"]) ? (m["outputAssetKeys"] as unknown[]).filter((k): k is string => typeof k === "string") : [];
-      return { kind: "mandate", id: r.id, createdAt: iso(r.createdAt), status: r.state, taskId: r.taskId ?? null, stepsDone: r.stepsDone, maxSteps: r.maxSteps, budgetCap: r.budgetCap, spent: r.spent, deadline: iso(r.deadline), inputAssetKey: str(m["inputAssetKey"]), outputAssetKeys: outputs };
+      // 卖出授权：库里 inputAssetKey 记的是资金币种、legs 是股票，但合约拉取的是股票、budgetCap 以股票计。
+      // 记录里按实际方向给（输入 = 股票，输出 = 资金币种），否则网页会把股票数量按 USDG 精度显示（2026-10-03 发现）
+      const legs = Array.isArray(m["legs"]) ? (m["legs"] as Array<{ outputAssetKey?: unknown }>) : [];
+      const sellStock = m["side"] === "sell" && typeof legs[0]?.outputAssetKey === "string" ? legs[0].outputAssetKey : null;
+      const inputKey = sellStock ?? str(m["inputAssetKey"]);
+      const outputKeys = sellStock ? [str(m["inputAssetKey"])].filter((k): k is string => !!k) : outputs;
+      return { kind: "mandate", id: r.id, createdAt: iso(r.createdAt), status: r.state, taskId: r.taskId ?? null, stepsDone: r.stepsDone, maxSteps: r.maxSteps, budgetCap: r.budgetCap, spent: r.spent, deadline: iso(r.deadline), inputAssetKey: inputKey, outputAssetKeys: outputKeys, ...(sellStock ? { side: "sell" as const } : {}) };
     }),
     ...plans.map((r): RecordItem => ({ kind: "plan", id: r.id, createdAt: iso(r.createdAt), ...goalSummary(r.goalJson) })),
     ...jobs.map((r): RecordItem => {

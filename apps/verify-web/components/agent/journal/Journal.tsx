@@ -17,6 +17,8 @@ import type { Task } from "@chaconne/core/verify";
 import { Card, Pill } from "@/components/ui";
 import { LoadingState, ModeTag, NotReady, OwnerField, Skeleton, Toast, useOwnerInput, useToast } from "../shared";
 import { blockerSentence, statusLabel, taskTitle } from "../tasks/taskTitle";
+import { V7_UI } from "@/lib/v7";
+import { AgentNight } from "./AgentNight";
 
 type L = { kind: "idle" } | { kind: "busy" } | { kind: "nr"; http: number } | { kind: "err"; msg: string } | { kind: "ok"; v: RecapView | RecapPendingView };
 
@@ -69,6 +71,7 @@ export function Journal() {
         {state.kind === "nr" && <div className="mt-3"><NotReady what="GET /v1/recaps" status={state.http} onRetry={() => reload(false)} /></div>}
         {state.kind === "err" && <p className="mt-2 text-sm text-bad">{state.msg}</p>}
       </Card>
+      {V7_UI && <AgentNight recap={state.kind === "ok" && !isRecapPending(state.v) ? state.v : null} fixture={sp.get("v7fixture") === "1"} />}
       {state.kind === "ok" && isRecapPending(state.v) && (
         <Card title={`${state.v.date} · ${zh ? "尚未生成" : "not generated yet"}`}>
           <p className="text-sm">{state.v.note}</p>

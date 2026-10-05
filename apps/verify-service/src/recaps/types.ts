@@ -2,6 +2,7 @@
  * C5 夜班日志（Recap）类型（Lane F）。页面（api-v2.ts 的 v6 段）与 SDK 镜像同一形状；
  * 若冻结进 contracts.ts 需走 CV-D。金额十进制字符串；时间 ISO-8601 UTC。
  */
+import type { AgentJournalDay } from "./agentJournal";
 
 /** 模拟 / 回放 / 真实三种标识（R-03）；FIXTURE 只在夹具证据模式出现，绝不标成 LIVE */
 export type RecapMode = "LIVE" | "SIMULATION" | "REPLAY" | "FIXTURE";
@@ -121,6 +122,8 @@ export interface Recap {
   milestones: RecapMilestone[];
   remixable: RecapRemixable[];
   share: RecapShare;
+  /** v7 R4：Agent 段（轮次 / 动作 / 等待 / 成交 / 成本 / 故障与恢复，按纽约交易日）；数据源未接上时缺省。只给 owner，不进公开视图 */
+  agent?: AgentJournalDay;
 }
 
 /** 生成门槛未到时的占位（不是假数据） */

@@ -1,0 +1,125 @@
+{
+ "items": [
+  {
+   "shareId": "shr_8863239b0a1e89c00f1223f9",
+   "kind": "job",
+   "persona": null,
+   "privacy": {
+    "amounts": "range",
+    "wallet": "hidden"
+   },
+   "title": null,
+   "createdAt": "2026-10-02T14:04:52.005Z",
+   "templateId": null,
+   "evidenceMode": "LIVE",
+   "status": "waiting",
+   "headline": "Check passed for AAPLx. Nothing executed yet.",
+   "headlineZh": "AAPLx 核验通过，尚未执行——这只是一次核验。",
+   "goal": {
+    "side": "buy",
+    "input": "USDG",
+    "output": "AAPLx",
+    "amount": "100–1k",
+    "policyId": "REFERENCE_CONTEXT"
+   },
+   "result": {
+    "verdict": "eligible",
+    "comparisonStatus": "official_close",
+    "marketSession": "REGULAR",
+    "reasons": [],
+    "reasonDetails": [],
+    "completionBps": null,
+    "reportHash": "0x4d844baa57d93669b050e207d33bf7686323a195cf07cbd18d957397c8fc4972",
+    "evidenceHash": "0x5de33cf934077e25c7be3247f49bcb3f706b1c8b6ceb35e524d1a29dd8778712",
+    "evaluatedAt": "2026-10-02T14:04:51.286Z",
+    "execution": null,
+    "check": {
+     "executionEligible": true,
+     "marketSession": "REGULAR",
+     "comparisonStatus": "official_close",
+     "evaluatedAt": "2026-10-02T14:04:51.286Z",
+     "policyId": "REFERENCE_CONTEXT",
+     "reference": {
+      "kind": "official_close",
+      "priceUsd": "330.32",
+      "deviationBps": 59,
+      "sourcePublishedAt": null,
+      "tradingDate": "2026-10-01"
+     },
+     "executableUsdPerShare": "332.260706732706",
+     "adverseImpactBps": 0,
+     "quoteReceivedAt": "2026-10-02T14:04:51.462Z"
+    }
+   },
+   "verifier": {
+    "bundleUrl": "/v1/jobs/job_2590575882850c9532480359/bundle",
+    "publicBundleUrl": "/pub/reports/shr_8863239b0a1e89c00f1223f9/bundle",
+    "contractAddress": "0x02834e26bbd851eedb888bafba666bc0af72770c"
+   }
+  },
+  {
+   "shareId": "shr_d4e31381a55a49ed264079cd",
+   "kind": "job",
+   "persona": null,
+   "privacy": {
+    "amounts": "range",
+    "wallet": "hidden"
+   },
+   "title": null,
+   "createdAt": "2026-09-25T16:26:19.637Z",
+   "templateId": null,
+   "evidenceMode": "LIVE",
+   "status": "waiting",
+   "headline": "Check passed for AAPLx. Nothing executed yet.",
+   "headlineZh": "AAPLx 核验通过，尚未执行——这只是一次核验。",
+   "goal": {
+    "side": "buy",
+    "input": "USDG",
+    "output": "AAPLx",
+    "amount": "100–1k",
+    "policyId": "REFERENCE_CONTEXT"
+   },
+   "result": {
+    "verdict": "eligible",
+    "comparisonStatus": "official_close",
+    "marketSession": "CLOSED",
+    "reasons": [
+     "CLOSE_UNCONFIRMED"
+    ],
+    "reasonDetails": [
+     {
+      "code": "CLOSE_UNCONFIRMED",
+      "severity": "info"
+     }
+    ],
+    "completionBps": null,
+    "reportHash": "0x88e9f341f7af66eed742dee8a77d51cc50da67f20851d6c75f82ba3b2f7fc5e0",
+    "evidenceHash": "0x473d2b098f991d7872746b84de6f7c71304e61f80f92552b37695f46fc2e2b6c",
+    "evaluatedAt": "2026-09-21T07:04:57.499Z",
+    "execution": null,
+    "check": {
+     "executionEligible": true,
+     "marketSession": "CLOSED",
+     "comparisonStatus": "official_close",
+     "evaluatedAt": "2026-09-21T07:04:57.499Z",
+     "policyId": "REFERENCE_CONTEXT",
+     "reference": {
+      "kind": "close_last_tick",
+      "priceUsd": "336.13",
+      "deviationBps": -40,
+      "sourcePublishedAt": "2026-09-18T20:00:00.000Z",
+      "tradingDate": "2026-09-18"
+     },
+     "executableUsdPerShare": "334.781659903078",
+     "adverseImpactBps": 1,
+     "quoteReceivedAt": "2026-09-21T07:04:57.679Z"
+    }
+   },
+   "verifier": {
+    "bundleUrl": "/v1/jobs/job_3d43807bbd9e85ab4ba83d12/bundle",
+    "publicBundleUrl": "/pub/reports/shr_d4e31381a55a49ed264079cd/bundle",
+    "contractAddress": "0x02834e26bbd851eedb888bafba666bc0af72770c"
+   }
+  }
+ ]
+}

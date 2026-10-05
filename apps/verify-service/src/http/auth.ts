@@ -2,8 +2,48 @@
  * 调用方身份：API key（x-api-key 或 Authorization: Bearer）→ callerId；每调用方独立限频（I-01 / I-06）。
  * 不缓存鉴权结果到共享缓存；所有 /v1/jobs 响应 Cache-Control: private, no-store（I-02）。
  */
+import { createHash, timingSafeEqual } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import type { ApiKeyEntry } from "../config";
+
+/* ---------------- v7（D-093 / CV-D25）：服务 key —— authKind = "service" ---------------- */
+
+/** 服务调用方：平台执行身份 / 托管 Agent。它们不是运营者（SEC-01），也不代表任何 owner（SEC-09） */
+export const SERVICE_CALLERS = ["executor:hosted", "agent:hosted"] as const;
+export type ServiceCaller = (typeof SERVICE_CALLERS)[number];
+export function isServiceCallerId(callerId: string | null | undefined): callerId is ServiceCaller {
+  return callerId === "executor:hosted" || callerId === "agent:hosted";
+}
+
+/** 从请求取 API key（x-api-key 或 Authorization: Bearer） */
+export function requestApiKey(req: Request): string {
+  return (req.header("x-api-key") || req.header("authorization")?.replace(/^Bearer\s+/i, "") || "").trim();
+}
+
+/**
+ * 服务 key 匹配器：verify-service 只存 SHA-256（VERIFY_EXECUTOR_KEY_SHA256 / VERIFY_HOSTED_AGENT_KEY_SHA256）；
+ * 请求 key 求 SHA-256 后与两项都做常量时间比较（不因第一项命中而短路），空配置 = 该身份不可用。
+ */
+export function serviceKeyMatcher(hashes: { executor?: string | null; agent?: string | null }): (key: string) => ServiceCaller | null {
+  const entries: Array<[ServiceCaller, Buffer | null]> = [
+    ["executor:hosted", /^[0-9a-f]{64}$/.test(hashes.executor ?? "") ? Buffer.from(hashes.executor!, "hex") : null],
+    ["agent:hosted", /^[0-9a-f]{64}$/.test(hashes.agent ?? "") ? Buffer.from(hashes.agent!, "hex") : null],
+  ];
+  return (key: string) => {
+    if (!key) return null;
+    const h = createHash("sha256").update(key, "utf8").digest();
+    let hit: ServiceCaller | null = null;
+    for (const [caller, want] of entries) {
+      const eq = want ? timingSafeEqual(h, want) : timingSafeEqual(h, h) && false;
+      if (eq && !hit) hit = caller;
+    }
+    return hit;
+  };
+}
+
+export function sha256Hex(s: string): string {
+  return createHash("sha256").update(s, "utf8").digest("hex");
+}
 
 /**
  * 调用方是否代表该 owner 地址（钱包账户化的两条无需查库的规则）：
@@ -65,6 +105,11 @@ export function rateLimit(key: string, limit: number, windowMs: number, now = Da
 export function freeRateLimiter(o: { perMin: number; validKeys: ReadonlySet<string>; now?: () => number; windowMs?: number }) {
   const windowMs = o.windowMs ?? 60_000;
   return (req: Request, res: Response, next: NextFunction): void => {
+    // v7：服务 key 已由 registerV7AEarly 鉴权并单独限频（agent 300/min、executor 600/min），不走 IP 桶
+    if (res.locals["authKind"] === "service") {
+      next();
+      return;
+    }
     const key = (req.header("x-api-key") || req.header("authorization")?.replace(/^Bearer\s+/i, "") || "").trim();
     if (key && o.validKeys.has(key)) {
       next();
@@ -95,9 +140,10 @@ export function resetRateLimits(): void {
   buckets.clear();
 }
 
-/** 运营者判定：只有配置表里的、非地址绑定的 key 调用方算运营者；开放模式（无 key）的调用方永远不是 */
+/** 运营者判定：只有配置表里的、非地址绑定的 key 调用方算运营者；开放模式（无 key）的调用方永远不是；服务 key（authKind=service）永远不是（D-093 / SEC-01） */
 export function isOperator(res: Response): boolean {
-  return res.locals["authKind"] === "key" && !/(0x[0-9a-f]{40})$/.test(String(res.locals["callerId"] ?? ""));
+  const callerId = String(res.locals["callerId"] ?? "");
+  return res.locals["authKind"] === "key" && !isServiceCallerId(callerId) && !/(0x[0-9a-f]{40})$/.test(callerId);
 }
 
 export interface ApiKeyAuthOptions {
@@ -109,12 +155,21 @@ export interface ApiKeyAuthOptions {
   keysUrl?: string;
 }
 
+/** v7（interfaces §12.8 末条）：活动流轮询单独计数，每调用方 ≥ 120/min，不挤占普通 60/min 额度 */
+export const ACTIVITY_PER_MIN = 120;
+const ACTIVITY_PATH = /^\/v1\/tasks\/[^/]+\/activity$/;
+function bucketFor(req: Request, callerId: string, perMin: number): { key: string; limit: number } {
+  if (req.method === "GET" && ACTIVITY_PATH.test(req.path)) return { key: `activity:${callerId}`, limit: Math.max(perMin, ACTIVITY_PER_MIN) };
+  return { key: `caller:${callerId}`, limit: perMin };
+}
+
 export function apiKeyAuth(entries: ApiKeyEntry[], perMin: number, opts: ApiKeyAuthOptions = {}) {
   const byKey = new Map(entries.map((e) => [e.key, e.callerId]));
-  const admit = (res: Response, callerId: string, next: NextFunction): void => {
-    if (!rateLimit(`caller:${callerId}`, perMin, 60_000)) {
+  const admit = (req: Request, res: Response, callerId: string, next: NextFunction): void => {
+    const b = bucketFor(req, callerId, perMin);
+    if (!rateLimit(b.key, b.limit, 60_000)) {
       res.setHeader("Retry-After", "60");
-      res.status(429).json({ error: "rate_limited", message: `Rate limit exceeded for this caller (${perMin}/min). Retry after 60 s.`, retryAfterSeconds: 60 });
+      res.status(429).json({ error: "rate_limited", message: `Rate limit exceeded for this caller (${b.limit}/min). Retry after 60 s.`, retryAfterSeconds: 60 });
       return;
     }
     res.locals["callerId"] = callerId;
@@ -126,6 +181,11 @@ export function apiKeyAuth(entries: ApiKeyEntry[], perMin: number, opts: ApiKeyA
     const key = header.trim();
     res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("Vary", "x-api-key, authorization, x-verify-caller");
+    // v7：服务 key 已在 registerV7AEarly 鉴权（默认拒绝白名单 + 轮次令牌）；这里不再查表、不改 authKind
+    if (res.locals["authKind"] === "service" && isServiceCallerId(res.locals["callerId"] as string)) {
+      next();
+      return;
+    }
     if (!key) {
       if (!opts.open) {
         res.status(401).json({
@@ -138,9 +198,10 @@ export function apiKeyAuth(entries: ApiKeyEntry[], perMin: number, opts: ApiKeyA
       // 开放模式：x-verify-caller 给了钱包地址 → 与网页同一命名空间 web:<地址>（网页与 MCP 看到同一批任务）；没给 → anon:<ip>
       const sub = (req.header("x-verify-caller") ?? "").trim().toLowerCase();
       const callerId = /^0x[0-9a-f]{40}$/.test(sub) ? `web:${sub}` : `anon:${req.ip ?? "unknown"}`;
-      if (!rateLimit(`caller:${callerId}`, perMin, 60_000)) {
+      const ob = bucketFor(req, callerId, perMin);
+      if (!rateLimit(ob.key, ob.limit, 60_000)) {
         res.setHeader("Retry-After", "60");
-        res.status(429).json({ error: "rate_limited", message: `Rate limit exceeded for this caller (${perMin}/min). Retry after 60 s.`, retryAfterSeconds: 60 });
+        res.status(429).json({ error: "rate_limited", message: `Rate limit exceeded for this caller (${ob.limit}/min). Retry after 60 s.`, retryAfterSeconds: 60 });
         return;
       }
       res.locals["callerId"] = callerId;
@@ -161,7 +222,7 @@ export function apiKeyAuth(entries: ApiKeyEntry[], perMin: number, opts: ApiKeyA
             res.status(403).json({ error: "invalid_api_key", message: `Unknown or revoked key. Issue a new one${opts.keysUrl ? ` at ${opts.keysUrl}` : ""}.`, keysUrl: opts.keysUrl ?? null });
             return;
           }
-          admit(res, hit.callerId, next);
+          admit(req, res, hit.callerId, next);
         })
         .catch(next);
       return;
@@ -175,9 +236,10 @@ export function apiKeyAuth(entries: ApiKeyEntry[], perMin: number, opts: ApiKeyA
       }
       callerId = `${callerId.slice(0, -1)}${sub}`;
     }
-    if (!rateLimit(`caller:${callerId}`, perMin, 60_000)) {
+    const kb = bucketFor(req, callerId, perMin);
+    if (!rateLimit(kb.key, kb.limit, 60_000)) {
       res.setHeader("Retry-After", "60");
-      res.status(429).json({ error: "rate_limited", message: `Rate limit exceeded for this API key (${perMin}/min). Retry after 60 s.`, retryAfterSeconds: 60 });
+      res.status(429).json({ error: "rate_limited", message: `Rate limit exceeded for this API key (${kb.limit}/min). Retry after 60 s.`, retryAfterSeconds: 60 });
       return;
     }
     res.locals["callerId"] = callerId;

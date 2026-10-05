@@ -1,0 +1,186 @@
+[
+ {
+  "id": 802,
+  "at": "2026-10-03T01:10:35.130Z",
+  "actor": "agent:byo",
+  "type": "created",
+  "note": "agent_goal LIVE (goal task: no template, agent's own strategy)",
+  "data": {
+   "to": "DRAFT"
+  }
+ },
+ {
+  "id": 803,
+  "at": "2026-10-03T01:10:35.130Z",
+  "actor": "agent:byo",
+  "type": "status",
+  "note": "",
+  "data": {
+   "to": "AWAITING_AUTHORIZATION",
+   "from": "DRAFT"
+  }
+ },
+ {
+  "id": 804,
+  "at": "2026-10-03T01:10:55.455Z",
+  "actor": "agent:byo",
+  "type": "authorized",
+  "note": "mandate mnd_2bd21151a72dadc5716cc948 ACTIVE",
+  "data": {
+   "ref": "mnd_2bd21151a72dadc5716cc948"
+  }
+ },
+ {
+  "id": 805,
+  "at": "2026-10-03T01:10:56.939Z",
+  "actor": "agent:byo",
+  "type": "authorized",
+  "note": "sell authorization sell:eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a → mandate mnd_859560b65fba3d7468b0a670 ACTIVE (contract cap 38989493130023483)",
+  "data": {
+   "ref": "mnd_859560b65fba3d7468b0a670",
+   "side": "sell",
+   "itemId": "sell:eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+   "mandateId": "mnd_859560b65fba3d7468b0a670"
+  }
+ },
+ {
+  "id": 808,
+  "at": "2026-10-03T02:08:56.736Z",
+  "actor": "agent:byo",
+  "type": "permit_submitted",
+  "note": "allowance signature for 0x4ae46a509f6b1d9056937ba4500cb143933d2dc8 submitted; the platform executor relays it on-chain (owner sends no transaction)",
+  "data": {
+   "ref": "prm_a09468808737b857db899a6b",
+   "jobId": "exj_7d439337f031e6334c864b5a",
+   "token": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+   "value": "6030000",
+   "permitId": "prm_a09468808737b857db899a6b"
+  }
+ },
+ {
+  "id": 809,
+  "at": "2026-10-03T02:08:59.599Z",
+  "actor": "executor:hosted",
+  "type": "permit_confirmed",
+  "note": "allowance for 0x4ae46a509f6b1d9056937ba4500cb143933d2dc8 set on-chain (0x62f45d61c7e68e3a711ae4a291284503277d78548c1b39c7ef9f2fd3a595cec8)",
+  "data": {
+   "ref": "prm_a09468808737b857db899a6b",
+   "token": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+   "txHash": "0x62f45d61c7e68e3a711ae4a291284503277d78548c1b39c7ef9f2fd3a595cec8",
+   "permitId": "prm_a09468808737b857db899a6b",
+   "allowanceAfter": "6030000"
+  }
+ },
+ {
+  "id": 811,
+  "at": "2026-10-03T02:08:59.868Z",
+  "actor": "system",
+  "type": "agent_turn",
+  "note": "turn 1 (ready_for_intent): conditions are clear inside your scope: submit a trade intent, decline, ask for evidence, revise the plan or end the task",
+  "data": {
+   "reason": "ready_for_intent",
+   "turnVersion": 1
+  }
+ },
+ {
+  "id": 812,
+  "at": "2026-10-03T02:09:00.757Z",
+  "actor": "system",
+  "type": "agent_turn",
+  "note": "turn 2 (authorized): the delegation is complete (buy authorization and allowance in place): you can act inside the signed scope",
+  "data": {
+   "reason": "authorized",
+   "triggerKey": "authorized:tsk_c7bc0d49075b80b3d83e1a8c",
+   "turnVersion": 2
+  }
+ },
+ {
+  "id": 817,
+  "at": "2026-10-03T02:09:16.070Z",
+  "actor": "system",
+  "type": "delegation_completed",
+  "note": "delegation complete: 6 signature(s), 0 user transaction(s)",
+  "data": {
+   "signatures": 6,
+   "userTransactions": 0
+  }
+ },
+ {
+  "id": 818,
+  "at": "2026-10-03T02:09:52.851Z",
+  "actor": "agent:hosted",
+  "type": "intent_certified",
+  "note": "intent int_6495e3b90b2075ddfe13e5d9 certified: buy AAPLx 2000000 → step 0",
+  "data": {
+   "ref": "int_6495e3b90b2075ddfe13e5d9",
+   "jobId": "exj_ed0c73fe7fc775e1d2447f84",
+   "status": "certified",
+   "intentId": "int_6495e3b90b2075ddfe13e5d9"
+  }
+ },
+ {
+  "id": 820,
+  "at": "2026-10-03T02:10:07.014Z",
+  "actor": "system",
+  "type": "step_confirmed",
+  "note": "spent 2000000",
+  "data": {
+   "ref": "mnd_2bd21151a72dadc5716cc948:0",
+   "spentRaw": "2000000",
+   "mandateId": "mnd_2bd21151a72dadc5716cc948",
+   "stepIndex": 0
+  }
+ },
+ {
+  "id": 821,
+  "at": "2026-10-03T02:10:07.156Z",
+  "actor": "system",
+  "type": "agent_turn",
+  "note": "turn 3 (step_confirmed): step 0 confirmed on-chain (spent 2000000); 2 planned step(s) left inside your scope",
+  "data": {
+   "reason": "step_confirmed",
+   "turnVersion": 3
+  }
+ },
+ {
+  "id": 823,
+  "at": "2026-10-03T02:10:42.311Z",
+  "actor": "agent:hosted",
+  "type": "agent_declined",
+  "note": "Step 0 (2,000,000 raw USDG → AAPLx) confirmed on-chain just moments ago (createdAt 2026-10-03T02:09:52Z, confirmed by 02:10:14Z). Strategy caps buys at one per hour. Submitting another intent now (≈22s later) would violate that cadence even though 2 steps and 4,000,000 raw budget remain. No pending ",
+  "data": {
+   "ref": "turn:3",
+   "status": "declined",
+   "nextCheckAt": "2026-10-03T03:15:00.000Z",
+   "turnVersion": 3,
+   "invalidation": "At least one hour has passed since the last confirmed buy AND a fresh executable quote for AAPLx or NVDAx shows reasonable price impact/deviation AND no new major pending release or Fed blackout window applies before the 2026-10-05T01:10Z deadline — then proceed with the next small step.",
+   "clientRequestId": "h:run_3eba8a06cbf517d14adbc584:1003"
+  }
+ },
+ {
+  "id": 826,
+  "at": "2026-10-03T03:15:16.876Z",
+  "actor": "system",
+  "type": "agent_turn",
+  "note": "turn 5 (scheduled): your scheduled check (2026-10-03T03:15:00.000Z) is due",
+  "data": {
+   "reason": "scheduled",
+   "triggerKey": "sched:2026-10-03T03:15:00.000Z",
+   "turnVersion": 5
+  }
+ },
+ {
+  "id": 851,
+  "at": "2026-10-03T04:22:13.899Z",
+  "actor": "agent:hosted",
+  "type": "agent_ended",
+  "note": "Step 3/3 (2,000,000 raw USDG→AAPLx) just confirmed on-chain. budget.buyStepsLeft=0: maxSteps(3) exhausted, no further buys possible under this scope. Strategy goal (small starter position in allowed stocks, ≤1 buy/hour) is fulfilled: AAPLx bought in 2 steps (avgCost ~$333.61), NVDAx in 1 step (avgCo",
+  "data": {
+   "ref": "turn:9",
+   "status": "ended",
+   "turnVersion": 9,
+   "invalidation": "A revised/renewed signed scope with more buy steps or budget, or an explicit owner instruction to sell, would restart activity on this task.",
+   "clientRequestId": "h:run_bfb341fb6bddb4c419e2a1ea:1005"
+  }
+ }
+]

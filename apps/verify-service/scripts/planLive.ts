@@ -27,7 +27,7 @@ async function main() {
     okx: new OkxClient({ apiKey: cfg.OKX_API_KEY, secretKey: cfg.OKX_SECRET_KEY, passphrase: cfg.OKX_PASSPHRASE, baseUrl: cfg.OKX_API_BASE_URL }),
     finnhub: cfg.FINNHUB_API_KEY ? new FinnhubClient(cfg.FINNHUB_API_KEY) : null,
     rpcUrl: cfg.XLAYER_RPC_URL,
-    guardAddress: (cfg.GUARD_ADDRESS || null) as `0x${string}` | null,
+    guardAddress: (cfg.PLANGUARD_ADDRESS || null) as `0x${string}` | null,
     approvedRouter: (cfg.ROUTER_ADDRESS || null) as `0x${string}` | null,
     approvedSpender: (cfg.SPENDER_ADDRESS || null) as `0x${string}` | null,
     closeClassification: "v2",

@@ -12,7 +12,14 @@ export interface VerifyClientOptions {
   fetchImpl?: typeof fetch;
   /** agent-wallet 模式下的 x402 付款人（用户自持钱包）；缺省 = 不自动付款，402 原样返回给 host */
   payer?: X402Payer | null;
+  /**
+   * v7（CV-D25）：托管 Agent 的一次性轮次令牌（x-agent-run-token）。缺省读环境变量 VERIFY_RUN_TOKEN；
+   * 托管 Agent 每轮启动一个本进程，只给它 VERIFY_SERVICE_URL / VERIFY_API_KEY / VERIFY_RUN_TOKEN。
+   */
+  runToken?: string | null;
 }
+
+export const RUN_TOKEN_HEADER = "x-agent-run-token";
 
 export interface HttpResult<T = unknown> {
   status: number;
@@ -31,8 +38,16 @@ export const API_KEY_REQUIRED = "api_key_required";
 
 export class VerifyClient {
   private readonly f: typeof fetch;
+  private readonly runToken: string | null;
   constructor(private readonly o: VerifyClientOptions) {
     this.f = o.fetchImpl ?? fetch;
+    const t = o.runToken !== undefined ? o.runToken : (process.env["VERIFY_RUN_TOKEN"] ?? null);
+    this.runToken = t && t.trim() ? t.trim() : null;
+  }
+
+  /** 是否带着托管 Agent 的轮次令牌 */
+  get hasRunToken(): boolean {
+    return this.runToken !== null;
   }
 
   get payer(): X402Payer | null {
@@ -52,6 +67,7 @@ export class VerifyClient {
     void normalizedPath;
     if (auth && this.o.apiKey) headers["x-api-key"] = this.o.apiKey;
     if (auth && this.o.caller) headers["x-verify-caller"] = this.o.caller;
+    if (auth && this.runToken) headers[RUN_TOKEN_HEADER] = this.runToken;
     const url = `${this.o.baseUrl.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
     const send = (h: Record<string, string>) => this.f(url, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
     let res = await send(headers);

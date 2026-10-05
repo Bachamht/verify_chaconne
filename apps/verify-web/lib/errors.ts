@@ -44,6 +44,19 @@ const E: Record<string, { en: string; zh: string }> = {
   invalid_playbook_params: { en: "Some task fields need attention.", zh: "任务里有几个字段需要修正。" },
   task_not_found: { en: "Task not found, or it belongs to another wallet.", zh: "找不到任务，或它属于另一个钱包。" },
   invalid_transition: { en: "The task cannot move to that state from where it is now.", zh: "任务当前状态不允许这个操作。" },
+  /* ---- v7（委托 / 托管 / 执行；interfaces §12） ---- */
+  permit_nonce_stale: { en: "The allowance request went stale (the token nonce moved); a fresh one is fetched automatically.", zh: "额度请求已过期（代币 nonce 变了），会自动重新取一份。" },
+  permit_pending: { en: "An allowance for this token is already going on-chain; wait for it to settle.", zh: "这个代币已有一份额度在上链，等它有结果。" },
+  permit_not_needed: { en: "The on-chain allowance already covers this; no signature is needed.", zh: "链上额度已经够用，不需要这次签名。" },
+  permit_domain_unverified: { en: "Allowance signatures are switched off for this token until its signing domain is verified.", zh: "这个代币的签名域还没核验通过，暂不支持额度签名。" },
+  hosted_not_allowed: { en: "Hosted running is not open to this wallet yet; you can use observation mode first.", zh: "托管运行暂未对这个钱包开放，可先用观察模式。" },
+  hosted_disabled: { en: "Hosted capability is currently switched off.", zh: "托管能力当前关闭。" },
+  issuance_not_agent: { en: "Only agent-issued tasks can switch who decides or executes.", zh: "只有由 Agent 提交意图的任务才能切换决策或执行方。" },
+  execution_in_flight: { en: "A transaction is being sent; try again after it settles.", zh: "有一笔交易正在发送，等它有结果后再试。" },
+  recipient_must_be_owner: { en: "Trimming and platform execution require the recipient to be your own wallet.", zh: "减仓与平台执行要求收款地址就是你的钱包。" },
+  platform_executes: { en: "The platform executor runs this task; there is no step for you to execute.", zh: "这个任务由平台执行，没有需要你自己执行的步骤。" },
+  task_bound_mandate: { en: "This authorization belongs to a task; manage it from the task page.", zh: "这份授权属于一个任务，请在任务页操作。" },
+  price_unavailable: { en: "No executable price was available to size the sell cap; rebuild it shortly.", zh: "暂时拿不到可执行价格来计算卖出上限，稍后重新生成。" },
 };
 
 /** 字段级校验码 → 人话（V-24：400 invalid_playbook_params 的 details[].code） */

@@ -38,20 +38,21 @@ describe("导航与路由", () => {
     expect(src).toContain("verify-switch");
     expect(src).toContain("行情比价");
   });
-  it("V-47：只有一套导航——页头 5 主项 + 工具下拉 + 开发者；子导航 pill 删除；投屏模式在页脚且带说明；/me 改名", () => {
+  it("V-47：只有一套导航——页头 5 主项 + 工具下拉 + 开发者；子导航 pill 删除；投屏模式已整体删除；/me 改名", () => {
     const header = read("components/Header.tsx");
     expect(header).toMatch(/NAV_MAIN[\s\S]*"\/agent\/journal"/);
     expect(header).toMatch(/NAV_TOOLS[\s\S]*"\/verify-bundle"/);
     expect(header).not.toContain("demo_mode");
     expect(read("components/agent/shared.tsx")).not.toContain("ag-subnav");
-    const footer = read("components/Footer.tsx");
-    expect(footer).toContain("demo_mode_hint");
+    expect(read("components/Footer.tsx")).not.toContain("demo_mode");
+    expect(read("components/shell/MarketingFooter.tsx")).not.toContain("demo_mode");
     const i18n = read("lib/i18n.tsx");
     expect(i18n).toMatch(/nav_me: \{ en: "My records", zh: "我的记录" \}/);
     expect(read("app/globals.css")).toMatch(/\.verify-menu-toggle \{ display: none; \}/);
   });
   it("代理放行 §11.7 全部 v6 路径", () => {
-    const src = read("app/api/verify/[...path]/route.ts");
+    // 名单在 v7 迁到 lib/proxyAllow.ts（route.ts 只调用 proxyAllowed）
+    const src = read("lib/proxyAllow.ts");
     for (const p of ["v1/context", "v1/events", "v1/event-impacts", "v1/tasks", "v1/theses", "v1/budget-groups", "v1/portfolio", "v1/notify", "v1/replays", "v1/rebalance", "v1/recaps", "v1/missions"]) expect(src).toContain(p);
   });
   it("入口与示例任务（条件不含金额/钱包；不再默认限制美股常规时段）", () => {

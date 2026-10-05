@@ -415,8 +415,27 @@ export const REASON_CODES = [
   "DECISION_BASIS_NOT_ADMISSIBLE",
   /** 签名里的硬约束未满足（与计划条件无关） */
   "HARD_CONSTRAINT_BLOCK",
-  /** 范围允许卖出，但卖出需按资产另签卖出授权，本意图不签发 */
+  /** 范围允许卖出，但卖出需按资产另签卖出授权，本意图不签发（v7 起只用于没有卖出草案的旧任务） */
   "SELL_MANDATE_REQUIRED",
+  /* ---- v7（Lane I 2026-10-02 冻结，开发计划 §2.13） ---- */
+  /** non-HARD：同一步已有被取走的证书或在途作业，等到签名 validUntil + margin */
+  "EXECUTION_IN_FLIGHT",
+  /** 阻塞，userActionRequired：委托清单未完成（买入授权或额度签名缺失） */
+  "DELEGATION_INCOMPLETE",
+  /** 阻塞，userActionRequired：owner 对 PlanGuard 的链上额度不足 */
+  "ALLOWANCE_INSUFFICIENT",
+  /** 阻塞，userActionRequired：owner 的输入代币余额不足 */
+  "BALANCE_INSUFFICIENT",
+  /** 阻塞：该股票没有签过卖出授权 */
+  "SELL_NOT_DELEGATED",
+  /** 阻塞：卖出数量无法核对（D-092 2026-10-02 简化后只在链上余额读不到时出现，detail.note = balance_unavailable）；超出链上余额走 BALANCE_INSUFFICIENT。码名保留兼容 */
+  "SELL_EXCEEDS_TASK_POSITION",
+  /** 信息项：平台执行身份不可用（gas 低 / 离线） */
+  "EXECUTOR_UNAVAILABLE",
+  /** 信息项：托管 Agent 达到次数 / 成本上限 */
+  "AGENT_LIMIT_REACHED",
+  /** 信息项：事件预定时间已到但实际值未入库 */
+  "EVENT_DATA_PENDING",
 ] as const;
 export type ReasonCode = (typeof REASON_CODES)[number];
 
@@ -673,7 +692,9 @@ export interface StepCertificate {
 
 export const MANDATE_STATES = ["DRAFT", "ACTIVE", "PAUSED", "CANCELLED", "REVOKED", "COMPLETED", "EXPIRED"] as const;
 export type MandateState = (typeof MANDATE_STATES)[number];
-export const MANDATE_STEP_STATES = ["PREPARED", "EXPIRED", "SUBMITTED", "REORG_PENDING", "CONFIRMED", "REVERTED", "UNKNOWN"] as const;
+export const MANDATE_STEP_STATES = ["PREPARED", "EXPIRED", "SUBMITTED", "REORG_PENDING", "CONFIRMED", "REVERTED", "UNKNOWN", "SUPERSEDED"] as const;
+/** v7（CV-D24）：只有这些「活」状态受 (mandate_id, step_index) 部分唯一索引约束；SUPERSEDED / EXPIRED / REVERTED 可与一条活行同 index 共存 */
+export const LIVE_MANDATE_STEP_STATES = ["PREPARED", "SUBMITTED", "REORG_PENDING", "CONFIRMED", "UNKNOWN"] as const;
 export type MandateStepState = (typeof MANDATE_STEP_STATES)[number];
 export type MandateEvalStatus = "READY" | "WAIT" | "BLOCKED" | "DONE";
 
@@ -1055,7 +1076,7 @@ export interface ReplayRun {
 }
 
 /* ---------- §1.9 通知事件 ---------- */
-export const NOTIFICATION_TYPES = ["task.status_changed", "task.step_ready", "task.step_confirmed", "task.step_reverted", "task.blocked", "event.revised", "event.released", "thesis.invalidated", "thesis.unknown", "budget.conflict", "budget.released", "task.expiring", "recap.ready", "task.intent_certified", "task.intent_rejected", "task.agent_turn", "task.agent_status"] as const;
+export const NOTIFICATION_TYPES = ["task.status_changed", "task.step_ready", "task.step_confirmed", "task.step_reverted", "task.blocked", "event.revised", "event.released", "thesis.invalidated", "thesis.unknown", "budget.conflict", "budget.released", "task.expiring", "recap.ready", "task.intent_certified", "task.intent_rejected", "task.agent_turn", "task.agent_status", "task.delegation_completed", "task.needs_owner", "task.execution_failed", "task.recertified", "event.data_arrived", "agent.run_completed", "ops.alert"] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 /** 载荷只含 id、类型、版本、摘要与链接；不含任何签名、证书、calldata（D-087：通知不携带权限） */
 export interface NotificationPayload {
@@ -1099,3 +1120,251 @@ export interface PortfolioSnapshotEvidence {
   blockNumber: number;
   holdings: Array<{ assetKey: string; balanceRaw: RawAmount; tracedQtyRaw: RawAmount | null }>;
 }
+
+/* =====================================================================================
+ * v7 增补（Lane I 2026-10-02 冻结；开发计划 §2.1 / §2.2 / §2.5 / §2.6 / §2.7；interfaces.md §12）
+ * 只有类型与常量；实现分别在 core/verify/{delegation,execution,agent} 与各服务里。
+ * ===================================================================================== */
+
+/** viem / 钱包 signTypedData 能直接吃的 typedData（domain 字段按代币 / 合约各自的域给出） */
+export interface Eip712TypedData {
+  domain: { name?: string; version?: string; chainId?: number; verifyingContract?: EvmAddress; salt?: Bytes32 };
+  types: Record<string, Array<{ name: string; type: string }>>;
+  primaryType: string;
+  message: Record<string, unknown>;
+}
+
+/* ---------- §2.1 任务运行态 ---------- */
+export const AGENT_MODES = ["hosted", "byo"] as const;
+export type AgentMode = (typeof AGENT_MODES)[number];
+/** hosted = 平台执行身份（作业制）；agent_wallet = 用户 Agent 经 MCP 自己发；browser = owner 网页逐笔 */
+export const EXECUTOR_MODES = ["hosted", "agent_wallet", "browser"] as const;
+export type ExecutorMode = (typeof EXECUTOR_MODES)[number];
+export type Actor = "owner" | "agent:hosted" | "agent:byo" | "executor:hosted" | "system";
+
+export const HOSTED_AGENT_STATES = ["starting", "working", "awaiting_fill", "waiting", "blocked_owner", "blocked_operator", "paused", "ended"] as const;
+export type HostedAgentState = (typeof HOSTED_AGENT_STATES)[number];
+export type AgentPresence =
+  | { mode: "hosted"; state: HostedAgentState; currentActivity: string | null; waitingFor: string | null; lastDecisionAt: IsoUtc | null; nextCheckAt: IsoUtc | null }
+  | { mode: "byo"; state: "online" | "offline"; lastResponseAt: IsoUtc | null; nextCheckAt: IsoUtc | null }
+  | { mode: "none"; state: "unassigned" };
+export interface ExecutorStatus { mode: ExecutorMode | null; state: "ready" | "busy" | "paused" | "gas_low" | "offline" | "disabled"; address: EvmAddress | null; lastJobAt: IsoUtc | null }
+
+export const NEEDS_OWNER_CODES = ["delegation_incomplete", "allowance_low", "balance_low", "permit_failed", "revoke_pending", "scope_exhausted", "agent_ended", "reclaim_allowance"] as const;
+export type NeedsOwnerCode = (typeof NEEDS_OWNER_CODES)[number];
+export interface NeedsOwnerItem {
+  code: NeedsOwnerCode;
+  blocking: boolean;
+  text: { zh: string; en: string };
+  action: { kind: "sign_delegation" | "sign_permit" | "confirm_revoke" | "reclaim_allowance" | "create_new_task" | "resume_or_cancel" | "top_up"; itemId?: string };
+}
+export const NEEDS_OPERATOR_CODES = ["executor_gas_low", "executor_offline", "model_unavailable", "rpc_unavailable", "agent_budget_exhausted", "integrity_alert", "contract_paused", /* v7 费用预算（interfaces §12.15，运营者确认 2026-10-02） */ "fee_budget_exhausted", "fee_cap_exceeded"] as const;
+export type NeedsOperatorCode = (typeof NEEDS_OPERATOR_CODES)[number];
+export interface TaskRuntime {
+  agentMode: AgentMode | null;
+  executorMode: ExecutorMode | null;
+  presence: AgentPresence;
+  executor: ExecutorStatus;
+  needsOwner: NeedsOwnerItem[];
+  needsOperator: NeedsOperatorCode[];
+}
+
+/* ---------- §2.2 委托清单 ---------- */
+export type DelegationItemKind = "mandate_buy" | "mandate_sell" | "permit";
+export type DelegationItemStatus = "todo" | "submitted" | "confirmed" | "failed" | "not_needed";
+export interface DelegationItem {
+  /** "buy" | "sell:<assetKey>" | "permit:<tokenAddress>" */
+  id: string;
+  kind: DelegationItemKind;
+  /** buy = 资金币种；sell = 股票；permit = 被授权的代币 */
+  assetKey: string;
+  title: { zh: string; en: string };
+  /** 这次签名允许什么、不允许什么（金额、合约、期限、能否撤回） */
+  explain: { zh: string; en: string };
+  /** mandate 来自建任务时的草案；permit 在 GET 时按当前 nonce 与账本现算并登记为 ISSUED；failed 时为 null */
+  typedData: Eip712TypedData | null;
+  /** permit 项：本次 GET 登记的请求 id（POST /allowances 必须引用它） */
+  permitRequestId?: string;
+  status: DelegationItemStatus;
+  /** mandateId / permitId */
+  ref: string | null;
+  /** permit 上链交易（执行身份代付 gas） */
+  txHash?: Hex | null;
+  error?: { code: string; message: string };
+}
+export interface DelegationChecklist {
+  taskId: string;
+  items: DelegationItem[];
+  /** userTransactions 正常恒为 0；只有不支持 permit 的回退路径才 > 0 */
+  counts: { signaturesNeeded: number; signaturesDone: number; userTransactions: number };
+  allowances: Array<{ token: EvmAddress; assetKey: string; onchainRaw: RawAmount; requiredRaw: RawAmount; pendingPermit: boolean }>;
+  /** 本任务事实：买入授权 ACTIVE ∧ 本任务资金币种 permit 项 confirmed 或 not_needed */
+  buyReady: boolean;
+  /** 每只股票：卖出授权 ACTIVE ∧ 该股票 permit 项 confirmed 或 not_needed */
+  sellReady: Record<string, boolean>;
+  /** 全部项 confirmed 或 not_needed */
+  complete: boolean;
+}
+
+/* ---------- §2.3 permit 与额度账本 ---------- */
+export const PERMIT_STATES = ["ISSUED", "SUBMITTED", "CONFIRMED", "FAILED", "SUPERSEDED"] as const;
+export type PermitState = (typeof PERMIT_STATES)[number];
+export type PermitPurpose = "delegation" | "reclaim";
+/** 额度余量：permitValue = required + ceil(required × 50 / 10_000) */
+export const PERMIT_HEADROOM_BPS = 50 as const;
+/** permit 签名可提交的截止时间（秒）：签名时刻 + 1800；不是额度有效期 */
+export const PERMIT_DEADLINE_S = 1800 as const;
+export interface PermitDomainEntry {
+  assetKey: string;
+  token: EvmAddress;
+  /** 链上 name() 原文 */
+  name: string;
+  /** 与链上 DOMAIN_SEPARATOR() 匹配成功的版本串；null = 域里不含 version */
+  version: string | null;
+  domainSeparator: Bytes32;
+  verifiedBlock: number;
+  verifiedAt: IsoUtc;
+  forkAcceptance: { block: number; tx: Hex } | null;
+  sources: string[];
+}
+export interface PermitDomainsFile { version: "permit-domains/1"; chainId: number; entries: PermitDomainEntry[] }
+
+/* ---------- §2.5 执行作业与步骤生命周期 ---------- */
+export const EXECUTION_JOB_KINDS = ["permit", "execute_step"] as const;
+export type ExecutionJobKind = (typeof EXECUTION_JOB_KINDS)[number];
+export const EXECUTION_JOB_STATES = ["QUEUED", "CLAIMED", "SENDING", "SENT", "CONFIRMED", "REVERTED", "EXPIRED", "FAILED", "CANCELLED"] as const;
+export type ExecutionJobState = (typeof EXECUTION_JOB_STATES)[number];
+export const TERMINAL_EXECUTION_JOB_STATES = ["CONFIRMED", "REVERTED", "EXPIRED", "FAILED", "CANCELLED"] as const;
+export const FAULT_KINDS = ["cert_void", "receipt_delay", "rpc_timeout", "double_claim"] as const;
+export type FaultKind = (typeof FAULT_KINDS)[number];
+export interface FaultSpec { kind: FaultKind; delayS?: number; createdAt: IsoUtc; by: string }
+export interface ExecuteStepJobPayload {
+  mandateId: string;
+  stepId: string;
+  stepIndex: number;
+  /** 证书里签名的 validUntil（到期判断只认它） */
+  validUntil: IsoUtc;
+  /** = MandatesService.pullStep 的 READY 体（guardCall、approval、证书等），只给执行身份 */
+  ready: Record<string, unknown>;
+  fault?: FaultSpec;
+}
+export interface PermitJobPayload {
+  permitId: string;
+  owner: EvmAddress;
+  token: EvmAddress;
+  spender: EvmAddress;
+  value: RawAmount;
+  nonce: RawAmount;
+  deadline: string;
+  signature: Hex;
+  fault?: FaultSpec;
+}
+export interface ExecutionJob {
+  id: string;
+  kind: ExecutionJobKind;
+  taskId: string | null;
+  mandateId: string | null;
+  stepId: string | null;
+  stepIndex: number | null;
+  owner: EvmAddress;
+  token: EvmAddress | null;
+  state: ExecutionJobState;
+  attempt: number;
+  leaseUntil: IsoUtc | null;
+  claimedBy: string | null;
+  txHash: Hex | null;
+  txNonce: string | null;
+  validUntil: IsoUtc | null;
+  errorCode: string | null;
+  payload: PermitJobPayload | ExecuteStepJobPayload;
+}
+export type ExecutorEventType = "sending" | "sent" | "preflight_failed" | "receipt" | "abandoned";
+/** reconcileStep 的判定（开发计划 §2.5 表驱动） */
+export type StepReconcileVerdict = "CONFIRMED_BY_RECEIPT" | "WAIT" | "REVERTED" | "EXECUTED_ELSEWHERE" | "EXPIRED";
+/** classifyRevert 的失败类别 */
+export const REVERT_CLASSES = ["retry_new_cert", "wait_clock", "replan", "liquidity", "chain_ahead", "scope", "terminal", "allowance", "balance", "paused", "bug", "unknown"] as const;
+export type RevertClass = (typeof REVERT_CLASSES)[number];
+
+/* ---------- §2.6 Agent 运行时 ---------- */
+export const AGENT_RUN_STATES = ["CLAIMED", "RUNNING", "COMPLETED", "INCOMPLETE", "FAILED", "CANCELLED"] as const;
+export type AgentRunState = (typeof AGENT_RUN_STATES)[number];
+/** v7 新增的轮次原因（与 tasks/agentTurn.ts 的 AGENT_TURN_REASONS 合并后即全集；由 Lane A 并入） */
+export const V7_AGENT_TURN_REASONS = ["assigned", "scheduled", "data_arrived", "execution_failed"] as const;
+export interface AgentRunStep {
+  seq: number;
+  kind: "model" | "tool";
+  name?: string;
+  argsHash?: Bytes32;
+  resultHash?: Bytes32;
+  argsPreview?: string;
+  resultPreview?: string;
+  tokensIn?: number;
+  tokensOut?: number;
+  latencyMs: number;
+  at: IsoUtc;
+  error?: string;
+}
+export interface AgentRunSummary {
+  runId: string;
+  taskId: string;
+  turnVersion: number;
+  attempt: number;
+  turnReason: string;
+  mode: "LIVE" | "SIMULATION";
+  model: string;
+  /** prompts/system.md 的内容哈希 */
+  promptHash: Bytes32;
+  startedAt: IsoUtc;
+  endedAt: IsoUtc | null;
+  state: AgentRunState;
+  action: { kind: "intent" | "status"; ref: string; status: string } | null;
+  /** ≤ 280 字，取自 rationale / note */
+  decisionSummary: string;
+  nextCheckAt: IsoUtc | null;
+  invalidation: string | null;
+  toolCalls: Array<{ name: string; argsHash: Bytes32; resultHash: Bytes32 }>;
+  usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; costUsdMicros: string };
+  prevRunHash: Bytes32 | null;
+  /** hashCanonical({ v: "agent-run/1", prevRunHash, taskId, turnVersion, attempt, model, promptHash, toolCalls, action, decisionSummary, nextCheckAt }) */
+  runHash: Bytes32;
+}
+/** 托管 Agent 暴露给模型的 verify-mcp 工具（12 个；再加本地 fetch_source = 13 个） */
+export const HOSTED_AGENT_MCP_TOOLS = ["get_turn_context", "get_executable_quotes", "get_market_context", "get_events", "explain_task_wait", "get_task_positions", "get_task_activity", "add_thesis_review_item", "submit_trade_intent", "withdraw_trade_intent", "report_agent_status", "remember_note"] as const;
+export const AGENT_MEMORY_MAX_NOTES = 20 as const;
+export const AGENT_MEMORY_NOTE_MAX_BYTES = 2048 as const;
+
+/* ---------- §2.7 事件实际值 ---------- */
+export interface EventOutcomeMetric {
+  /** 例："payrolls_change"、"unemployment_rate"、"ahe_mom" */
+  key: string;
+  label: string;
+  /** 十进制字符串（canon-1 不允许浮点） */
+  actual: DecimalString;
+  /** "thousands" | "percent" | "percent_mom" | "usd" … */
+  unit: string;
+  /** 统计期，如 "2026-09" */
+  period: string;
+  /** 本次发布里给出的上期值 */
+  previous?: DecimalString;
+  /** 本次发布对上期值的官方修订（统计机构的修订） */
+  revisedPrevious?: DecimalString;
+  /** 没有就不写；没有预期值不得生成「超预期 / 不及预期」 */
+  expectation?: { value: DecimalString; kind: "survey" | "market_implied"; source: string; at: IsoUtc };
+}
+export interface EventOutcome {
+  metrics: EventOutcomeMetric[];
+  source: string;
+  sourceUrl?: string;
+  publishedAt: IsoUtc;
+  fetchedAt: IsoUtc;
+  provider: "crowsnest" | "finnhub";
+}
+export const EVENT_DATA_STATUSES = ["upcoming", "due_pending_data", "data_arrived", "revised"] as const;
+export type EventDataStatus = (typeof EVENT_DATA_STATUSES)[number];
+/** MarketEvent 的 v7 视图：producer 给 outcome；outcomeRevision / dataStatus 由服务端派生 */
+export interface MarketEventV7 extends MarketEvent {
+  outcome?: EventOutcome;
+  outcomeRevision?: number;
+  dataStatus?: EventDataStatus;
+}
+

@@ -1,0 +1,23 @@
+{
+  "name": "@chaconne/verify-executor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Chaconne platform executor identity (v7 D-089): claims execution jobs from verify-service and sends only PlanGuard.executeStep and registry-token permit transactions.",
+  "scripts": {
+    "start": "tsx --env-file-if-exists=.env src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@chaconne/core": "workspace:*",
+    "@chaconne/verify-exec": "workspace:*",
+    "tsx": "^4.22.5",
+    "viem": "^2.54.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
+  }
+}

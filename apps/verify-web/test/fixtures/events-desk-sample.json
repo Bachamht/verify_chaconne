@@ -1,0 +1,1109 @@
+{
+ "note": "Real samples captured 2026-10-03 from the demo wallet via the read-only relay: /v1/events, /v1/tasks (trimmed), /v1/event-impacts (two items).",
+ "events": [
+  {
+   "id": "crowsnest.ism:MACRO_TIER2:2026-10-05:ism-svc",
+   "tz": "America/New_York",
+   "kind": "MACRO_TIER2",
+   "name": "ISM服务业",
+   "source": "crowsnest.ism",
+   "status": "estimated",
+   "revision": 0,
+   "dateLocal": "2026-10-05",
+   "sessionHint": null,
+   "firstKnownAt": "2026-09-23T08:22:47+00:00",
+   "datePrecision": "estimate",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-10-05T14:00:00+00:00",
+   "sourceFetchedAt": "2026-09-23T07:12:00+00:00",
+   "dataStatus": "upcoming"
+  },
+  {
+   "id": "crowsnest.fedcal:FED_SPEECH:2026-10-06:bowman",
+   "tz": "America/New_York",
+   "kind": "FED_SPEECH",
+   "name": "Bowman 讲话（投票·待定）",
+   "source": "crowsnest.fedcal",
+   "status": "confirmed",
+   "revision": 0,
+   "dateLocal": "2026-10-06",
+   "sessionHint": null,
+   "firstKnownAt": "2026-10-01T23:00:20+00:00",
+   "datePrecision": "exact",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-10-06T14:45:00+00:00",
+   "sourceFetchedAt": "2026-10-01T23:00:20+00:00",
+   "dataStatus": "upcoming"
+  },
+  {
+   "id": "crowsnest.treasury:MACRO_TIER2:2026-10-06:auction-3y",
+   "tz": "America/New_York",
+   "kind": "MACRO_TIER2",
+   "name": "3Y国债拍卖",
+   "source": "crowsnest.treasury",
+   "status": "confirmed",
+   "revision": 0,
+   "dateLocal": "2026-10-06",
+   "sessionHint": null,
+   "firstKnownAt": "2026-09-25T19:15:20+00:00",
+   "datePrecision": "exact",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-10-06T17:00:00+00:00",
+   "sourceFetchedAt": "2026-09-25T19:12:00+00:00",
+   "dataStatus": "upcoming"
+  },
+  {
+   "id": "crowsnest.eia:MACRO_TIER2:2026-10-07:eia-weekly",
+   "tz": "America/New_York",
+   "kind": "MACRO_TIER2",
+   "name": "EIA原油库存周报",
+   "source": "crowsnest.eia",
+   "status": "estimated",
+   "revision": 0,
+   "dateLocal": "2026-10-07",
+   "sessionHint": null,
+   "firstKnownAt": "2026-09-23T08:22:47+00:00",
+   "datePrecision": "estimate",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-10-07T14:30:00+00:00",
+   "sourceFetchedAt": "2026-09-23T07:12:00+00:00",
+   "dataStatus": "upcoming"
+  },
+  {
+   "id": "crowsnest.treasury:MACRO_TIER2:2026-10-07:auction-10y",
+   "tz": "America/New_York",
+   "kind": "MACRO_TIER2",
+   "name": "10Y国债拍卖",
+   "source": "crowsnest.treasury",
+   "status": "confirmed",
+   "revision": 0,
+   "dateLocal": "2026-10-07",
+   "sessionHint": null,
+   "firstKnownAt": "2026-09-25T19:15:20+00:00",
+   "datePrecision": "exact",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-10-07T17:00:00+00:00",
+   "sourceFetchedAt": "2026-09-25T19:12:00+00:00",
+   "dataStatus": "upcoming"
+  },
+  {
+   "id": "crowsnest.yaml:MACRO_TIER1:2026-10-07:fomc-min-sep",
+   "tz": "America/New_York",
+   "kind": "MACRO_TIER1",
+   "name": "FOMC 9月会议纪要",
+   "source": "crowsnest.yaml",
+   "status": "confirmed",
+   "revision": 0,
+   "dateLocal": "2026-10-07",
+   "sessionHint": null,
+   "firstKnownAt": "2026-09-23T08:22:47+00:00",
+   "datePrecision": "exact",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-10-07T18:00:00+00:00",
+   "sourceFetchedAt": "2026-09-23T08:36:12+00:00",
+   "dataStatus": "upcoming"
+  },
+  {
+   "id": "crowsnest.fred:MACRO_TIER1:2026-09-30:pce",
+   "tz": "America/New_York",
+   "kind": "MACRO_TIER1",
+   "name": "PCE物价",
+   "source": "crowsnest.fred",
+   "status": "released",
+   "revision": 3,
+   "dateLocal": "2026-09-30",
+   "releasedAt": "2026-10-02T04:13:47+00:00",
+   "sessionHint": null,
+   "firstKnownAt": "2026-09-23T08:22:47+00:00",
+   "datePrecision": "estimate",
+   "underlyingIds": [],
+   "scheduledAtUtc": "2026-09-30T12:30:00+00:00",
+   "sourceFetchedAt": "2026-09-30T07:12:00+00:00",
+   "outcomeRevision": 0,
+   "dataStatus": "data_arrived"
+  },
+  {
+   "id": "finnhub:EARNINGS:2026-09-30:MU",
+   "tz": "America/New_York",
+   "kind": "EARNINGS",
+   "name": "MU earnings FY2026 Q4",
+   "source": "finnhub",
+   "status": "released",
+   "revision": 2,
+   "dateLocal": "2026-09-30",
+   "releasedAt": "2026-09-30T20:40:16.785Z",
+   "sessionHint": "amc",
+   "firstKnownAt": "2026-09-23T07:13:40.372Z",
+   "datePrecision": "exact",
+   "underlyingIds": [
+    "us-equity:MU"
+   ],
+   "scheduledAtUtc": "2026-09-30T20:00:00.000Z",
+   "sourceFetchedAt": "2026-10-03T04:52:40.163Z",
+   "outcomeRevision": 0,
+   "dataStatus": "data_arrived"
+  }
+ ],
+ "tasks": [
+  {
+   "id": "tsk_3c52ccd03b47f5ffe727ac91",
+   "status": "COMPLETED",
+   "playbookId": "agent_goal",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_56f4f0a6ee4a0c66e6f6a01f"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "两天内分两次买入 AAPLx，每次 1 USDG；报价看起来不正常就等。",
+    "outputAssetKeys": [
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+    ]
+   },
+   "brief": {
+    "watch": {
+     "kinds": [
+      "MACRO_TIER1",
+      "EARNINGS",
+      "FED_SPEECH"
+     ]
+    }
+   }
+  },
+  {
+   "id": "tsk_320b2d2fbfe273b28904464e",
+   "status": "ACTIVE",
+   "playbookId": "agent_goal",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_6d6f0bf0af1486a5074c250d"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "未来五个交易日，按宏观数据的落地情况把预算分配到我允许的两只股票上；反应不明就持币。",
+    "outputAssetKeys": [
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+    ]
+   },
+   "brief": {
+    "watch": {
+     "kinds": [
+      "MACRO_TIER1",
+      "MACRO_TIER2",
+      "FED_SPEECH"
+     ]
+    }
+   }
+  },
+  {
+   "id": "tsk_8645767bc373fe61985e5e5c",
+   "status": "ACTIVE",
+   "playbookId": "agent_goal",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_097f5ac48f8a649af66aaa15"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "未来五个交易日，按宏观数据的落地情况把预算分配到我允许的两只股票上；反应不明就持币。",
+    "outputAssetKeys": [
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+     "eip155:196:0xc845b2894dbddd03858fd2d643b4ef725fe0849d"
+    ]
+   },
+   "brief": {
+    "watch": {
+     "kinds": [
+      "MACRO_TIER1",
+      "MACRO_TIER2",
+      "FED_SPEECH"
+     ]
+    }
+   }
+  },
+  {
+   "id": "tsk_808bcc69e2f3ac7c41c798e8",
+   "status": "ACTIVE",
+   "playbookId": "agent_goal",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_2a0c35c0bb5bed9b1d340262"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "未来三周，围绕我允许的三只股票的财报逐份建仓；下调指引的那只直接放弃。",
+    "outputAssetKeys": [
+     "eip155:196:0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48",
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+     "eip155:196:0xc845b2894dbddd03858fd2d643b4ef725fe0849d"
+    ]
+   },
+   "brief": {
+    "watch": {
+     "kinds": [
+      "EARNINGS",
+      "MACRO_TIER1"
+     ]
+    }
+   }
+  },
+  {
+   "id": "tsk_a149814f3704e3188d51f8a8",
+   "status": "REVOKE_PENDING",
+   "playbookId": "agent_goal",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_a6f8a89c5a21d5b6addddedc"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "look for chances to add AAPLx",
+    "outputAssetKeys": [
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+    ]
+   },
+   "brief": {
+    "watch": {
+     "kinds": [
+      "MACRO_TIER1",
+      "MACRO_TIER2",
+      "FED_SPEECH"
+     ]
+    }
+   }
+  },
+  {
+   "id": "tsk_9a22746bc8c2e724cbcd4c49",
+   "status": "EXPIRED",
+   "playbookId": "agent_goal",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_ac520585257ceae8c2e15548"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "Over the next five trading days, deploy the budget across the two names I allowed according to how macro data lands, keeping cash whenever the reaction is unclear.",
+    "outputAssetKeys": [
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+     "eip155:196:0xc845b2894dbddd03858fd2d643b4ef725fe0849d"
+    ]
+   },
+   "brief": {
+    "watch": {
+     "kinds": [
+      "MACRO_TIER1",
+      "MACRO_TIER2",
+      "FED_SPEECH"
+     ]
+    }
+   }
+  },
+  {
+   "id": "tsk_b42318333a83cc9a13a411f4",
+   "status": "EXPIRED",
+   "playbookId": "agent_goal",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_fba97baf9edbcc8d7c33c7f7"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "Over the next five trading days, deploy the budget across the two names I allowed according to how macro data lands, keeping cash whenever the reaction is unclear.",
+    "outputAssetKeys": [
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+     "eip155:196:0xc845b2894dbddd03858fd2d643b4ef725fe0849d"
+    ]
+   },
+   "brief": {
+    "watch": {
+     "kinds": [
+      "MACRO_TIER1",
+      "MACRO_TIER2",
+      "FED_SPEECH"
+     ]
+    }
+   }
+  },
+  {
+   "id": "tsk_46523c7b5bbffe826f0645b7",
+   "status": "ACTIVE",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "not_in_fed_blackout"
+     },
+     {
+      "type": "max_vix",
+      "value": 25
+     },
+     {
+      "type": "avoid_event_window",
+      "kinds": [
+       "MACRO_TIER1",
+       "FED_SPEECH"
+      ],
+      "afterMin": 20,
+      "beforeMin": 30,
+      "includeEstimated": true,
+      "wholeDayIfDayPrecision": true
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_d701bc754f73b16b915dc629"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "Session DCA",
+    "outputAssetKeys": [
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+    ]
+   },
+   "brief": {
+    "watch": {
+     "kinds": []
+    }
+   }
+  },
+  {
+   "id": "tsk_6db361a4ba3536ffd3a2c10b",
+   "status": "ACTIVE",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_ed060635f6b2e21570e56171"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "Session DCA",
+    "outputAssetKeys": [
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+    ]
+   },
+   "brief": {
+    "watch": {
+     "kinds": []
+    }
+   }
+  },
+  {
+   "id": "tsk_dd800e59f2a59d1a208b3b4e",
+   "status": "ACTIVE",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_57f1f94f6b4f82fca6fa6702"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "Session DCA",
+    "outputAssetKeys": [
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+    ]
+   },
+   "brief": {
+    "watch": {
+     "kinds": []
+    }
+   }
+  },
+  {
+   "id": "tsk_83477db89335a81644251e8e",
+   "status": "ACTIVE",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_9a9ccc2398668f2a9cf5296a"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "Session DCA",
+    "outputAssetKeys": [
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+    ]
+   }
+  },
+  {
+   "id": "tsk_a7db71a065c2721e11150590",
+   "status": "ACTIVE",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_337f6c017fd832e427b8e4d0"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "Session DCA",
+    "outputAssetKeys": [
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+    ]
+   }
+  },
+  {
+   "id": "tsk_779d2979e0837d728c23ca77",
+   "status": "ACTIVE",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_1c07307dc51933691d22a220"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "Session DCA",
+    "outputAssetKeys": [
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+    ]
+   }
+  },
+  {
+   "id": "tsk_ca01e725e604241b345dca6d",
+   "status": "CANCELLED",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_6a33462e65257bd1cf29dcbd"
+     }
+    ]
+   },
+   "scope": {
+    "objective": "Session DCA",
+    "outputAssetKeys": [
+     "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+    ]
+   }
+  },
+  {
+   "id": "tsk_fc7c2ee1d6fa6b22f02c7e08",
+   "status": "WAITING",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "avoid_event_window",
+      "kinds": [
+       "MACRO_TIER1"
+      ],
+      "afterMin": 60,
+      "beforeMin": 60,
+      "includeEstimated": true,
+      "wholeDayIfDayPrecision": true
+     },
+     {
+      "type": "require_cross_asset_confirmation",
+      "acceptStates": [
+       "relief",
+       "transmission"
+      ]
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_a9db862a74dcbc19dce06a9a"
+     }
+    ]
+   }
+  },
+  {
+   "id": "tsk_b636008e4801c8ea6f8edbf6",
+   "status": "WAITING",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "type": "session",
+      "allow": [
+       "US_REGULAR"
+      ]
+     },
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "avoid_event_window",
+      "kinds": [
+       "MACRO_TIER1"
+      ],
+      "afterMin": 20,
+      "beforeMin": 30,
+      "includeEstimated": true,
+      "wholeDayIfDayPrecision": true
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_d9eff84853174bc2b4b2a66b"
+     }
+    ]
+   }
+  },
+  {
+   "id": "tsk_df4151ba86cf42248f94b4cf",
+   "status": "WAITING",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "type": "session",
+      "allow": [
+       "US_REGULAR"
+      ]
+     },
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "avoid_event_window",
+      "kinds": [
+       "MACRO_TIER1"
+      ],
+      "afterMin": 20,
+      "beforeMin": 30,
+      "includeEstimated": true,
+      "wholeDayIfDayPrecision": true
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_a9c408b1240e812175489611"
+     }
+    ]
+   }
+  },
+  {
+   "id": "tsk_a76a414f8153d5db9c202064",
+   "status": "WAITING",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "type": "session",
+      "allow": [
+       "US_REGULAR"
+      ]
+     },
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "avoid_event_window",
+      "kinds": [
+       "MACRO_TIER1"
+      ],
+      "afterMin": 20,
+      "beforeMin": 30,
+      "includeEstimated": true,
+      "wholeDayIfDayPrecision": true
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_51b048095c83caeb69a1ca2e"
+     }
+    ]
+   }
+  },
+  {
+   "id": "tsk_143b2d7671cd192f5c668f39",
+   "status": "CANCELLED",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "type": "session",
+      "allow": [
+       "US_REGULAR"
+      ]
+     },
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "avoid_event_window",
+      "kinds": [
+       "MACRO_TIER1"
+      ],
+      "afterMin": 20,
+      "beforeMin": 30,
+      "includeEstimated": true,
+      "wholeDayIfDayPrecision": true
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_692ff582dfadaee1274359c6"
+     }
+    ]
+   }
+  },
+  {
+   "id": "tsk_92e865998b5cfb294f95b147",
+   "status": "CANCELLED",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "type": "session",
+      "allow": [
+       "US_REGULAR"
+      ]
+     },
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "avoid_event_window",
+      "kinds": [
+       "MACRO_TIER1"
+      ],
+      "afterMin": 20,
+      "beforeMin": 30,
+      "includeEstimated": true,
+      "wholeDayIfDayPrecision": true
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_05fec55c703d4c048992d15e"
+     }
+    ]
+   }
+  },
+  {
+   "id": "tsk_ac184e9e971ef5f59e5db138",
+   "status": "CANCELLED",
+   "playbookId": "session_dca",
+   "goal": {
+    "legs": [
+     {
+      "weightBps": 10000,
+      "outputAssetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a"
+     }
+    ]
+   },
+   "conditions": {
+    "items": [
+     {
+      "type": "session",
+      "allow": [
+       "US_REGULAR"
+      ]
+     },
+     {
+      "days": 1,
+      "type": "min_gap_trading_days"
+     },
+     {
+      "type": "thesis_holds",
+      "thesisId": "ths_a8faa948dfcbbdffc4c0111f"
+     }
+    ]
+   }
+  }
+ ],
+ "impactItems": [
+  {
+   "eventId": "crowsnest.fred:MACRO_TIER1:2026-09-30:pce",
+   "rules": [
+    {
+     "taskId": "tsk_46523c7b5bbffe826f0645b7",
+     "ruleLabel": "avoid_event_window(MACRO_TIER1|FED_SPEECH,30,20)",
+     "active": false,
+     "upcoming": false,
+     "needsChoice": false,
+     "nextCheckAt": null,
+     "window": {
+      "startUtc": "2026-09-30T04:00:00.000Z",
+      "endUtc": "2026-10-01T04:00:00.000Z",
+      "basis": "whole_day"
+     }
+    },
+    {
+     "taskId": "tsk_fc7c2ee1d6fa6b22f02c7e08",
+     "ruleLabel": "avoid_event_window(MACRO_TIER1,60,60)",
+     "active": false,
+     "upcoming": false,
+     "needsChoice": false,
+     "nextCheckAt": null,
+     "window": {
+      "startUtc": "2026-09-30T04:00:00.000Z",
+      "endUtc": "2026-10-01T04:00:00.000Z",
+      "basis": "whole_day"
+     }
+    },
+    {
+     "taskId": "tsk_b636008e4801c8ea6f8edbf6",
+     "ruleLabel": "avoid_event_window(MACRO_TIER1,30,20)",
+     "active": false,
+     "upcoming": false,
+     "needsChoice": false,
+     "nextCheckAt": null,
+     "window": {
+      "startUtc": "2026-09-30T04:00:00.000Z",
+      "endUtc": "2026-10-01T04:00:00.000Z",
+      "basis": "whole_day"
+     }
+    },
+    {
+     "taskId": "tsk_df4151ba86cf42248f94b4cf",
+     "ruleLabel": "avoid_event_window(MACRO_TIER1,30,20)",
+     "active": false,
+     "upcoming": false,
+     "needsChoice": false,
+     "nextCheckAt": null,
+     "window": {
+      "startUtc": "2026-09-30T04:00:00.000Z",
+      "endUtc": "2026-10-01T04:00:00.000Z",
+      "basis": "whole_day"
+     }
+    },
+    {
+     "taskId": "tsk_a76a414f8153d5db9c202064",
+     "ruleLabel": "avoid_event_window(MACRO_TIER1,30,20)",
+     "active": false,
+     "upcoming": false,
+     "needsChoice": false,
+     "nextCheckAt": null,
+     "window": {
+      "startUtc": "2026-09-30T04:00:00.000Z",
+      "endUtc": "2026-10-01T04:00:00.000Z",
+      "basis": "whole_day"
+     }
+    },
+    {
+     "taskId": "tsk_143b2d7671cd192f5c668f39",
+     "ruleLabel": "avoid_event_window(MACRO_TIER1,30,20)",
+     "active": false,
+     "upcoming": false,
+     "needsChoice": false,
+     "nextCheckAt": null,
+     "window": {
+      "startUtc": "2026-09-30T04:00:00.000Z",
+      "endUtc": "2026-10-01T04:00:00.000Z",
+      "basis": "whole_day"
+     }
+    },
+    {
+     "taskId": "tsk_92e865998b5cfb294f95b147",
+     "ruleLabel": "avoid_event_window(MACRO_TIER1,30,20)",
+     "active": false,
+     "upcoming": false,
+     "needsChoice": false,
+     "nextCheckAt": null,
+     "window": {
+      "startUtc": "2026-09-30T04:00:00.000Z",
+      "endUtc": "2026-10-01T04:00:00.000Z",
+      "basis": "whole_day"
+     }
+    },
+    {
+     "taskId": "tsk_7a28742e21f4680d1250af64",
+     "ruleLabel": "avoid_event_window(MACRO_TIER1,30,20)",
+     "active": false,
+     "upcoming": false,
+     "needsChoice": false,
+     "nextCheckAt": null,
+     "window": {
+      "startUtc": "2026-09-30T04:00:00.000Z",
+      "endUtc": "2026-10-01T04:00:00.000Z",
+      "basis": "whole_day"
+     }
+    }
+   ],
+   "tasks": [
+    {
+     "taskId": "tsk_46523c7b5bbffe826f0645b7",
+     "matchedRules": [
+      "avoid_event_window(MACRO_TIER1|FED_SPEECH,30,20)"
+     ],
+     "effect": "none"
+    },
+    {
+     "taskId": "tsk_fc7c2ee1d6fa6b22f02c7e08",
+     "matchedRules": [
+      "avoid_event_window(MACRO_TIER1,60,60)"
+     ],
+     "effect": "none"
+    },
+    {
+     "taskId": "tsk_b636008e4801c8ea6f8edbf6",
+     "matchedRules": [
+      "avoid_event_window(MACRO_TIER1,30,20)"
+     ],
+     "effect": "none"
+    },
+    {
+     "taskId": "tsk_df4151ba86cf42248f94b4cf",
+     "matchedRules": [
+      "avoid_event_window(MACRO_TIER1,30,20)"
+     ],
+     "effect": "none"
+    },
+    {
+     "taskId": "tsk_a76a414f8153d5db9c202064",
+     "matchedRules": [
+      "avoid_event_window(MACRO_TIER1,30,20)"
+     ],
+     "effect": "none"
+    },
+    {
+     "taskId": "tsk_143b2d7671cd192f5c668f39",
+     "matchedRules": [
+      "avoid_event_window(MACRO_TIER1,30,20)"
+     ],
+     "effect": "none"
+    },
+    {
+     "taskId": "tsk_92e865998b5cfb294f95b147",
+     "matchedRules": [
+      "avoid_event_window(MACRO_TIER1,30,20)"
+     ],
+     "effect": "none"
+    },
+    {
+     "taskId": "tsk_7a28742e21f4680d1250af64",
+     "matchedRules": [
+      "avoid_event_window(MACRO_TIER1,30,20)"
+     ],
+     "effect": "none"
+    }
+   ],
+   "blockers": []
+  },
+  {
+   "eventId": "finnhub:EARNINGS:2026-09-30:MU",
+   "rules": [],
+   "tasks": [],
+   "blockers": []
+  }
+ ]
+}

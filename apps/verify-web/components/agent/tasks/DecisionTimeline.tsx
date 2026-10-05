@@ -13,7 +13,7 @@ import { EXPLORER, short } from "@/lib/wallet";
 import { bucketLabel, checkLabel, claimLines, decisionEntries, entryLabel, intentStatusLabel, turnReasonLabel, turnStateLabel } from "./decisionTimelineLabels";
 
 const TURN_TONE: Record<AgentTurn["state"], "ok" | "warn" | "info" | "neutral" | "bad"> = { awaiting_agent: "info", intent_received: "ok", accepted: "info", declined: "neutral", needs_evidence: "warn", plan_revised: "info", ended: "neutral", no_response: "warn" };
-const INTENT_TONE: Record<AgentTradeIntent["status"], "ok" | "warn" | "info" | "neutral" | "bad"> = { certified: "ok", simulated: "info", rejected: "bad", withdrawn: "neutral", expired: "neutral" };
+const INTENT_TONE: Record<AgentTradeIntent["status"], "ok" | "warn" | "info" | "neutral" | "bad"> = { certified: "ok", simulated: "info", rejected: "bad", withdrawn: "neutral", expired: "neutral", superseded: "neutral" };
 
 export function DecisionTimeline({ turn, intents, timeline, assets, stable, trustTier, issuance, txByRef = {} }: { turn: AgentTurn | null; intents: AgentTradeIntent[] | null; timeline: TaskTimelineEntry[] | undefined; assets: AssetEntry[]; stable: AssetEntry | null | undefined; trustTier: string; issuance: string; /** `${mandateId}:${stepIndex}` → 交易哈希：step_confirmed 条目直接给区块浏览器链接 */ txByRef?: Record<string, string> }) {
   const { locale } = useI18n();

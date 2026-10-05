@@ -27,7 +27,7 @@ const X = {
   phase_switch_chain: { en: "switching network", zh: "切换网络" },
   phase_approve: { en: "approving the exact amount", zh: "精确授权" },
   phase_sign: { en: "signing the intent", zh: "签署意图" },
-  phase_send: { en: "sending the Guard transaction", zh: "发送 Guard 交易" },
+  phase_send: { en: "sending the transaction", zh: "发送交易" },
   wallet_owner_needed: { en: "This task belongs to {owner}. Switch to that account in the wallet, or switch wallet.", zh: "这个任务属于 {owner}。请在钱包里切到该账户，或更换钱包。" },
   disabled_not_owner: { en: "Disabled: the connected account is not the task owner.", zh: "不可用：已连接账户不是任务 owner。" },
   disabled_no_wallet: { en: "Connect the wallet first.", zh: "先连接钱包。" },

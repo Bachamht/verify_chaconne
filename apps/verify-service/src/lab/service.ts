@@ -9,6 +9,8 @@ import { PLAYBOOK_IDS, buildEvidenceSnapshot, comparePolicies, conditionSetHash,
 import type { Db } from "@chaconne/db";
 import type { VerifyConfig } from "../config";
 import { HttpError } from "../jobs/service";
+import { isServiceCallerId } from "../http/auth";
+import { currentRunBinding } from "../agent/runContext";
 import { newId } from "../ids";
 import type { ReplayArchiveReader } from "./archive";
 import { LabStore } from "./store";
@@ -48,7 +50,15 @@ export class LabService {
     const m = callerId.match(/(0x[0-9a-f]{40})$/);
     return m ? m[1]! : null;
   }
-  private async requireTask(callerId: string, taskId: string): Promise<LabTaskRecord> {
+  private async requireTask(callerId: string, taskId: string, op: "read" | "owner_write" = "owner_write"): Promise<LabTaskRecord> {
+    // v7（D-093 / CV-D25）：托管 Agent 只能读「令牌绑定的任务」的等待诊断（explain_task_wait）；对照 / 回放是 owner 的配置面
+    if (isServiceCallerId(callerId)) {
+      const b = currentRunBinding();
+      if (callerId !== "agent:hosted" || op !== "read" || !b || b.taskId !== taskId) throw new HttpError(403, "forbidden", "只有任务 owner 可读取等待诊断与对照");
+      const rec = await this.d.taskReader.readTask(taskId);
+      if (!rec) throw new HttpError(404, "task_not_found", "任务不存在（或 Lane B 任务表尚未接入）");
+      return rec;
+    }
     const rec = await this.d.taskReader.readTask(taskId);
     if (!rec) throw new HttpError(404, "task_not_found", "任务不存在（或 Lane B 任务表尚未接入）");
     const owner = this.ownerFromCaller(callerId);
@@ -84,7 +94,7 @@ export class LabService {
 
   /* ---------- 等待诊断 ---------- */
   async explainWait(callerId: string, taskId: string, localeRaw: unknown) {
-    const rec = await this.requireTask(callerId, taskId);
+    const rec = await this.requireTask(callerId, taskId, "read");
     const locale = LabService.locale(localeRaw);
     const state = rec.taskState ?? EMPTY_STATE;
     const nowIso = this.now().toISOString();

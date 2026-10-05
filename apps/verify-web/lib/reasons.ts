@@ -19,7 +19,7 @@ const R: Record<string, { en: string; zh: string }> = {
   QUOTE_TOO_OLD: { en: "Quote is older than allowed — re-verify.", zh: "报价过旧 — 请再核验。" },
   PRICE_IMPACT_UNKNOWN: { en: "Price impact unknown — not treated as zero.", zh: "价格冲击未知 — 不当作 0。" },
   PRICE_IMPACT_EXCEEDED: { en: "Price impact exceeds your limit.", zh: "价格冲击超过你的上限。" },
-  ROUTE_UNSUPPORTED: { en: "Route is not in the verified set for Guard execution.", zh: "路由不在 Guard 已验证范围。" },
+  ROUTE_UNSUPPORTED: { en: "Route is not in the verified set.", zh: "路由不在已验证范围。" },
   MIN_OUT_INVALID: { en: "Minimum output rounds to zero.", zh: "最小到账量为 0。" },
   AMOUNT_OUT_OF_RANGE: { en: "Amount out of range.", zh: "金额越界。" },
   POLICY_PARAM_OUT_OF_RANGE: { en: "A policy parameter is out of range.", zh: "策略参数越界。" },

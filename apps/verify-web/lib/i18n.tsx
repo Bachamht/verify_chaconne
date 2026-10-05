@@ -1,5 +1,5 @@
 "use client";
-/** 极简字典式双语：已存偏好优先，其次浏览器语言（zh* → 中文），否则英文；投屏模式大字。 */
+/** 极简字典式双语：已存偏好优先，其次浏览器语言（zh* → 中文），否则英文。 */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export type Locale = "en" | "zh";
@@ -10,8 +10,6 @@ const DICT = {
   nav_home: { en: "Home", zh: "首页" },
   nav_new: { en: "Verify", zh: "核验" },
   nav_dev: { en: "Developers", zh: "开发者" },
-  demo_mode: { en: "Projector mode", zh: "投屏模式" },
-  demo_mode_hint: { en: "Larger type for projecting this site on a screen; changes nothing else.", zh: "放大字号，适合投影到大屏；不改其它任何东西。" },
   nav_tools: { en: "Tools", zh: "工具" },
   nav_plan: { en: "Plan", zh: "规划" },
   nav_play: { en: "Play", zh: "试玩" },
@@ -120,7 +118,6 @@ const DICT = {
   feat2_h: { en: "Time semantics, not vibes", zh: "时间语义，不靠感觉" },
   feat2_p: { en: "Source time vs received time; live vs official close; no silent policy downgrade.", zh: "源时间与接收时间分开；实时与正式收盘分开；绝不静默降级。" },
   feat3_h: { en: "Execution that obeys the report", zh: "执行服从报告" },
-  feat3_p: { en: "Guard enforces amount, minimum output, recipient, route and deadline on-chain.", zh: "Guard 在链上强制金额、最小到账、收款人、路由与期限。" },
   new_h: { en: "Create a verification task", zh: "创建核验任务" },
   f_owner: { en: "Funding wallet (owner)", zh: "资金钱包（owner）" },
   f_recipient: { en: "Recipient (defaults to owner)", zh: "收款地址（默认同 owner）" },
@@ -162,14 +159,10 @@ const DICT = {
   prefilled_from: { en: "Prefilled from the main site — check the amount and policy, then run.", zh: "已从主站预填——确认金额与策略后运行。" },
   switch_chain: { en: "Switch to X Layer", zh: "切换到 X Layer" },
   step_prepare: { en: "1 · Re-verify & issue certificate", zh: "1 · 再核验并签发证明" },
-  step_approve: { en: "2 · Approve exact amount to Guard", zh: "2 · 向 Guard 精确授权" },
-  step_approve_first: { en: "1 · Approve the exact amount to Guard (do this first)", zh: "1 · 先向 Guard 精确授权" },
   approve_first_hint: { en: "A certificate lives at most 60 s and never longer than the quote it rests on — usually about 30 s after re-verification. Approve first, then re-verify, sign and send within that window.", zh: "证明最长 60 秒，且不得比报价更久——再核验后通常约 30 秒。先授权，再核验、签名、发送。" },
   sign_and_send: { en: "Sign intent & execute", zh: "签署意图并执行" },
   step_prepare_2: { en: "2 · Re-verify & issue certificate", zh: "2 · 再核验并签发证明" },
-  step_sign_3: { en: "3 · Sign intent & send Guard transaction", zh: "3 · 签署意图并发送 Guard 交易" },
   step_sign: { en: "3 · Sign trade intent", zh: "3 · 签署交易意图" },
-  step_send: { en: "4 · Send Guard transaction", zh: "4 · 发送 Guard 交易" },
   step_receipt: { en: "5 · Receipt (wallet)", zh: "5 · 回执（钱包）" },
   step_server_receipt: { en: "6 · Server-verified receipt", zh: "6 · 服务端链上核实" },
   receipt_verified: { en: "verified on-chain", zh: "链上已核实" },
@@ -201,7 +194,6 @@ const DICT = {
   header_close: { en: "Close", zh: "收起" },
   wallet_connected: { en: "Connected", zh: "已连接" },
   wallet_short: { en: "Wallet", zh: "钱包" },
-  demo_short: { en: "Demo", zh: "投屏" },
   wallet_connecting: { en: "Confirm in your wallet…", zh: "请在钱包中确认…" },
   back_report: { en: "← Report", zh: "← 返回报告" },
   not_enabled: { en: "not enabled", zh: "未启用" },
@@ -209,7 +201,6 @@ const DICT = {
   footer_not_official: { en: "OKX Dev Day 2026 · Not an official OKX product.", zh: "OKX Dev Day 2026 · 非 OKX 官方产品。" },
   footer_links: { en: "Developers · Replay · Local records", zh: "开发者 · 事件回放 · 本机核验记录" },
   file_choose: { en: "Upload a JSON file", zh: "上传 JSON 文件" },
-  cert_ttl_line: { en: "If eligible, a re-verification issues a certificate (at most 60 s, never longer than the quote — usually about 30 s); the wallet approves the exact amount, signs the intent and executes through Guard — unspent input is refunded, output goes to the recipient.", zh: "合格则再核验签发证明（最长 60 秒，不得比报价更久，通常约 30 秒），钱包精确授权、签署意图、经 Guard 执行；未消耗输入退回、输出到收款人。" },
   tz_note: { en: "Local time", zh: "本地时间" },
   dev_raw_note: { en: "Raw values are what the service and contract actually see (smallest units / basis points).", zh: "raw 值是服务与合约实际看到的（最小单位 / 基点）。" },
   plan_weight_pct: { en: "weight %", zh: "权重 %" },
@@ -266,7 +257,7 @@ const DICT = {
   task_nf_h: { en: "Task not found", zh: "找不到这个任务" },
   task_nf_p: { en: "The link may be wrong, or the task belongs to another wallet — tasks are only visible to the wallet that created them.", zh: "链接可能不对，或这个任务属于另一个钱包——任务只对创建它的钱包可见。" },
   live_empty_h: { en: "No public reports yet", zh: "还没有公开的战报" },
-  live_empty_p: { en: "Reports appear here once someone shares one. Run a verification and share yours.", zh: "有人分享战报后会出现在这里。先做一次核验，再把你的分享出来。" },
+  live_empty_p: { en: "Reports appear here once someone shares one.", zh: "有人分享战报后会出现在这里。" },
   me_empty_h: { en: "Nothing here yet", zh: "还没有记录" },
   replay_changed: { en: "changed", zh: "变了" },
   err_generic: { en: "Error", zh: "出错" },
@@ -369,8 +360,6 @@ export type Key = keyof typeof DICT;
 interface Ctx {
   locale: Locale;
   setLocale: (l: Locale) => void;
-  demo: boolean;
-  setDemo: (d: boolean) => void;
   t: (k: Key, vars?: Record<string, string | number>) => string;
 }
 
@@ -379,22 +368,18 @@ const I18nContext = createContext<Ctx | null>(null);
 export function I18nProvider({ children, initialLocale }: { children: ReactNode; initialLocale?: Locale }) {
   // UV-06：服务端已按主站 cookie / Accept-Language 定了首帧语言；本站显式切换过（localStorage）才覆盖
   const [locale, setLocaleState] = useState<Locale>(initialLocale ?? "en");
-  const [demo, setDemoState] = useState(false);
   useEffect(() => {
     try {
       const l = localStorage.getItem("verify-locale");
       if (l === "zh" || l === "en") setLocaleState(l);
       else if (!initialLocale && typeof navigator !== "undefined" && /^zh/i.test(navigator.language || "")) setLocaleState("zh");
-      const d = localStorage.getItem("verify-demo");
-      if (d === "1") setDemoState(true);
     } catch {
       /* ignore */
     }
   }, []);
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-    document.documentElement.dataset["demo"] = demo ? "1" : "0";
-  }, [locale, demo]);
+  }, [locale]);
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
     try {
@@ -403,26 +388,16 @@ export function I18nProvider({ children, initialLocale }: { children: ReactNode;
       /* ignore */
     }
   }, []);
-  const setDemo = useCallback((d: boolean) => {
-    setDemoState(d);
-    try {
-      localStorage.setItem("verify-demo", d ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
-  }, []);
   const value = useMemo<Ctx>(
     () => ({
       locale,
       setLocale,
-      demo,
-      setDemo,
       t: (k, vars) => {
         const s = DICT[k][locale] as string;
         return vars ? s.replace(/\{(\w+)\}/g, (m, name: string) => (name in vars ? String(vars[name]) : m)) : s;
       },
     }),
-    [locale, setLocale, demo, setDemo],
+    [locale, setLocale],
   );
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

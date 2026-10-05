@@ -6,11 +6,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeftRight, ArrowUpRight, HelpCircle, ShoppingCart, Sparkles, Target } from "lucide-react";
+import Image from "next/image";
+import { ArrowLeftRight, ArrowUpRight, BookOpen, HelpCircle, ListChecks, ShoppingCart, Sparkles, Target, Wallet } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { marketContext } from "@/lib/api-v2";
 import { assetByKey, loadAssets, type AssetsLoad } from "@/lib/assets";
 import { useAccount } from "@/lib/useAccount";
+import { V7_UI } from "@/lib/v7";
 import { Card } from "@/components/ui";
 import { Crew } from "../crew/Crew";
 import { Missions } from "../crew/Missions";
@@ -21,6 +23,7 @@ import { ENTRIES, type EntryId } from "./entries";
 import { EntryPanel, labCompareHref, labWaitHref } from "./EntryForms";
 import { MyAgentTasks } from "./MyAgentTasks";
 import { FirstMinute } from "./FirstMinute";
+import "./workspace-home.css";
 
 const ICONS = { goal: Target, buy: ShoppingCart, wait: HelpCircle, compare: ArrowLeftRight } as const;
 
@@ -95,24 +98,40 @@ export function AgentHome() {
     return () => { alive = false; };
   }, [account]);
 
+  const destinations = [
+    { href: "/agent/tasks", icon: ListChecks, title: zh ? "任务台" : "Task desk", copy: zh ? "进展、等待原因与需要你处理的事" : "Progress, waiting reasons and what needs you" },
+    { href: "/agent/funds#allowances", icon: Wallet, title: zh ? "资金与额度" : "Funds & allowances", copy: zh ? "持仓、预算与额度管理" : "Holdings, budgets and allowance controls" },
+    { href: "/agent/journal", icon: BookOpen, title: zh ? "判断与日志" : "Decisions & journal", copy: zh ? "回看研究、决定和执行记录" : "Review research, decisions and execution" },
+  ];
+  const goalForm = <Card title={t("ag_entry_goal")}><EntryPanel entry="goal" assets={assets.assets} assetsSource={assets.source} onRetryAssets={reloadAssets} /></Card>;
+
   return (
     <>
-      <header>
+      {V7_UI ? <header className="agent-home-intro">
+        <div className="agent-home-title-row">
+          <div><p className="agent-home-overline">{zh ? "Chaconne Agent · 工作台" : "CHACONNE AGENT / WORKSPACE"}</p><h1>{zh ? "目标交给它。\n节奏留给你。" : "Give it the goal.\nKeep the tempo."}</h1><p className="agent-home-lead">{zh ? "内置 Chaconne Agent 可以研究、等待并提交决定。你设定范围，真实运行前逐项授权；平台执行器在授权内行动，每笔仍须核验。" : "The built-in Chaconne Agent researches, waits and submits decisions. Set its scope and authorize each item before going live. The platform executor acts within that scope, with verification for every trade."}</p>
+            <div className="agent-home-entry-actions"><Link className="agent-home-primary" href="/start">{zh ? "让 Agent 先跑给我看" : "Let the agent show me"}<ArrowUpRight size={17} aria-hidden="true" /></Link><a href="#agent-goal-form" onClick={(e) => { if (entry && entry !== "goal") { e.preventDefault(); router.push("/agent#agent-goal-form"); } }}>{zh ? "直接设置完整任务" : "Configure a full task"}<ArrowUpRight size={14} aria-hidden="true" /></a></div>
+          </div>
+          <div className="agent-home-conductor">{zh ? null : <span aria-hidden="true">YOUR CALL.<br />THE NEXT CUE.</span>}<Image src="/brand/conductor-v1.jpg" alt={zh ? "Chaconne 紫色小指挥家" : "Chaconne's purple conductor"} width={768} height={768} sizes="(max-width: 640px) 145px, 230px" unoptimized draggable={false} /></div>
+        </div>
+        <nav className="agent-home-navigation" aria-label={zh ? "继续管理你的任务" : "Manage your tasks"}>{destinations.map((item) => { const Icon = item.icon; return <Link href={item.href} key={item.href}><Icon size={22} strokeWidth={1.5} aria-hidden="true" /><span><strong>{item.title}</strong><small>{item.copy}</small></span><ArrowUpRight size={17} aria-hidden="true" /></Link>; })}</nav>
+        <p className="agent-home-byo">{zh ? "已有自己的 Agent？完整表单也保留自带 Agent、自己的执行器和浏览器执行选项。" : "Already have an agent? The full form also keeps your own agent, an agent-wallet executor and browser execution."}<Link href="/developers">{zh ? "查看接入方式" : "See integration options"}<ArrowUpRight size={13} aria-hidden="true" /></Link></p>
+      </header> : <header>
         <h1 className="ag-h1">{zh ? "把今晚的事交给你的 Agent" : "Hand tonight to your agent"}</h1>
         <p className="ag-lead">{zh ? "你带着自己的 Agent 和策略来：给它一个目标和签过的范围，它用 Chaconne 的数据研究、决定何时买哪个买多少，每一笔先核验、签证书，再由合约按你签过的边界执行。固定自动化工具（定投、避开事件、价格观察）在第二个入口。" : "Bring your own agent and strategy: give it an objective and a signed scope, it researches with Chaconne's data and decides when, which asset and how much; every trade is verified and certified before a contract executes it inside the boundaries you signed. Fixed automation tools (DCA, event windows, price watch) are the second entry."}</p>
-      </header>
-      {newcomer && (
+      </header>}
+      {newcomer && !V7_UI && (
         <Card className="ag-start-here" title={zh ? "第一次来？先看示例，或免费模拟一个任务" : "First time here? Browse the examples, or simulate a task for free"} right={<Sparkles size={18} aria-hidden="true" className="text-brand-300" />}>
           <p className="ag-note">{zh ? "首页的目标委托与示例策略可以先浏览；建任务、看自己的任务和资金需要连接钱包。没有自己的 Agent 也可以用「更多」里的固定自动化工具先模拟。" : "The goal entry and example strategies are open to browse; creating tasks and seeing your own tasks and funds need a wallet. Without an agent of your own, the fixed automation tools under “More” can simulate first."}</p>
           <div className="ag-actions mt-3"><Link className="btn" href="/start">{zh ? "免费体验一个任务" : "Try a task for free"}<ArrowUpRight size={15} aria-hidden="true" /></Link><Link className="btn-ghost" href="/agent/tasks">{zh ? "我已经有任务" : "I already have tasks"}</Link></div>
         </Card>
       )}
       {/* 主入口：把目标交给 Agent（默认展开）；固定自动化 / 旧链接（entry=buy|wait|compare）仍可用 */}
-      {(!entry || entry === "goal") && <Card title={t("ag_entry_goal")}><EntryPanel entry="goal" assets={assets.assets} assetsSource={assets.source} onRetryAssets={reloadAssets} /></Card>}
+      {(!entry || entry === "goal") && (V7_UI ? <section id="agent-goal-form" className="agent-home-form"><div className="agent-home-form-heading"><span>01 / {zh ? "完整任务设置" : "FULL TASK SETUP"}</span><p>{zh ? "目标、策略、范围，以及谁来决策与执行，都在这里。先用模拟，或自行选择真实模式。" : "Choose the goal, strategy, scope, decision-maker and executor here. Begin with simulation, or choose live mode."}</p></div>{goalForm}</section> : goalForm)}
       {entry && entry !== "goal" && <Card title={t(ENTRIES.find((e) => e.id === entry)!.key)} right={<button type="button" className="text-sm underline" onClick={() => setEntry(null)}>{zh ? "回到目标委托" : "Back to goal"}</button>}><EntryPanel entry={entry} assets={assets.assets} assetsSource={assets.source} onRetryAssets={reloadAssets} preset={preset} taskId={taskId} /></Card>}
       <MyAgentTasks account={account} />
       <details className="ag-more">
-        <summary className="cursor-pointer text-sm font-semibold">{zh ? "更多：固定自动化工具、第一分钟、今晚的 Crew 与任务" : "More: fixed automation tools, first minute, tonight's crew and missions"}</summary>
+        <summary className="cursor-pointer text-sm font-semibold">{V7_UI ? (zh ? "更多工具：固定自动化、任务诊断与教学" : "More tools: fixed automation, diagnosis and learning") : (zh ? "更多：固定自动化工具、第一分钟、今晚的 Crew 与任务" : "More: fixed automation tools, first minute, tonight's crew and missions")}</summary>
         <div className="mt-3 space-y-5">
           <div className="ag-entries" role="tablist" aria-label={zh ? "其它入口" : "Other entries"}>
             {ENTRIES.filter((e) => e.id !== "goal").map((e) => {

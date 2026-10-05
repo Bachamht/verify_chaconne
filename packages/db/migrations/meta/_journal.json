@@ -71,6 +71,20 @@
       "when": 1790349138569,
       "tag": "0009_api_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790367600000,
+      "tag": "0010_v7_delegation_runtime",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790388000000,
+      "tag": "0011_v7_fee_budget",
+      "breakpoints": true
     }
   ]
 }

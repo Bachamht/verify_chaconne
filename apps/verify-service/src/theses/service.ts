@@ -23,6 +23,8 @@ import {
 } from "@chaconne/core/verify";
 import { newId } from "../ids";
 import { HttpError } from "../jobs/service";
+import { isServiceCallerId } from "../http/auth";
+import { currentRunBinding } from "../agent/runContext";
 
 export type ThesisRow = typeof verifyTheses.$inferSelect;
 
@@ -60,8 +62,17 @@ export class ThesesService {
   async byId(id: string): Promise<ThesisRow | null> {
     return (await this.d.db.select().from(verifyTheses).where(eq(verifyTheses.id, id)).limit(1))[0] ?? null;
   }
-  async require(callerId: string, id: string): Promise<ThesisRow> {
+  /**
+   * v7（D-093 / CV-D25）：op 缺省 owner_write；agent:hosted 只能对「令牌绑定的任务」的理由卡做 read / agent_write（review-items），
+   * 其它服务 key 一律 404（与「不存在」同形，不泄露存在性）。
+   */
+  async require(callerId: string, id: string, op: "read" | "agent_write" | "owner_write" = "owner_write"): Promise<ThesisRow> {
     const row = await this.byId(id);
+    if (isServiceCallerId(callerId)) {
+      const b = currentRunBinding();
+      if (callerId !== "agent:hosted" || op === "owner_write" || !row || !b || b.taskId !== row.taskId) throw new HttpError(404, "thesis_not_found");
+      return row;
+    }
     if (!row || row.callerId !== callerId) throw new HttpError(404, "thesis_not_found");
     return row;
   }
@@ -91,8 +102,11 @@ export class ThesesService {
 
   /** 追加复核项（只 owner/agent；sourceUrl 必填；不触发执行） */
   async addReviewItem(callerId: string, id: string, raw: unknown, addedBy: "agent" | "user"): Promise<ThesisRow> {
-    const row = await this.require(callerId, id);
+    const row = await this.require(callerId, id, "agent_write");
     const o = (raw ?? {}) as Record<string, unknown>;
+    // v7（CV-D25）：clientRequestId 去重（托管 Agent 一律 h:<runId>:<seq>）；重放返回原卡片，不追加第二条
+    const clientRequestId = typeof o["clientRequestId"] === "string" && /^[A-Za-z0-9_\-:.]{1,128}$/.test(o["clientRequestId"]) ? o["clientRequestId"] : null;
+    if (clientRequestId && (row.premisesJson as Premise[]).some((p) => (p.reviewItems ?? []).some((it) => (it as { clientRequestId?: string }).clientRequestId === clientRequestId))) return row;
     const premiseId = typeof o["premiseId"] === "string" ? o["premiseId"] : null;
     const v = validateReviewItem(o, addedBy, this.now().toISOString());
     if (!v.ok) throw new HttpError(400, "invalid_request", "复核项校验失败", v.errors);
@@ -100,7 +114,7 @@ export class ThesesService {
     const target = premiseId ? premises.find((p) => p.id === premiseId) : premises.find((p) => p.kind === "research");
     if (!target) throw new HttpError(404, "premise_not_found", "没有可挂复核项的 research 前提");
     if (target.kind !== "research") throw new HttpError(409, "premise_not_research", "复核项只能挂在 research 前提上（机器/时间门前提由条件求值决定）");
-    target.reviewItems = [...(target.reviewItems ?? []), v.item].slice(-50);
+    target.reviewItems = [...(target.reviewItems ?? []), clientRequestId ? ({ ...v.item, clientRequestId } as typeof v.item) : v.item].slice(-50);
     const [updated] = await this.d.db.update(verifyTheses).set({ premisesJson: premises, updatedAt: this.now() }).where(eq(verifyTheses.id, id)).returning();
     return updated!;
   }

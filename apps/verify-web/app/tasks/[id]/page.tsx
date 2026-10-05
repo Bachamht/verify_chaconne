@@ -1,6 +1,6 @@
-import { TaskClient } from "@/components/TaskClient";
+import { MandateRoute } from "@/components/routes/MandateRoute";
 
 export default async function TaskPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <TaskClient id={id} />;
+  return <MandateRoute id={id} />;
 }

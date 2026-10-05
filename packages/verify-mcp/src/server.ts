@@ -1,5 +1,5 @@
 /**
- * Chaconne Verify · MCP 服务器（技术设计 §6.2：7 个薄工具；不接收私钥、不代签、不代付）。
+ * Chaconne Verify · MCP 服务器（技术设计 §6.2：5 个薄工具；不接收私钥、不代签、不代付。单笔 Guard 执行的 prepare_guard_trade / get_execution_status 10/5 起删除）。
  *
  * 工具 → HTTP：
  *   list_supported_assets     GET  /v1/assets
@@ -7,20 +7,18 @@
  *   prepare_verification      POST /v1/jobs                       （创建任务，不付款）
  *   purchase_verification     GET  /v1/jobs/:id/report            （可带 host 产生的 x402 凭证；未付返回挑战）
  *   get_verification          GET  /v1/jobs/:id (+ /report)
- *   prepare_guard_trade       POST /v1/jobs/:id/prepare-execution （返回 typed data / 证书 / Guard 调用参数，不签名）
- *   get_execution_status      GET  /v1/jobs/:id + 链上回执核实（可选 RPC）
  * 返回内容一律 structuredContent + 文本摘要；上游错误 isError=true 并保留状态码，不吞错。
- * v2 工具见 toolsV2.ts（13 个），v6 工具见 toolsV6.ts（28 个：interfaces §11.8 的 23 个 + CV-D16 批次 4 的 5 个），免 key 工具见 toolsFree.ts（3 个，V-40）；共 51 个。
+ * v2 工具见 toolsV2.ts（13 个），v6 工具见 toolsV6.ts（28 个：interfaces §11.8 的 23 个 + CV-D16 批次 4 的 5 个），免 key 工具见 toolsFree.ts（3 个，V-40），
+ * v7 工具见 toolsV7.ts（7 个，interfaces §12.10）；共 56 个。
  * 无 VERIFY_API_KEY：照常启动，只有只读 / 免 key 工具可用；其余回 not_available(missing_api_key) 并附拿 key 的地址（网站 /agent/keys，钱包签名签发，FIX-175）。
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createPublicClient, decodeEventLog, http, type Hex } from "viem";
 import { VerifyClient } from "./client";
-import { GUARD_ABI } from "./guardAbi";
 import { registerV2Tools, TOOL_NAMES_V2 } from "./toolsV2";
 import { registerV6Tools, TOOL_NAMES_V6 } from "./toolsV6";
 import { registerFreeTools, TOOL_NAMES_FREE } from "./toolsFree";
+import { registerV7Tools, TOOL_NAMES_V7 } from "./toolsV7";
 import type { ExecutorHeartbeat } from "./heartbeat";
 import type { AgentWallet } from "./wallet";
 
@@ -40,11 +38,10 @@ export const TOOL_NAMES = [
   "prepare_verification",
   "purchase_verification",
   "get_verification",
-  "prepare_guard_trade",
-  "get_execution_status",
   ...TOOL_NAMES_V2,
   ...TOOL_NAMES_V6,
   ...TOOL_NAMES_FREE,
+  ...TOOL_NAMES_V7,
 ] as const;
 
 /** 不需要 VERIFY_API_KEY 的工具（只打免费端点）；其余在无 key 时回 not_available(api_key_required) */
@@ -147,63 +144,9 @@ export function createVerifyMcpServer(deps: ServerDeps): McpServer {
     },
   );
 
-  server.registerTool(
-    "prepare_guard_trade",
-    {
-      title: "Prepare a Guard execution",
-      description: "Re-verifies with fresh evidence (consumes one of the paid re-verification credits), and if eligible returns the EIP-712 TradeIntent typed data for the OWNER to sign, the service-signed VerificationCertificate, the exact approval (token, spender=Guard, amount) and the Guard call parameters. This tool never signs and never holds keys. A rejected re-verification is a delivered result and also consumes a credit.",
-      inputSchema: { jobId: z.string().min(1), refreshKey: z.string().min(1).max(128).describe("Idempotency key: retrying with the same key returns the same attempt without consuming credit") },
-    },
-    async (a) =>
-      fromHttp(await c.call("POST", `/v1/jobs/${a.jobId}/prepare-execution`, { refreshKey: a.refreshKey }), (b) => {
-        const ex = b["execution"] as Record<string, unknown> | null;
-        return ex
-          ? `attempt ${String(b["attemptId"])} PREPARED (report v${String(b["reportVersion"])}); certificate valid until ${String(ex["validUntil"])}; ${String(b["refreshesRemaining"])} re-verification(s) left. Next: owner signs typedData, approves exact amount to Guard, sends execute().`
-          : `attempt ${String(b["attemptId"])} ${String(b["state"])}: verdict ${String(b["verdict"])}; no certificate issued; ${String(b["refreshesRemaining"])} re-verification(s) left`;
-      }),
-  );
-
-  const rpc = deps.rpcUrl ? createPublicClient({ transport: http(deps.rpcUrl) }) : null;
-  server.registerTool(
-    "get_execution_status",
-    {
-      title: "Get execution status",
-      description: "Lists execution attempts for a task. If an attempt has a txHash and an RPC is configured, fetches the on-chain receipt and decodes the GuardedExecution event (spent / received / refunded). Submission ≠ fill: only a successful receipt with the event counts.",
-      inputSchema: { jobId: z.string().min(1), attemptId: z.string().optional() },
-    },
-    async (a) => {
-      const job = await c.call("GET", `/v1/jobs/${a.jobId}`);
-      if (job.status !== 200) return fromHttp(job, () => "");
-      const jb = job.body as Record<string, unknown>;
-      const execs = (jb["executions"] as Array<{ attemptId: string; state: string; txHash: string | null; validUntil: string | null; reportVersion: number }>).filter((e) => !a.attemptId || e.attemptId === a.attemptId);
-      const enriched = [];
-      for (const e of execs) {
-        let onchain: Record<string, unknown> | null = null;
-        if (e.txHash && rpc) {
-          try {
-            const rcpt = await rpc.getTransactionReceipt({ hash: e.txHash as Hex });
-            let event: Record<string, unknown> | null = null;
-            for (const l of rcpt.logs) {
-              try {
-                const d = decodeEventLog({ abi: GUARD_ABI, data: l.data, topics: l.topics });
-                if (d.eventName === "GuardedExecution") event = Object.fromEntries(Object.entries(d.args as Record<string, unknown>).map(([k, v]) => [k, typeof v === "bigint" ? v.toString() : v]));
-              } catch {
-                /* other logs */
-              }
-            }
-            onchain = { status: rcpt.status, blockNumber: rcpt.blockNumber.toString(), blockHash: rcpt.blockHash, gasUsed: rcpt.gasUsed.toString(), guardedExecution: event };
-          } catch (err) {
-            onchain = { status: "unknown", error: err instanceof Error ? err.message : String(err) };
-          }
-        }
-        enriched.push({ ...e, onchain });
-      }
-      return ok(`${enriched.length} attempt(s): ${enriched.map((e) => `${e.attemptId}=${e.state}${e.onchain ? `/${String((e.onchain as Record<string, unknown>)["status"])}` : ""}`).join(", ")}`, { status: 200, jobId: a.jobId, executions: enriched });
-    },
-  );
-
   registerV2Tools(server, { client: c, wallet: deps.wallet ?? null, rpcUrl: deps.rpcUrl, chainId: deps.chainId ?? 196, heartbeat: deps.heartbeat ?? null });
   registerV6Tools(server, { client: c, wallet: deps.wallet ?? null, heartbeat: deps.heartbeat ?? null });
   registerFreeTools(server, { client: c });
+  registerV7Tools(server, { client: c });
   return server;
 }

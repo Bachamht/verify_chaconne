@@ -20,6 +20,31 @@
       "address": "0xbacb138e0e9e1444bae9b401c4615378c57c0381",
       "keyLocation": ".qa-live/demo-wallet.env DEMO_USER_PRIVATE_KEY (client-side demo wallet, not a service key)",
       "funds": "X Layer mainnet OKB + stablecoin <= $20"
+    },
+    "executor": {
+      "address": "0x9185E91ad939273cfC43ADE97B18DDB44B27eD43",
+      "chainId": 196,
+      "purpose": "v7 platform executor identity (D-089): pays gas for PlanGuard.executeStep and registry-token permit relays only; never holds user assets",
+      "keyLocation": "apps/verify-executor/.env (EXECUTOR_PRIVATE_KEY, mode 600, gitignored; server copy goes to the same path)",
+      "funding": {
+        "amountOkb": "0.03",
+        "fromAddress": "0xf023c55709015357ffba79270c2e403dfcccd152",
+        "tx": "0xc677c580edf355df5d8fa361dcd4019f1224ac4dc4f62f98209869cfb48b0946",
+        "date": "2026-10-03"
+      },
+      "note": "local executor identity used by scripts/v7MainnetSmoke.ts and fork tests; production uses roles.executorServer"
+    },
+    "executorServer": {
+      "address": "0x535Ed52f5F0E0c3Ca07F7489048b59ADd5c5516C",
+      "chainId": 196,
+      "purpose": "v7 production platform executor identity (D-089), runs as system user chaconne-exec under chaconne-verify-executor.service; pays gas for PlanGuard.executeStep and registry-token permit relays only; never holds user assets",
+      "keyLocation": "server /opt/chaconne-verify/apps/verify-executor/.env (EXECUTOR_PRIVATE_KEY, owner chaconne-exec, mode 600; generated on the server, printed address only)",
+      "funding": {
+        "amountOkb": "0.03",
+        "fromAddress": "0xf023c55709015357ffba79270c2e403dfcccd152",
+        "tx": "0x037d19ca158b58bf270144afe34c17aa7ff295a0c9ce14929581a24b923fbc3c",
+        "date": "2026-10-03"
+      }
     }
   },
   "networks": {
@@ -354,5 +379,72 @@
       "AGENT_C9_ENABLED"
     ],
     "status": "merged to devday-2026, not yet deployed"
+  },
+  "mainnetEvidenceV7": {
+    "mode": "LIVE",
+    "chainId": 196,
+    "date": "2026-10-02T21:58:02.917Z",
+    "via": "production verify-service (v6 endpoints only) + apps/verify-service/scripts/v7MainnetSmoke.ts",
+    "what": "signature-based allowance (USDG EIP-2612 permit relayed by a separate executor identity) + third-party executeStep through PlanGuard; owner sent 0 transactions",
+    "planGuard": "0xe8517f296211f4b9175796baab47979fb14fd2f0",
+    "owner": "0xbacb138e0e9e1444bae9b401c4615378c57c0381",
+    "executor": "0x9185e91ad939273cfc43ade97b18ddb44b27ed43",
+    "taskId": "tsk_3f658b470047d9aa41b44e65",
+    "mandateId": "mnd_3eec6060a89c1afd260ed8f4",
+    "intentId": "int_73fde0ab4a7e9ab4f0872631",
+    "permit": {
+      "txHash": "0x597fa2815adb075d98a93669c19ca56bdf2516184dbd356faff7b9798e531b35",
+      "block": 72209229,
+      "relayedBy": "0x9185e91ad939273cfc43ade97b18ddb44b27ed43",
+      "value": "2000000",
+      "spender": "0xe8517f296211f4b9175796baab47979fb14fd2f0",
+      "token": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8"
+    },
+    "executeStep": {
+      "txHash": "0x50772122a86de7d83043ccb0193d345d69587d3d88f4e8f06b2ba416647ca44e",
+      "block": 72209235,
+      "sentBy": "0x9185e91ad939273cfc43ade97b18ddb44b27ed43",
+      "gasUsed": 596692,
+      "event": {
+        "stepIndex": 0,
+        "amountIn": "1000000",
+        "spent": "1000000",
+        "received": "2999814365492806",
+        "refunded": "0",
+        "executor": "0x9185e91ad939273cfc43ade97b18ddb44b27ed43",
+        "evidenceHash": "0x5127bd93f4e6ce13dfdd5b3badaf22a7e61cdc3f4e14ed10533f509ec87008c7"
+      }
+    },
+    "ownerTransactions": 0,
+    "executorGasPaidWei": "13779780688989",
+    "serverVerified": "service step state CONFIRMED",
+    "afterwards": "task cancelled; 1 USDG allowance remains approved to PlanGuard (usable only within signed, unexpired mandates)"
+  },
+  "firstHostedRunV7": {
+    "date": "2026-10-03",
+    "network": "X Layer 196",
+    "task": "tsk_c7bc0d49075b80b3d83e1a8c",
+    "owner": "0xbacb138e0e9e1444bae9b401c4615378c57c0381",
+    "scope": "LIVE, agent hosted (claude-sonnet-5), executor hosted; USDG → AAPLx / NVDAx; budget 6 USDG, per step 2 USDG, max 3 steps, sell allowed, deadline 2026-10-05T01:10Z",
+    "ownerSignatures": 6,
+    "ownerTransactions": 0,
+    "permitRelays": {
+      "USDG": "0x62f45d61c7e68e3a711ae4a291284503277d78548c1b39c7ef9f2fd3a595cec8",
+      "AAPLx": "0x949e07543ee22aa0b7173464ea9459c4a938d52a90cd59a82bfcd6d2a1abf3f3",
+      "NVDAx": "0x5b97cb3cf909b040be4be56d92b8c78f283f71fe3379d5f58739b9a1cb1137ac"
+    },
+    "firstFill": {
+      "intent": "int_6495e3b90b2075ddfe13e5d9",
+      "mandateStep": "mnd_2bd21151a72dadc5716cc948:0",
+      "side": "buy",
+      "amountIn": "2 USDG",
+      "outputAAPLxRaw": "5996178488585316",
+      "certifiedAt": "2026-10-03T02:09:52Z",
+      "confirmedAt": "2026-10-03T02:10:07Z",
+      "txHash": "see the task bundle (GET /v1/tasks/tsk_c7bc0d49075b80b3d83e1a8c/bundle)"
+    },
+    "executor": "0x535Ed52f5F0E0c3Ca07F7489048b59ADd5c5516C",
+    "executorGasAfterFourTxOkb": "0.0000168",
+    "firstRunModelCostUsd": "0.124"
   }
 }

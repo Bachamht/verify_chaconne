@@ -22,8 +22,9 @@ describe("New visitor budget caps", () => {
 });
 
 describe("Complex tasks are goal tasks (no template, no rules)", () => {
-  it("five distinct tasks with objective, strategy, watch kinds and a sample intent in both languages", () => {
-    expect(new Set(COMPLEX_TASKS.map((t) => t.id)).size).toBe(5);
+  it("four distinct tasks (thesis template removed 10/5) with objective, strategy, watch kinds and a sample intent in both languages", () => {
+    expect(new Set(COMPLEX_TASKS.map((t) => t.id)).size).toBe(4);
+    expect(COMPLEX_TASKS.some((t) => t.id === "thesis_and_cost")).toBe(false);
     for (const t of COMPLEX_TASKS) {
       for (const l of ["zh", "en"] as const) { expect(t.objective[l].length).toBeGreaterThan(10); expect(t.strategy[l].length).toBeGreaterThan(40); expect(t.sampleIntent.rationale[l]).toBeTruthy(); }
       expect(t.watch.length).toBeGreaterThan(0);

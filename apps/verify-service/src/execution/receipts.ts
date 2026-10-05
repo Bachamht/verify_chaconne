@@ -10,7 +10,6 @@
  */
 import { createPublicClient, decodeEventLog, http, type Hex } from "viem";
 import { log } from "../log";
-import { GUARD_ABI } from "./guardAbi";
 import { PLANGUARD_ABI } from "./planGuardAbi";
 
 export interface ReceiptLog {
@@ -23,7 +22,19 @@ export interface ChainReceipt {
   blockNumber: bigint;
   blockHash: string;
   gasUsed: bigint;
+  /** 实际单价（EIP-1559 回执字段）；费用结算 = gasUsed × effectiveGasPrice + l1Fee。缺失时费用账本按预留额结算 */
+  effectiveGasPrice?: bigint;
+  /** OP Stack 回执的 L1 数据费（X Layer 2026-10-02 实测为 0）；缺失视为 0 */
+  l1Fee?: bigint;
   logs: ReceiptLog[];
+}
+
+/** viem 回执 → 费用字段（OP Stack 的 l1Fee 不在通用格式化器里，可能是 hex 串） */
+export function feeFieldsOf(r: { effectiveGasPrice?: unknown; l1Fee?: unknown }): { effectiveGasPrice?: bigint; l1Fee?: bigint } {
+  const big = (v: unknown): bigint | undefined => (typeof v === "bigint" ? v : typeof v === "string" && /^(0x[0-9a-fA-F]+|\d+)$/.test(v) ? BigInt(v) : typeof v === "number" && Number.isSafeInteger(v) ? BigInt(v) : undefined);
+  const egp = big(r.effectiveGasPrice);
+  const l1 = big(r.l1Fee);
+  return { ...(egp !== undefined ? { effectiveGasPrice: egp } : {}), ...(l1 !== undefined ? { l1Fee: l1 } : {}) };
 }
 export interface ReceiptSource {
   /** 未上链 / 未知 hash → null */
@@ -37,7 +48,7 @@ export function rpcReceiptSource(rpcUrl: string): ReceiptSource {
     async getReceipt(txHash) {
       try {
         const r = await client.getTransactionReceipt({ hash: txHash });
-        return { status: r.status, blockNumber: r.blockNumber, blockHash: r.blockHash, gasUsed: r.gasUsed, logs: r.logs.map((l) => ({ address: l.address, data: l.data, topics: l.topics })) };
+        return { status: r.status, blockNumber: r.blockNumber, blockHash: r.blockHash, gasUsed: r.gasUsed, ...feeFieldsOf(r as unknown as { effectiveGasPrice?: unknown; l1Fee?: unknown }), logs: r.logs.map((l) => ({ address: l.address, data: l.data, topics: l.topics })) };
       } catch (e) {
         if (e instanceof Error && /not (be )?found|could not be found/i.test(e.message)) return null;
         throw e;
@@ -64,40 +75,11 @@ export interface ReceiptVerifierOptions {
   confirmations: number;
   unknownAfterMs: number;
   now?: () => Date;
-  /** v2：事件匹配器；默认 GuardedExecution（v1 Guard）。PlanGuard 用 findMandateStepEvent */
-  matcher?: EventMatcher;
+  /** 事件匹配器（PlanGuard 用 mandateStepMatcher）。单笔 Guard 执行 10/5 起已删除，不再有默认值 */
+  matcher: EventMatcher;
 }
 /** 从回执里找本合约事件并给出用于比对的摘要（v1: intentDigest；v2: stepDigest 由 mandateDigest+stepIndex 关联，比对 attempt.intentDigest 存 stepDigest 时用 stepDigestOf） */
 export type EventMatcher = (receipt: ChainReceipt, guard: string) => { digest: string; event: Record<string, unknown> } | null;
-
-export interface GuardedExecutionSummary {
-  owner: string;
-  recipient: string;
-  nonce: string;
-  intentDigest: string;
-  evidenceHash: string;
-  router: string;
-  amountIn: string;
-  spent: string;
-  received: string;
-  refunded: string;
-}
-
-export function findGuardedExecution(receipt: ChainReceipt, guard: string): GuardedExecutionSummary | null {
-  for (const l of receipt.logs) {
-    if (l.address.toLowerCase() !== guard.toLowerCase() || l.topics.length === 0) continue;
-    try {
-      const d = decodeEventLog({ abi: GUARD_ABI, data: l.data, topics: l.topics as [Hex, ...Hex[]] });
-      if (d.eventName !== "GuardedExecution") continue;
-      const a = d.args as Record<string, unknown>;
-      const s = (k: string) => String(a[k]);
-      return { owner: s("owner").toLowerCase(), recipient: s("recipient").toLowerCase(), nonce: s("nonce"), intentDigest: s("intentDigest").toLowerCase(), evidenceHash: s("evidenceHash").toLowerCase(), router: s("router").toLowerCase(), amountIn: s("amountIn"), spent: s("spent"), received: s("received"), refunded: s("refunded") };
-    } catch {
-      /* 非本合约事件 */
-    }
-  }
-  return null;
-}
 
 export interface MandateStepSummary {
   owner: string;
@@ -128,11 +110,6 @@ export function findMandateStep(receipt: ChainReceipt, planGuard: string): Manda
   return null;
 }
 
-/** v1 默认匹配器 */
-export const guardedExecutionMatcher: EventMatcher = (receipt, guard) => {
-  const ev = findGuardedExecution(receipt, guard);
-  return ev ? { digest: ev.intentDigest, event: ev as unknown as Record<string, unknown> } : null;
-};
 /** v2：attempt.intentDigest 存的是 `${mandateDigest}:${stepIndex}` 关联键 */
 export const mandateStepMatcher: EventMatcher = (receipt, planGuard) => {
   const ev = findMandateStep(receipt, planGuard);
@@ -153,7 +130,7 @@ export function decideReceipt(attempt: ReceiptAttempt, receipt: ChainReceipt | n
   }
   const base = { txHash, blockNumber: receipt.blockNumber.toString(), blockHash: receipt.blockHash, gasUsed: receipt.gasUsed.toString(), checkedAt };
   if (receipt.status === "reverted") return { state: "REVERTED", receipt: { ...base, status: "reverted" } };
-  const matched = (opts.matcher ?? guardedExecutionMatcher)(receipt, opts.guard);
+  const matched = opts.matcher(receipt, opts.guard);
   if (!matched) return attempt.state === "UNKNOWN" && (attempt.receiptJson as { reason?: string } | null)?.reason === "guard_event_missing" ? null : { state: "UNKNOWN", receipt: { ...base, status: "success", reason: "guard_event_missing" } };
   const ev = matched.event;
   if (matched.digest !== attempt.intentDigest.toLowerCase()) return attempt.state === "UNKNOWN" && (attempt.receiptJson as { reason?: string } | null)?.reason === "intent_digest_mismatch" ? null : { state: "UNKNOWN", receipt: { ...base, status: "success", reason: "intent_digest_mismatch", event: ev } };

@@ -1,0 +1,107 @@
+{
+  "version": "permit-domains/1",
+  "chainId": 196,
+  "status": "approved",
+  "generatedBy": "apps/verify-service/scripts/permitDomains.ts",
+  "spenderUsedOnFork": "0xe8517f296211f4b9175796baab47979fb14fd2f0",
+  "entries": [
+    {
+      "assetKey": "eip155:196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+      "token": "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8",
+      "name": "Global Dollar",
+      "version": "1",
+      "domainSeparator": "0x415f0706e345fcaf25d5be24c4fd7830d0054fc5742c51a0db9319c759bd3743",
+      "verifiedBlock": 72135843,
+      "verifiedAt": "2026-10-02T01:34:39.314Z",
+      "forkAcceptance": {
+        "block": 72135854,
+        "tx": "0xdaab8360419f3e2e2488ea7b43ab7be3e472cb210edefa157c47d3b9c86460e8"
+      },
+      "sources": [
+        "eth_call DOMAIN_SEPARATOR()",
+        "eth_call name()",
+        "local anvil fork permit() accepted (block 72135854, Approval emitted)",
+        "OKLink verified source of EIP-1967 implementation 0x50607322caa9ce5c27b8cc403c476838caaa9202 (contractName USDG): EIP712._makeDomainSeparator(name(), \"1\")"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "token": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "name": "USDC",
+      "version": "2",
+      "domainSeparator": "0xc139aad82c94d0c30c92d2422f0805afad2a7b3e0c183678f5d96239acddc605",
+      "verifiedBlock": 72135843,
+      "verifiedAt": "2026-10-02T01:34:39.314Z",
+      "forkAcceptance": {
+        "block": 72135855,
+        "tx": "0x40586d13a3bf860c6a62736b5da8af08b99266c02e22a3e492fb05a672185462"
+      },
+      "sources": [
+        "eth_call DOMAIN_SEPARATOR()",
+        "eth_call name()",
+        "local anvil fork permit() accepted (block 72135855, Approval emitted)",
+        "eth_call version()",
+        "OKLink verified source of implementation 0x908cb63cded85ee69525e2f95f7f38da25ae0245 (FiatTokenV2_2): EIP712.makeDomainSeparator(name, \"2\", _chainId())"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x779ded0c9e1022225f8e0630b35a9b54be713736",
+      "token": "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+      "name": "USD₮0",
+      "version": "1",
+      "domainSeparator": "0xd591d9baf744328d9400b923cb02c9474d367d591ca1ab24d8c4068be527599d",
+      "verifiedBlock": 72135843,
+      "verifiedAt": "2026-10-02T01:34:39.314Z",
+      "forkAcceptance": {
+        "block": 72135856,
+        "tx": "0xf3e53d4038299479b17e9a84e8a8b94550a8b1396e9e35561d858aaffa88fb14"
+      },
+      "sources": [
+        "eth_call DOMAIN_SEPARATOR()",
+        "eth_call name()",
+        "local anvil fork permit() accepted (block 72135856, Approval emitted)",
+        "Sourcify exact_match (matchId 42408986) of EIP-1967 implementation 0x1ec7df9e74be05cb5a456aca2dc1ac2cec9ab6a3 (TetherTokenOFTExtension): ERC20PermitUpgradeable __EIP712_init_unchained(name, \"1\")"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "token": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "name": "Apple xStock",
+      "version": "1",
+      "domainSeparator": "0xf7db98b01c7e4ec2921049c973f53b81446cf51213d09b622dde3456a2e8a5d0",
+      "verifiedBlock": 72135843,
+      "verifiedAt": "2026-10-02T01:34:39.314Z",
+      "forkAcceptance": {
+        "block": 72135857,
+        "tx": "0x20e4cee0a54bd42f7d3a48c3fbe770d42efd02a30551289020c964b53d23f141"
+      },
+      "sources": [
+        "eth_call DOMAIN_SEPARATOR()",
+        "eth_call name()",
+        "local anvil fork permit() accepted (block 72135857, Approval emitted)",
+        "OKLink verified source of EIP-1967 implementation 0x65c40d624af3b18c109fbf87b7deff34cdc5f19b (BackedAutoFeeTokenImplementation): DOMAIN_SEPARATOR_VERSION = \"1\" (DOMAIN_SEPARATOR is a stored variable)"
+      ]
+    },
+    {
+      "assetKey": "eip155:196:0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "token": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "name": "NVIDIA xStock",
+      "version": "1",
+      "domainSeparator": "0xd0a0a8ddcfcb7da4e3e36edcad1228d9500606105a25eab80d0b85784825f4ed",
+      "verifiedBlock": 72135843,
+      "verifiedAt": "2026-10-02T01:34:39.314Z",
+      "forkAcceptance": {
+        "block": 72135858,
+        "tx": "0xeba83cac0c17913485f0711cb33b7f0b097047b735b6abc2b5d41e4c47efd07b"
+      },
+      "sources": [
+        "eth_call DOMAIN_SEPARATOR()",
+        "eth_call name()",
+        "local anvil fork permit() accepted (block 72135858, Approval emitted)",
+        "OKLink verified source of EIP-1967 implementation 0x65c40d624af3b18c109fbf87b7deff34cdc5f19b (BackedAutoFeeTokenImplementation): DOMAIN_SEPARATOR_VERSION = \"1\" (DOMAIN_SEPARATOR is a stored variable)"
+      ]
+    }
+  ],
+  "approvedBy": "operator",
+  "approvedAt": "2026-10-03"
+}

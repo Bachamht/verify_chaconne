@@ -432,3 +432,494 @@ agent-wallet 模式（CV-D08）：`AGENT_WALLET_PRIVATE_KEY` 是用户自己的 
 - **页面只留三层**：任务层（`/agent` 目标委托、`/agent/tasks` 我的任务与记录、任务详情）；上下文层（事件 `/agent/events`、资金 `/agent/funds`、日志 `/agent/journal`）；核验层（验证决策记录 `/verify-bundle`、市场回放、公开板）。老的单笔核验 `/new`、规划 `/plan` 撤出普通用户入口，只在 `/developers` 留调试入口（能力仍由 agent 在意图核验里调用）；`/play` → `/start`、`/agent/lab` → `/agent/tasks`、`/me` → `/agent/tasks` 转向（旧链接与历史记录可访问，接口不删）。
 - **任务证据包升级为决策记录（Task Decision Bundle）**：`TaskBundleExtras` 增 `brief`（策略全部版本、当前计划、关注事件、接管的 agent）、`agentTurn`、`agentIntents`（全部意图：决策记录、依据分拣、四道核验、计划偏离、签发的步骤）、`timeline`；`bundleHash` 覆盖全部键。`verifyTaskBundleExtras` 新增 `intents_belong_to_task`、`certified_intents_have_certificates`（certified 的意图必须在包内找到同 index 的步骤且包内有证书）、`certified_intents_passed_all_checks`、`strategy_versions_contiguous`。任务详情「执行详情」里可导出 JSON 并到 `/verify-bundle` 离线验证。字段名用 `agentIntents`，避开 v1 证据包已有的 `intents`（单笔 TradeIntent 签名）。
 - **删除**：`DELETE /v1/tasks/:id`（见 §11.7），迁移 0023 `verify_tasks.archived_at`。
+
+---
+
+## 12. v7 增补（Chaconne Agent 决赛升级，2026-10-02 冻结；Lane I）
+
+> 来源：v7 开发计划 §2（2026-10-02 09:00 版）。本节是契约：路由、类型、表、环境变量、状态机以此为准；实现增补追加在本节末尾「12.15 实现增补」。
+> 类型已落地 `packages/core/src/verify/contracts.ts` 末尾「v7 增补」区（只类型）；迁移 `packages/db/migrations/0025_v7_delegation_runtime.sql` + `verifySchema.ts` 已落地并由 `apps/verify-service/test/migration0025.test.ts` 验证（回填、部分唯一索引、在途 permit 唯一）。
+> 冻结类型的落地差异：`MANDATE_STEP_STATES` 追加 `SUPERSEDED`，另导出 `LIVE_MANDATE_STEP_STATES`；轮次原因的四个新值先以 `V7_AGENT_TURN_REASONS` 导出，由 Lane A 并入 `tasks/agentTurn.ts` 的 `AGENT_TURN_REASONS`；新增通用 `Eip712TypedData`、`PermitDomainsFile`、`FaultSpec`、`StepReconcileVerdict`、`RevertClass`、`MarketEventV7`、`HOSTED_AGENT_MCP_TOOLS`。
+
+
+约定不变：唯一类型事实来源 `packages/core/src/verify/contracts.ts`（只追加；新子模块只放纯函数、从 contracts 导入类型）；金额一律十进制字符串；链下时间 ISO-8601 UTC；哈希 keccak256 + `canon-1`（CV-D12：签名 / 哈希对象里不得出现浮点数，比例与价格一律十进制字符串）。新增核心子模块：`packages/core/src/verify/{delegation,execution,agent}/`，全部纯函数、带单测。冻结后改类型走 CV-D，由 Lane I 合并。
+
+### 12.1 任务运行态（谁决策、谁执行、在等什么）
+
+```ts
+export const AGENT_MODES = ["hosted", "byo"] as const;   // hosted = Chaconne Agent；byo = 用户自带 Agent（MCP / API）
+export const EXECUTOR_MODES = ["hosted", "agent_wallet", "browser"] as const;
+// hosted = 平台执行身份（作业制）；agent_wallet = 用户 Agent 经 MCP execute_trade_intent 自己发（旧路径，无作业）；
+// browser = owner 在网页逐笔发（旧路径，无作业）。「自跑 verify-executor 的自带执行者」移到赛后（勘误 #7）
+export type Actor = "owner" | "agent:hosted" | "agent:byo" | "executor:hosted" | "system";
+
+export type HostedAgentState =
+  | "starting"         // 已指派，委托未完成或首轮未开始
+  | "working"          // 有轮次在跑（currentActivity = 最近一次工具调用的人话）
+  | "awaiting_fill"    // 最新意图已认证，执行作业未终结
+  | "waiting"          // 在等：waitingFor（阻塞项 / 实际值未到 / 下次检查时刻）
+  | "blocked_owner"    // 有阻塞型 needsOwner
+  | "blocked_operator" // 模型不可用 / 执行身份 gas 低 / RPC 不可用（页面显示「平台在处理」）
+  | "paused" | "ended";  // ended = Agent 报 ended 后的内部暂停（§12.6）
+export type AgentPresence =
+  | { mode: "hosted"; state: HostedAgentState; currentActivity: string | null; waitingFor: string | null; lastDecisionAt: IsoUtc | null; nextCheckAt: IsoUtc | null }
+  | { mode: "byo"; state: "online" | "offline"; lastResponseAt: IsoUtc | null; nextCheckAt: IsoUtc | null }   // online = 10 分钟内有回应
+  | { mode: "none"; state: "unassigned" };
+export interface ExecutorStatus { mode: ExecutorMode | null; state: "ready" | "busy" | "paused" | "gas_low" | "offline" | "disabled"; address: EvmAddress | null; lastJobAt: IsoUtc | null }
+
+export type NeedsOwnerCode = "delegation_incomplete" | "allowance_low" | "balance_low" | "permit_failed" | "revoke_pending" | "scope_exhausted" | "agent_ended" | "reclaim_allowance";
+export interface NeedsOwnerItem { code: NeedsOwnerCode; blocking: boolean; text: { zh: string; en: string }; action: { kind: "sign_delegation" | "sign_permit" | "confirm_revoke" | "reclaim_allowance" | "create_new_task" | "resume_or_cancel" | "top_up"; itemId?: string } }
+export type NeedsOperatorCode = "executor_gas_low" | "executor_offline" | "model_unavailable" | "rpc_unavailable" | "agent_budget_exhausted" | "integrity_alert" | "contract_paused";
+export interface TaskRuntime { agentMode: AgentMode | null; executorMode: ExecutorMode | null; presence: AgentPresence; executor: ExecutorStatus; needsOwner: NeedsOwnerItem[]; needsOperator: NeedsOperatorCode[] }
+```
+
+`GET /v1/tasks/:id` 的视图新增 `runtime: TaskRuntime`、`delegation`（清单摘要）、`positions`（摘要）、`steps: { buy: { planned, confirmed }, sell: { confirmed } }`。`reclaim_allowance` 是非阻塞提醒（任务结束后链上额度 > 需要量时出现）。`scope_exhausted` = 预算 / 步数 / 期限用完，动作只有「建新任务」——范围永远不能放宽。
+
+### 12.2 委托清单（P0-A）
+
+```ts
+export type DelegationItemKind = "mandate_buy" | "mandate_sell" | "permit";
+export type DelegationItemStatus = "todo" | "submitted" | "confirmed" | "failed" | "not_needed";
+export interface DelegationItem {
+  id: string;                  // "buy" | "sell:<assetKey>" | "permit:<tokenAddress>"
+  kind: DelegationItemKind;
+  assetKey: string;            // buy = 资金币种；sell = 股票；permit = 被授权的代币
+  title: { zh: string; en: string };
+  explain: { zh: string; en: string };   // 这次签名允许什么、不允许什么（金额、合约、期限、能否撤回）
+  typedData: Eip712TypedData | null;     // mandate 来自建任务时的草案；permit 在 GET 时按当前 nonce 与账本现算并登记为 ISSUED；failed 时为 null
+  permitRequestId?: string;              // permit 项：本次 GET 登记的请求 id（POST 必须引用它）
+  status: DelegationItemStatus;
+  ref: string | null;          // mandateId / permitId
+  txHash?: Hex | null;         // permit 上链交易（执行身份代付 gas）
+  error?: { code: string; message: string };
+}
+export interface DelegationChecklist {
+  taskId: string;
+  items: DelegationItem[];
+  counts: { signaturesNeeded: number; signaturesDone: number; userTransactions: number };   // 正常恒为 0；只有不支持 permit 的回退路径才 > 0，测试断言五个登记代币下为 0
+  allowances: Array<{ token: EvmAddress; assetKey: string; onchainRaw: RawAmount; requiredRaw: RawAmount; pendingPermit: boolean }>;
+  buyReady: boolean;                      // 本任务事实：买入授权 ACTIVE ∧ 本任务的资金币种 permit 项 confirmed 或 not_needed（不随别的任务登记而翻转）
+  sellReady: Record<string, boolean>;     // 每只股票：卖出授权 ACTIVE ∧ 该股票 permit 项 confirmed 或 not_needed
+  complete: boolean;                      // 全部项 confirmed 或 not_needed
+}
+```
+
+- 签名顺序（向导固定）：`buy` → 各 `sell:<asset>` → 各 `permit:<token>`。permit 的 typedData 在 `GET /delegation` 时计算，**把本任务尚未登记的授权草案也计入账本**，向导能一次拿到全部 typedData、连续签完。
+- **每一步的实时额度检查**：`buyReady` / `sellReady` 是委托完成的事实，不是额度保证。意图核验时另查 `allowance(owner, PlanGuard) ≥ amountIn`，不足 → `ALLOWANCE_INSUFFICIENT` + `needsOwner: allowance_low`（附一个按账本新算的 permit）。这样另一个任务登记授权不会让本任务停摆。
+- LIVE 委托任务在 `buyReady` 之前保持 `AWAITING_AUTHORIZATION`（现有 `authorize` 在 mandate ACTIVE 时就转 ACTIVE——v7 委托任务改为等 permit 确认）；`buyReady` 首次为真 → ACTIVE + 开 `authorized` 轮次；`complete` 首次为真 → `task.delegation_completed`。
+
+### 12.3 permit 与额度账本（D-091，CV-D20）
+
+**域配置**：`apps/verify-service/config/permit-domains.xlayer.json`
+
+```json
+{ "version": "permit-domains/1", "chainId": 196,
+  "entries": [ { "assetKey": "eip155:196:0x…", "token": "0x…", "name": "<链上 name() 原文>", "version": "<匹配成功的版本串>",
+                 "domainSeparator": "0x…", "verifiedBlock": 0, "verifiedAt": "…",
+                 "forkAcceptance": { "block": 0, "tx": "0x…" }, "sources": ["eth_call DOMAIN_SEPARATOR()", "eth_call name()", "<第二来源>"] } ] }
+```
+
+- 生成方法（Lane X 脚本 `scripts/permitDomains.ts`）：读 `name()`、`DOMAIN_SEPARATOR()`；先试 EIP-5267 `eip712Domain()`（AAPLx / USDG 实测回退，不可依赖）；再按候选（`version ∈ {"1","2"}`、不含 version 的域、官方源码里出现的其它写法）计算域分隔符，**与链上 `DOMAIN_SEPARATOR()` 完全相等才记录**。
+- **最终判据 = 分叉上的真实接受**：在 anvil 分叉上用一把随机私钥按候选域签 permit 并调用 `permit(...)`，`allowance` 被设置即通过（permit 不要求余额），交易哈希记入 `forkAcceptance`。2026-10-02 链上预检已确认五个代币都实现了 `permit`（伪签名回「签名无效」而非「函数不存在」），所以域对不上 = 我们推导错了，要继续找候选，**不要**直接回退到 approve；只有分叉接受对所有候选都失败才允许回退（一笔用户 approve，`counts.userTransactions` +1，页面如实说明）。
+- verify-service 启动时：对每条配置重算域分隔符，并经 RPC 读一次链上 `DOMAIN_SEPARATOR()` 比对；任一不等即对该代币关闭 permit（`permit_domain_unverified`）并告警。
+
+**typedData**：`primaryType: "Permit"`，`types.Permit = [owner address, spender address, value uint256, nonce uint256, deadline uint256]`，`spender = PLANGUARD_ADDRESS`，`nonce = token.nonces(owner)`（GET 时读链），`deadline = now + 1800`（秒）。`deadline` 只是签名可提交的截止时间；额度上链后一直有效直到被改写。
+
+**账本**（同一 `(owner, token, spender=PlanGuard)`）：
+
+```
+requiredRaw  = Σ_{m ∈ 未终结授权} max(0, budgetCap_m − spent_m)  +  Σ_{d ∈ 本任务未登记草案} budgetCap_d
+               （未终结 = DRAFT / ACTIVE / PAUSED；spent 用链上 mandateState 镜像；卖出授权按股票代币单位单独记账）
+permitValue  = requiredRaw + ceil(requiredRaw × 50 / 10_000)        // +0.5%：吸收退款与 rebasing 舍入
+链上额度已 ≥ requiredRaw  → 该 permit 项 not_needed（省一次签名）
+```
+
+**发放与提交**：`GET /delegation` 为每个需要的 permit 登记一条 `verify_permits(state=ISSUED, value, nonce, deadline)` 并返回 `permitRequestId`。`POST /v1/tasks/:id/allowances {permitRequestId, signature}` 的校验（任一不过即拒绝，不入队）：请求存在且属于本任务、状态 ISSUED、未过 `deadline − 120 s`；`recoverTypedDataAddress(ISSUED 的 typedData, signature) == task.owner`；`nonce == 链上 nonces(owner)`（否则 409 `permit_nonce_stale`，向导重取）；同 `(owner, token)` 无在途 permit 作业（否则 409 `permit_pending`）；链上额度此刻仍 < `requiredRaw`（否则 409 `permit_not_needed`）。**value 以 GET 时发放的为准**，GET 与 POST 之间有成交也不会 422；发放值 ≤ `permitValue`，不存在无限额度。〔已由 §12.15「permit 发放值复核」修订：POST 时要求 value ≤ permitValue(当前需要量)，超出 → 422 `permit_value_too_high`〕
+
+**代付限制**（执行身份的 gas 不能被白嫖）：只为 `executor_mode=hosted` 且 owner ∈ `HOSTED_OWNER_ALLOWLIST` 的任务代付；每 owner 每小时 ≤ `PERMIT_RELAY_PER_OWNER_PER_HOUR`(6)，全局每天 ≤ `PERMIT_RELAY_DAILY_MAX`(50)；超限 429。
+
+**收回额度（owner 维度）**：`GET /v1/owners/:owner/allowances`（各代币链上额度、账本需要量、差额）与 `POST /v1/owners/:owner/allowances/reclaim {token}` → 发放一条 `purpose=reclaim` 的 ISSUED permit（value = 其余未终结授权的 `requiredRaw`，有未终结授权时 + 0.5%，没有则为 0），用户签名后同样走 `/allowances` 提交路径（`POST /v1/owners/:owner/allowances/submit`）。任务终结后若链上额度 > 需要量 + 0.5%，出现非阻塞 `reclaim_allowance`。残余额度只能被**仍有效且签过名的** mandate 使用（过期 mandate 合约直接拒绝），所以是低风险项，但要给用户一键清理；用户也可以自己发 `approve(PlanGuard, 0)`。
+
+### 12.4 卖出授权（P1-A，D-092）
+
+- **生成条件**：只对目标式买入任务（`playbookId=agent_goal`、`scope.issuance=agent`、买入方向）且 `scope.allowSell = true`、`AGENT_V7_SELL_ENABLED` 打开时生成；`target_sell` 等模板任务与 `issuance=auto` 任务不生成（避免出现永远不会就绪的清单项）。
+- **收款人**：`allowSell` 或托管执行的任务要求 `recipient == owner`（买入送到 recipient、卖出从 owner 拉款；两者不同会让「链上余额」包含 owner 原有持仓）。建任务时校验，不满足 → 400 `recipient_must_be_owner`。
+- **草案**：为 `scope.outputAssetKeys` 里每只股票生成一份卖出 TradeMandate：`inputToken = 股票代币`，`outputSetHash = hash([资金币种代币])`，`recipient = owner`，`budgetCap = perStepCap = sellCapRaw`，`maxSteps = scope.maxSteps`，`deadline = scope.deadline`，策略与 `effectivePolicyHash` 同买入授权（`conditionsHash` = `scopeHash`）。
+- **上限公式**（股票代币最小单位，向上取整；P6 = 建任务时该股票「100 USDG 档」可执行单价 × 1e6 取整，来源 `/pub/market/xlayer` 快照或证据报价；资金币种按 1 USD 计——这是宽松上界，不是估值）：
+
+```
+budgetMicroUsd = budgetCapRaw × 10^(6 − stableDecimals)
+sellCapRaw     = ceil( budgetMicroUsd × 2 × 10^tokenDecimals / P6 )     // 预算在「价格腰斩」时能买到的份额
+P6 不可得 → 该卖出项 failed{price_unavailable}，POST /v1/tasks/:id/delegation/refresh 重试
+```
+
+- 〔本条与上限公式已由 §12.15「D-092 简化」修订：合约上限 = 委托时链上余额 + 公式；服务上限 = 链上余额〕页面同时写两个上限：「合约上限 X 股（你签的）」与「服务上限 = 本任务买入形成的持仓」。服务侧卖出只允许 `amountInRaw ≤ sellableRaw = min(任务净持仓, 链上余额)`；任务净持仓 = 买入 `received` 之和 − 卖出 `spent` 之和（与 `tracedFills` 口径一致）；`< POSITION_DUST_RAW`(1e9) 视为 0。
+- **卖出的路由金额**：与现有 `nextStepJob` 一致，报价 / 路由按 `amountIn − SELL_INPUT_TOLERANCE_WEI` 取，步骤 `amountIn` 仍为全额（rebasing 输入少到 1 wei 时路由不会多拉）。
+- **mandate nonce**：同一 owner 内唯一；`nonce = BigInt(Date.now()) × 100n + 序号`，登记前查重。`authorize` 的 `clientRequestId` 改为每项固定 `${taskId}:auth:${itemId}`（现有的 `…:auth:${mandateIds.length}` 会让重试变成 409）。
+- 登记沿用 9/22 修正后的 `registerBody` 约定（`side=sell` 时 `mandateJson.inputAssetKey` 存资金币种、`legs[0]` 存股票，方向翻转）；新增列 `verify_mandates.side` 与 `asset_key`（**= PlanGuard 实际拉取的代币**：买入为资金币种、卖出为股票），查询不再依赖这个约定。
+- **卖出授权从不触碰资金组账目**：不 `reserve`、不 `markPending`、不 `settle`、不 `onStepConfirmed` 记预算（现有代码会把股票单位的数额记进稳定币预算——必须加守卫与测试）。
+- **绝不做计划驱动的卖出签发**：卖出授权只按意图签发；`nextStepJob` 对 `side=sell` 且挂在任务上的授权返回 null（否则会按 `sellCapRaw` 一次卖光，绕过 `sellableRaw`）。
+
+### 12.5 执行作业与步骤生命周期（P0-B，D-089，CV-D21，CV-D24）
+
+```ts
+export const EXECUTION_JOB_KINDS = ["permit", "execute_step"] as const;
+export const EXECUTION_JOB_STATES = ["QUEUED", "CLAIMED", "SENDING", "SENT", "CONFIRMED", "REVERTED", "EXPIRED", "FAILED", "CANCELLED"] as const;
+export interface ExecutionJob { id: string; kind: ExecutionJobKind; taskId: string | null; mandateId: string | null; stepId: string | null; stepIndex: number | null; owner: EvmAddress; token: EvmAddress | null; state: ExecutionJobState; attempt: number; leaseUntil: IsoUtc | null; claimedBy: string | null; txHash: Hex | null; txNonce: string | null; validUntil: IsoUtc | null; errorCode: string | null; payload: PermitJobPayload | ExecuteStepJobPayload }
+export interface ExecuteStepJobPayload { mandateId: string; stepId: string; stepIndex: number; validUntil: IsoUtc; ready: PreparedStepReady /* = mandates.pullStep 的 READY 体 */; fault?: FaultSpec }
+export interface PermitJobPayload { permitId: string; owner: EvmAddress; token: EvmAddress; spender: EvmAddress; value: RawAmount; nonce: RawAmount; deadline: string; signature: Hex; fault?: FaultSpec }
+```
+
+**步骤行（`verify_mandate_steps`）规则变更**——这是防重复成交的根：
+1. 新状态 `SUPERSEDED`。迁移 0025 把唯一约束 `(mandate_id, step_index)` 改为**部分唯一索引**：只约束「活」状态 `PREPARED / SUBMITTED / REORG_PENDING / CONFIRMED / UNKNOWN`。
+2. **被取走过的行（`pulled_at` 非空）永不删除**：重签同一 index 时把它标 `SUPERSEDED`（保留证书、用于回执归因）；只有从未被取走的行可以删除重签（`DELETE … WHERE pulled_at IS NULL`）。
+3. **到期判断用证书里签名的 `validUntil`**（`certificate_json.certificate.validUntil`），不用可变的 `valid_until` 列；被取走过的行只有在 `now > 签名 validUntil + EXECUTION_EXPIRY_MARGIN_S` 后才能转 EXPIRED。现有三处要改：`mandates.transition(PAUSED/CANCELLED)` 只作废**未被取走**的 PREPARED 行；`intents.withdraw` 只作废未被取走的行（已取走的：取消未进 SENDING 的作业，行保持在途直到过期）；`expireSteps()` 对已取走的行加上 margin，并跳过有 SENDING / SENT 作业的行。
+4. **取走是原子的**：执行者领取时在同一事务里 `UPDATE verify_mandate_steps SET pulled_at = now WHERE id = ? AND pulled_at IS NULL AND state = 'PREPARED' RETURNING`；影响 0 行 → 作业 CANCELLED。
+5. **回执归因**：回执核实器与链上回填器拿到 `MandateStep` 事件后，除 `(mandateDigest, stepIndex)` 外还要核对 `evidenceHash`、`amountIn`、`outputToken` 与步骤行一致；不一致 → 在同 index 的 SUPERSEDED 行里找匹配的那条，把成交记到它（及其意图）名下、活行转 SUPERSEDED；都不匹配 → `integrity_alert`。成交永远记在真正被执行的那张证书上。
+
+**作业状态转移（只有这些合法；core `canTransitionJob` + 单测）：**
+
+| 从 → 到 | 触发 | 条件 |
+|---|---|---|
+| QUEUED → CLAIMED | `POST /v1/executor/claim` | `attempt += 1`，租约 90 s；同时原子取走步骤（上条第 4 点）；同一授权同时最多 1 个 CLAIMED / SENDING / SENT |
+| QUEUED → EXPIRED | 清扫器 | execute_step：签名 `validUntil` 剩余 < 20 s 仍未被领取；permit：`deadline` 剩余 < 120 s |
+| QUEUED → CANCELLED | 暂停 / 意图撤回 / 被新意图取代 / 接管切换 | 与意图状态变更在同一事务 |
+| CLAIMED → QUEUED | 执行者事件 `abandoned`，或清扫器（租约过期） | 未进入 SENDING；证书剩余 ≥ 20 s |
+| CLAIMED → SENDING | 执行者事件 `sending {rawTxHash?, nonce?, rawTx?}` | **发送提交点**：服务端复核——任务未暂停、步骤仍是活行且由本作业取走、签名 `validUntil` 剩余 ≥ `EXECUTOR_MIN_CERT_REMAINING_S`(8)、attempt 匹配；任一不满足：回 409 `not_allowed_now` **并当场**把作业转 CANCELLED 或 EXPIRED（不等租约），执行者不得广播。EOA 模式必须带 `rawTxHash / nonce / rawTx`；`okx_agentic` 模式三者可空 |
+| CLAIMED → FAILED | 执行者事件 `preflight_failed {code, revert?}` | 本地或链上预检失败（下表失败分类） |
+| CLAIMED → EXPIRED | 清扫器 | 租约过期、未进 SENDING、证书剩余 < 20 s（从未广播，安全） |
+| SENDING → SENT | 事件 `sent {txHash}` | 广播成功或按哈希查到交易；服务端调用内部 `recordJobSubmission(stepId, txHash)`（**不走**带调用方鉴权、按 index 查找、会对 EXPIRED 抛 409 的 `recordSubmission`）→ 步骤 SUBMITTED |
+| SENDING/SENT → CONFIRMED | 回执核实器（execute_step：6 确认 + 事件归因通过）；permit：回执里 `Approval(owner, PlanGuard, value)` | permit 不读余额判定（避免与其它任务的步骤竞争）；若某代币 permit 不发 Approval（分叉上先验证），退回按回执区块号读 `allowance` |
+| SENDING/SENT → REVERTED | 回执 status 0 | 解码 revert → 失败分类 |
+| SENDING/SENT → EXPIRED | 对账器 | `reconcileStep` 判定 EXPIRED |
+| SENDING/SENT → CONFIRMED（permit 被抢跑） | 对账器 | 签名已被他人上链（`nonces` 已前进）且链上存在该 owner、spender、value 的 Approval → 视为确认；否则 FAILED `permit_nonce_consumed` → `needsOwner: permit_failed` |
+
+- execute_step 作业在 `intents.submit` 拿到 `step` 后立即为 `executor_mode=hosted` 的任务创建（`step_id` 唯一）；**清扫器**每 2 s 为「托管执行任务里 PREPARED、未取走、无作业」的步骤补建作业。
+- **作业制任务不交出 READY 体**：`intents.submit` 对 `executor_mode=hosted` 的任务不调 `pullStep`、响应改为 `execution: { mode: "hosted", jobId }`；`GET …/intents/:id?withStep=1` 对它们回 409 `platform_executes`；MCP `execute_trade_intent` 回 `not_applicable: platform executes`。`agent_wallet` / `browser` 模式照旧取走 READY 体（签发闸门与链上回填对它们同样生效）。
+- **挂在任务上的授权不能绕过任务**：`POST /v1/mandates/:id/prepare-step` 与 `/resume` 对 `task_id` 非空的授权回 409 `task_bound_mandate`（暂停 / 取消仍允许——停止永远可以）。
+- **意图被取代**：同一授权的新意图签发时，若旧意图的步骤从未被取走，旧意图转新状态 `superseded`，其作业 CANCELLED——同一事务。
+- 领取顺序：permit 作业优先；某 `(owner, token)` 有在途 permit 时，以该代币为输入的 execute_step 暂不领取。
+
+**对账决策（core 纯函数 `reconcileStep`，表驱动单测）：**
+
+```
+输入：stepIndex, signedValidUntil, chainHeadTs, chainSteps(mandateState.steps), receipt(null | {status, confirmations}), confirmationsRequired(=6), marginS(=15)
+receipt.status == success ∧ confirmations ≥ confirmationsRequired → CONFIRMED_BY_RECEIPT
+receipt.status == success ∧ confirmations <  confirmationsRequired → WAIT
+receipt.status == reverted                                       → REVERTED
+chainSteps  > stepIndex                                          → EXECUTED_ELSEWHERE   // 按 MandateStep 日志回填并归因，绝不重发
+chainHeadTs > signedValidUntil + marginS                         → EXPIRED              // 此后任何带该证书的交易必被合约拒绝（CertificateExpired）
+其它                                                              → WAIT
+```
+
+关键性质：PlanGuard 对 `block.timestamp > validUntil` 一律回退，所以**签名里的证书有效期就是不确定窗口的上界（≤ 120 s）**；过了窗口且链上步序没动，就可以确定这一步没有执行。
+
+**签发闸门（改 `MandatesService`）——给授权 M 的第 n 步签发前，按顺序：**
+1. 链上 `mandateState(digest).steps` > 库里 `stepsDone` → 先跑链上回填，再评估。
+2. 存在 (M, n) 的活行为 SUBMITTED / REORG_PENDING → WAIT `STEP_AWAITING_CONFIRMATION`（已有）。
+3. 存在 (M, n) 的**任意状态**的行满足 `pulled_at` 非空且 `now ≤ 签名 validUntil + marginS` → WAIT `EXECUTION_IN_FLIGHT`（`nextCheckAt = 签名 validUntil + marginS`）。
+4. 存在 (M, n) 的作业处于 SENDING / SENT → WAIT `EXECUTION_IN_FLIGHT`。
+5. 以上都不成立：未被取走的旧行删除；被取走过的旧行标 SUPERSEDED；然后重签。
+
+**链上回填器**（服务 worker，每 `CHAIN_RECONCILE_INTERVAL_MS`=30 s 扫近 48 h 有活动的授权，签发前也同步跑一次）：读 `mandateState(digest)`；`steps > stepsDone` → `eth_getLogs(MandateStep, topics=[sig, owner, mandateDigest])`，`fromBlock` = 授权登记时记下的区块号（`verify_mandates` 新列 `from_block`），按 2 000 区块分页 → 缺失的 index 按上面第 5 点归因后 upsert 为 CONFIRMED → 更新 `spent / stepsDone` → 走 `withBudgetSettlement` 包装的同一回执路径（结算只发生一次）→ 触发 `onStepConfirmed`。幂等。覆盖浏览器钱包、agent-wallet、执行者漏报等所有情况。
+
+**自动重签（只对时效类失败）**：失败分类为 `retry_new_cert` 时，服务端对同一意图自动重签一次（`AUTO_RECERTIFY_MAX=1`，意图创建后 `AUTO_RECERTIFY_WINDOW_S=300` 内），**新报价重新过四道核验**；仍失败才开 `execution_failed` 轮次交给 Agent。价格类失败从不自动重签——价格变了，要不要换数量是 Agent 的决定。
+
+**失败分类**（core `classifyRevert`：选择器由 `abi/ChaconneVerifyPlanGuard.json` 加上 OZ v5 `ERC20InsufficientAllowance / ERC20InsufficientBalance`、`Error(string)`、`Panic(uint256)` 生成；测试断言 PlanGuard ABI 每个 error 都有归类）：
+
+| 类 | 错误 | 处理 |
+|---|---|---|
+| `retry_new_cert` | `CertificateExpired`、`StepExpired`、预检「证书剩余不足」、`QUOTE_TOO_OLD` | 自动重签一次 → 再失败开 `execution_failed` 轮次 |
+| `wait_clock` | `CertificateNotYetValid` | 时钟偏差：等 10 s 再预检，不重签；三次仍失败 → `integrity_alert` |
+| `replan` | `InsufficientOutput`、`RecipientShortfall` | 不重签；`execution_failed` 轮次（附 received / minOut） |
+| `liquidity` | `RouterCallFailed` | 退避 60 s；`execution_failed` 轮次 |
+| `chain_ahead` | `StepOutOfOrder` | 跑链上回填；不重试 |
+| `scope` | `StepsExhausted`、`BudgetExceeded`、`PerStepCapExceeded`、`OutputNotInSet`、`MandateExpired`、`MandateNotYetValid` | 服务侧核验漏网 = 缺陷：`integrity_alert` + 轮次 |
+| `terminal` | `MandateRevokedError`、`MandateNonceAlreadyUsed` | 停止该授权；交给撤销流程 |
+| `allowance` / `balance` | 预检读到 `allowance < amountIn` / `balanceOf(owner) < amountIn`；OZ `ERC20Insufficient*`；代币的 `Error(string)` 额度 / 余额文案 | `needsOwner: allowance_low / balance_low`；不重试 |
+| `paused` | OZ `EnforcedPause` | `needs_operator: contract_paused` |
+| `bug` | `InputTransferShortfall`、`InputTransferExcess`、`OverSpent`、签名 / 绑定 / 白名单 / 计算类其余全部 | 停止该授权签发；`integrity_alert`；告警运营者 |
+| `unknown` | 解不出 | 不重试；轮次 + 告警 |
+
+**执行身份**：执行者 id = 它的链上地址（EOA 或 Agentic Wallet 地址），跨重启不变；心跳带每次启动随机生成的 `instanceId`，服务端在 `verify_executor_status` 上维持单实例租约（90 s）——同一地址的第二个进程领取时回 409 `executor_instance_conflict`，避免 nonce 打架；崩溃重启后按地址取回自己 SENDING / SENT 的作业。
+
+**故障注入（演练，D-095）**：`POST /v1/ops/faults`（运营者 key，且 `FAULT_INJECTION_ENABLED=true`）给下一个匹配作业挂一次性 `fault`：
+- `cert_void`：执行者领取后等到证书剩余 < 8 s 再走发送提交点 → 被拒（作业当场 EXPIRED）→ `retry_new_cert` → 自动重签 → 成交一次。
+- `receipt_delay`：执行者广播后 90 s 内不报回执、不查回执 → 服务端闸门 3 / 4 阻止重签 → 回执核实器确认 → 成交一次。
+- `rpc_timeout`：执行者广播后、报 `sent` 前人为抛错并重启循环 → 按 `rawTxHash` 找回 → 报 `sent` / `receipt` → 不重发。
+- `double_claim`（只在分叉 / 本地）：人为让租约过期，第二个执行者（另一地址）领取 → 旧 attempt 的事件 409；若两者都广播，链上 `StepOutOfOrder` 只让一笔成功，回执归因到真正执行的那张证书。
+故障只会造成延迟或过期，**不能绕过任何核验**；生产环境未挂故障时这些分支不可达（测试断言）。
+
+### 12.6 Agent 运行时（P0-C，D-090，D-093，CV-D23，CV-D25）
+
+**轮次原因**新增：`assigned`（SIMULATION 观察任务创建时、或对已在运行的任务切换为托管 Agent 时立即开一轮）、`scheduled`（到达 Agent 自定的 `nextCheckAt`）、`data_arrived`（关注事件的实际值入库）、`execution_failed`（作业 EXPIRED / FAILED / REVERTED 且未被自动重签消化）。LIVE 委托任务的第一轮沿用现有 `authorized`（在 `buyReady` 时开）。
+
+**轮次与动作的绑定**：
+- 交易意图与状态报告的请求体新增 `turnVersion`；服务端只关闭**同版本**的轮次。若期间已开出更新的轮次，动作照常生效并记在它自己的版本上，新轮次保持打开（不再出现「上一轮的回答把新唤醒吞掉」）。
+- 托管轮次每个 `(taskId, turnVersion)` **只接受一个终结动作**；第二个回 409 `turn_already_answered` 并带回已记录的动作。
+- `report_agent_status`、`remember_note`、`add_thesis_review_item` 增加 `clientRequestId`（服务端按 `(taskId, clientRequestId)` 去重）；托管 Agent 一律用 `h:<runId>:<seq>`。
+- 状态报告可选字段：`nextCheckAt`（ISO，∈ [now+60 s, scope.deadline]）、`invalidation`（≤ 500 字：什么情况会让我改主意）；交易意图体同样可带 `nextCheckAt`。存进 `verify_tasks.next_agent_check_at`；monitor tick 到点开 `scheduled` 轮次（观察键 `sched:<iso>`）。
+- **`ended` 的唯一含义**：Agent 认为本任务目标已完成或不值得继续 → 服务端走**内部路径**把任务转 PAUSED（`paused_by = "agent"`，不调用需要 owner 身份的 `transition`），不再开新轮次，presence = `ended`，`needsOwner: agent_ended`（「恢复让它继续」或「取消并收回额度」）。不转 COMPLETED；MCP 工具描述同步改。
+
+**轮次令牌（CV-D25，防跨租户）**：
+- `POST /v1/agent/claim` 为每次领取返回一次性 `runToken`（32 字节随机，库里只存 sha256），绑定 `(runId, taskId, attempt, leaseUntil)`。
+- verify-agent **每个轮次单独启动一个 verify-mcp 子进程**，env 只有 `VERIFY_SERVICE_URL`、`VERIFY_API_KEY`（托管 Agent key）、`VERIFY_RUN_TOKEN`；verify-mcp 的 `VerifyClient` 在设置了 `VERIFY_RUN_TOKEN` 时附加请求头 `x-agent-run-token`（新增约 10 行，带测试）。
+- 服务端：`agent:hosted` 的每个任务类请求都必须带有效令牌；路由里的任务（或理由卡所属任务）≠ 令牌绑定的任务 → 403；attempt 过期或租约过期 → 409。
+- verify-agent 在转发工具调用前把参数里的 `taskId` 改写为本轮任务、拒绝不属于本任务的 `thesisId`（纵深防御）。
+
+**轮次记录**：
+
+```ts
+export const AGENT_RUN_STATES = ["CLAIMED", "RUNNING", "COMPLETED", "INCOMPLETE", "FAILED", "CANCELLED"] as const;
+export interface AgentRunStep { seq: number; kind: "model" | "tool"; name?: string; argsHash?: Bytes32; resultHash?: Bytes32; argsPreview?: string; resultPreview?: string; tokensIn?: number; tokensOut?: number; latencyMs: number; at: IsoUtc; error?: string }
+export interface AgentRunSummary {
+  runId: string; taskId: string; turnVersion: number; attempt: number; turnReason: AgentTurnReason; mode: "LIVE" | "SIMULATION";
+  model: string; promptHash: Bytes32;            // prompts/system.md 的内容哈希
+  startedAt: IsoUtc; endedAt: IsoUtc | null; state: AgentRunState;
+  action: { kind: "intent" | "status"; ref: string; status: string } | null;
+  decisionSummary: string;                        // ≤ 280 字，取自 rationale / note
+  nextCheckAt: IsoUtc | null; invalidation: string | null;
+  toolCalls: Array<{ name: string; argsHash: Bytes32; resultHash: Bytes32 }>;
+  usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; costUsdMicros: string };
+  prevRunHash: Bytes32 | null; runHash: Bytes32;
+}
+// runHash = hashCanonical({ v: "agent-run/1", prevRunHash, taskId, turnVersion, attempt, model, promptHash, toolCalls, action, decisionSummary, nextCheckAt })
+```
+
+- 每个 `(taskId, turnVersion)` 一行；模型故障导致的 FAILED 可被再次领取（同一行 `attempt += 1`，最多 3 次）。**哈希链覆盖所有带动作的轮次（COMPLETED 与 INCOMPLETE）**，按完成时间串接。
+- 预览（`argsPreview` / `resultPreview`）每条 ≤ 2 KB，写入前过密钥扫描（SEC-05）；完整模型消息只存 `verify_agent_runs.messages_json` 用于续跑（≤ 256 KB，超出截断最旧的工具结果），**不进证据包、不对外**。续跑时先查本轮是否已有记录的终结动作，有就直接收尾。
+- 任务记忆：`verify_agent_memory`，≤ 20 条 × 2 KB，先进先出。
+
+**成本与节流（在 verify-service 执行）**：价格与上限变量放在 **verify-service** 的 `.env`（verify-agent 只上报 token 用量，由服务端算成本）；`HOSTED_AGENT_ENABLED=true` 但价格变量缺失 → 托管 Agent 不启用并告警（否则上限形同虚设）。日上限分开：`AGENT_DAILY_USD_CAP_PER_TASK`、`AGENT_DAILY_USD_CAP_LIVE_TOTAL`、`AGENT_DAILY_USD_CAP_SIM_TOTAL`——观察模式花不到 LIVE 的预算。低优先级原因（`observation_changed`、非实际值的 `event`）同一任务两轮间隔 ≥ `AGENT_MIN_RUN_INTERVAL_S`(600)；`assigned / authorized / data_arrived / execution_failed / step_confirmed / scheduled` 不受限。
+
+**决策上下文** `GET /v1/tasks/:id/agent-context`（每轮第一条输入，也是工具 `get_turn_context`）：
+
+```json
+{ "now": "…", "session": { "label": "US_REGULAR|PRE|POST|CLOSED", "nextOpen": "…", "nextClose": "…" },
+  "task": { "id": "…", "mode": "LIVE|SIMULATION", "status": "…", "objective": "…", "strategy": { "version": 3, "text": "…", "by": "owner|agent" },
+            "scope": { "inputAssetKey": "…", "outputAssetKeys": ["…"], "budgetCapRaw": "…", "perStepCapRaw": "…", "maxSteps": 5, "deadline": "…", "allowSell": true, "trustTier": "agent_data", "hardConditions": [] } },
+  "turn": { "version": 7, "reason": "data_arrived", "summary": "…", "blockers": [ { "code": "…", "text": "…" } ] },
+  "budget": { "buyRemainingRaw": "…", "buyStepsLeft": 3, "allowanceRaw": { "<token>": "…" }, "sellReady": { "<assetKey>": true } },
+  "positions": [ { "assetKey": "…", "netRaw": "…", "sellableRaw": "…", "avgCostUsd": "…" } ],
+  "lastIntent": { "id": "…", "status": "…", "job": { "state": "…", "errorCode": null } },
+  "recentRuns": [ { "at": "…", "action": "…", "decisionSummary": "…", "nextCheckAt": "…" } ],
+  "memory": [ { "at": "…", "text": "…" } ],
+  "thesis": { "id": "…", "status": "holds|invalidated|unknown", "premises": [ { "id": "…", "kind": "machine|research|timing", "text": "…", "status": "…" } ] },
+  "events": [ { "id": "…", "name": "…", "dataStatus": "…", "outcome": { "…": "…" } } ],
+  "evidence": [ { "evidenceId": "…", "kind": "market_context|market_event|…", "observedAt": "…", "summary": "…" } ] }
+```
+
+`evidence[]` 与 `POST /v1/tasks/:id/quotes` 返回的证据写入 `verify_task_evidence`（15 分钟内有效）。**事实分拣扩展（CV-D23）**：`triageClaims` 在本次核验证据之外，也承认该任务 15 分钟内 `verify_task_evidence` 里的 evidenceId（标签仍是 `platform_verified`，附 `observedAt` 与年龄）——Agent 自然会引用它刚看过的报价与上下文，这些引用应当可核。
+
+**报价** `POST /v1/tasks/:id/quotes`：`items ≤ 3`，每项 `{side: buy|sell, assetKey ∈ scope, amountInRaw ≤ 对应每笔上限}`；复用证据提供者取证但**不签发、不落授权评估**（卖出按 `amountIn − SELL_INPUT_TOLERANCE_WEI` 询价）；串行 + 30 s 缓存 + 每任务每小时 ≤ 20 次（OKX 报价限流）；返回 `{ executableUsdPerShare, priceImpactBps, minOutRaw, reference: {priceUsd, kind, ageS}, deviationBps, session, evidenceIds }`。
+
+### 12.7 事件实际值（P0-D，CV-D22）
+
+```ts
+export interface EventOutcomeMetric {
+  key: string;                 // 例："payrolls_change"、"unemployment_rate"、"ahe_mom"
+  label: string;
+  actual: string;              // 十进制字符串（canon-1 不允许浮点）
+  unit: string;                // "thousands" | "percent" | "percent_mom" | "usd" …
+  period: string;              // "2026-09"
+  previous?: string;           // 本次发布里给出的上期值
+  revisedPrevious?: string;    // 本次发布对上期值的官方修订（统计机构的修订，不是我们对自己采集值的更正）
+  expectation?: { value: string; kind: "survey" | "market_implied"; source: string; at: IsoUtc };   // 没有就不写；没有预期值不得生成「超预期 / 不及预期」
+}
+export interface EventOutcome { metrics: EventOutcomeMetric[]; source: string; sourceUrl?: string; publishedAt: IsoUtc; fetchedAt: IsoUtc; provider: "crowsnest" | "finnhub" }
+// MarketEvent 追加：outcome?: EventOutcome；服务端派生 outcomeRevision（不由 producer 给）
+export type EventDataStatus = "upcoming" | "due_pending_data" | "data_arrived" | "revised";
+export function eventDataStatus(ev: MarketEvent & { outcomeRevision?: number }, nowMs: number): EventDataStatus;
+// 预定时刻未到 → upcoming；已过且无 outcome → due_pending_data；有 outcome 且 outcomeRevision = 0 → data_arrived；≥ 1 → revised
+```
+
+- **修订号规则**：现有 `mergeEventRevision` 丢弃 `revision` 不递增的更新，`verify_event_revisions` 按 `(id, revision)` 去重——所以 **crowsnest 每次改动 outcome（包括第一次附上）都必须 `revision + 1`**。服务端按 outcome 的规范化哈希派生 `outcomeRevision`：第一次出现 = 0（变更类型 `data_arrived`，发 `event.data_arrived`，**不**发 `event.revised`），之后哈希每变一次 +1（变更类型 `revised`）。`events/store.ts` 的变更分类增加 `data_arrived`。
+- `validateMarketEvent` 扩展校验 `outcome`：metrics 1..12、`actual` 匹配 `^-?\d+(\.\d+)?$`、`unit` / `period` 必填。
+- 任务的事件观察键从「按时间 upcoming / released」改为 `${id}@${revision}:${dataStatus}`：到点开「去核实」轮次（`due_pending_data`），实际值入库开 `data_arrived` 轮次，修订开 `event` 轮次并重评理由卡。
+- Agent 自己抓到的外部资料只出现在它的决策依据里（`agent_data`，标「未核验」）；平台事件库只收 crowsnest / finnhub。
+
+### 12.8 HTTP（verify-service；旧接口不变）
+
+鉴权列：**O** = 代表 owner 的调用方（网站登录会话 `web:<owner>` 或该钱包签发的 key）；**H** = `agent:hosted` + 有效轮次令牌（只限令牌绑定的、`agent_mode=hosted` 的任务）；**E** = `executor:hosted`；**OP** = 运营者 key；**P** = 公开。新路由放在各 lane 的路由模块 `apps/verify-service/src/http/routes/v7<lane>.ts`（导出 `registerV7…(app, deps)`），`http/app.ts` 只由 Lane I 加一行挂载。
+
+| 方法 路径 | 鉴权 | 用途 | 状态码 |
+|---|---|---|---|
+| `GET /v1/tasks/:id/delegation` | O, H(读) | 委托清单（§12.2）；为需要的 permit 登记 ISSUED 请求 | 200 / 403 |
+| `POST /v1/tasks/:id/authorize`（改） | O | body 增 `itemId`（缺省 `buy`；`sell:<assetKey>`） | 201 / 409 / 422 |
+| `POST /v1/tasks/:id/allowances` | O | `{permitRequestId, signature}`（§12.3） | 202 / 409 / 422 / 429 |
+| `POST /v1/tasks/:id/delegation/refresh` | O | 重建失败的卖出草案 | 200 |
+| `GET /v1/owners/:owner/allowances`、`POST …/allowances/reclaim`、`POST …/allowances/submit` | O | owner 维度的额度视图与收回（§12.3） | 200 / 202 / 409 |
+| `POST /v1/tasks/:id/handover` | O | `{agent?: "hosted"\|"byo"\|null, executor?: "hosted"\|"agent_wallet"\|"browser"}`；不改范围、不需签名；只对 `scope.issuance=agent` 的任务；切换时取消 QUEUED / CLAIMED 作业，有 SENDING / SENT 作业时 409 | 200 / 403 `hosted_not_allowed` / 409 `issuance_not_agent` `execution_in_flight` / 503 `hosted_disabled` |
+| `GET /v1/tasks/:id/activity?since&limit` | O, H | 增量活动流 `{items, nextCursor, runtime}` | 200 |
+| `GET /v1/tasks/:id/timeline?cursor&limit` | O, H | 分页全量时间线 | 200 |
+| `GET /v1/tasks/:id/runs`、`GET …/runs/:runId` | O, H | 轮次摘要 / 详情（工具调用只给预览与哈希） | 200 |
+| `GET /v1/tasks/:id/positions` | O, H | 任务持仓（`boughtRaw, soldRaw, netRaw, onchainRaw, sellableRaw, avgCostUsd, coverage`） | 200 |
+| `GET /v1/tasks/:id/agent-context` | O, H | 决策上下文（§12.6） | 200 |
+| `POST /v1/tasks/:id/quotes` | O, H | 可执行报价（§12.6） | 200 / 429 |
+| `POST /v1/tasks/:id/memory`、`GET …/memory` | O, H | 任务记忆（带 `clientRequestId`） | 201 / 200 |
+| `POST /v1/executor/claim` | E | `{executor, instanceId, kinds?, max?=1}` → `{jobs}`（含本执行者未终结的 SENDING / SENT 作业，`recover:true`） | 200 / 204 / 409 `executor_instance_conflict` |
+| `POST /v1/executor/jobs/:id/events` | E | `{attempt, type: sending\|sent\|preflight_failed\|receipt\|abandoned, …}` | 200 / 409 `stale_attempt` `not_allowed_now` |
+| `POST /v1/executor/heartbeat` | E | `{executor, instanceId, mode, gasBalanceWei, chainHead, version}` | 204 / 409 |
+| `POST /v1/agent/claim` | H（不需令牌） | `{worker, max?=1}` → `{runs: [{runId, runToken, taskId, turnVersion, reason, attempt, leaseUntil, resume?}]}` | 200 / 204 |
+| `POST /v1/agent/runs/:runId/checkpoint`、`…/complete` | H | `{attempt, steps[], messages?, usage}` / `{attempt, state, action, decisionSummary, nextCheckAt, invalidation, usage}`；服务端算 runHash 链 | 200 / 409 |
+| `POST /v1/agent/heartbeat` | H（不需令牌） | `{worker, version, model}`，供 `/v1/ops/status` 与 healthz 显示 | 204 |
+| `POST /v1/ops/faults` | OP | 一次性故障（§12.5） | 201 / 403 |
+| `GET /v1/ops/status` | OP | 执行身份 gas、作业队列、今日轮次与成本、模型可达、Agent 心跳 | 200 |
+| `POST /v1/tasks/:id/share-activity`、`GET /pub/tasks/:shareId/activity` | O / P | 公开值守看板（复用 `verify_shares`，kind 增 `task_activity`；**只输出类别与时间，不含任何金额、数量、地址、自由文本**；服务端缓存 5 s） | 201 / 200 |
+
+改动的旧接口：
+- `POST /v1/tasks`：body 增 `agent: {mode}`、`executor: {mode}`；目标式买入任务 + `allowSell` 生成卖出草案；响应增 `delegation`。托管 Agent 或托管执行的 LIVE 任务要求 owner ∈ `HOSTED_OWNER_ALLOWLIST`；SIMULATION 托管任务对所有已登录钱包开放，但每钱包每天 ≤ `HOSTED_SIM_PER_OWNER_PER_DAY`(3)。服务 key **不能**建任务（现有 `ownerOf` 对无地址调用方信任 body 里的 owner——服务 key 被默认拒绝中间件挡在外面）。
+- `POST /v1/tasks/:id/intents`：增 `turnVersion`；卖出体 `{kind: "sell", assetKey, amountInRaw}`（`outputAssetKey` 可省，给了必须等于资金币种）；可带 `nextCheckAt`；委托未完成 → `DELEGATION_INCOMPLETE`；额度不足 → `ALLOWANCE_INSUFFICIENT`；托管执行任务响应为 `execution: { mode, jobId }`。
+- `POST /v1/tasks/:id/agent-status`：增 `turnVersion`、`clientRequestId`、`nextCheckAt`、`invalidation`；`ended` 按 §12.6 走内部暂停。
+- `POST /v1/tasks/:id/pause`：托管执行任务的未进 SENDING 作业即时取消，响应 note：「托管执行：暂停在发送前生效；已广播的交易以链上为准」。
+- `POST /v1/tasks/:id/resume`：**修复现有缺陷**——恢复授权时比较的是 `row.conditionsHash`，但 scope 任务的授权存的是 `scopeHash`，导致 scope 任务暂停后授权永远停在 PAUSED；改为比较 `bindingHashOf(row)`，补回归测试。
+- `POST /v1/mandates/:id/prepare-step`、`/resume`：挂在任务上的授权 409 `task_bound_mandate`。
+- `GET /v1/tasks/:id/intents/:intentId?withStep=1`：托管执行任务 409 `platform_executes`。
+- `GET /v1/events`、`GET /v1/events/:id/revisions`：事件带 `outcome`、`outcomeRevision`、`dataStatus`。
+- `/healthz`：增 `executor {enabled, address, gasOk, lastHeartbeatAt}`、`agent {enabled, lastHeartbeatAt, lastRunAt, costTodayUsdMicros}`。
+- 网站代理 `apps/verify-web/app/api/verify/[...path]/route.ts` 的 `ALLOWED` 加入上表全部 O 路由；`/v1/executor/*`、`/v1/agent/*`、`/v1/ops/*` **不得**放行。代理的每 owner 限频（现为 60/min）对 `/activity` 单列 120/min；免费限流器的 `validKeys` 认得服务 key 的哈希。
+
+### 12.9 鉴权模型（D-093，CV-D25，SEC 组验收）
+
+- 新增 `authKind: "service"`：verify-service `.env` 只存 `VERIFY_EXECUTOR_KEY_SHA256`、`VERIFY_HOSTED_AGENT_KEY_SHA256`；请求 key 做 SHA-256 后常量时间比较 → `callerId = "executor:hosted" | "agent:hosted"`。`isOperator()` 对 `service` 恒为 false。服务 key 单独限频（agent 300/min，executor 600/min）。
+- **默认拒绝中间件**：`authKind=service` 的请求先过显式路由白名单（`agent:hosted` → §12.8 中标 H 的路由 + 免费端点 + `/v1/agent/*`；`executor:hosted` → 只有 `/v1/executor/*`），不在白名单 → 403，**根本到不了各服务自己的鉴权**（建任务、事件影响动作、授权计划、组合、通知、资金组、调仓、key、理由卡创建、Lab 都在这里被挡）。SEC-02 / SEC-03 枚举 express 上注册的**全部**路由逐一断言。
+- `TasksService.requireTask(callerId, id, op)`，`op ∈ {"read", "agent_write", "owner_write"}`：现有调用点**逐个**标注 op（缺省 `owner_write`）。`agent:hosted` 只在 `row.agentMode === "hosted"` 且轮次令牌绑定本任务时允许 `read` / `agent_write`。
+- `agent_write` 只有：意图（提交 / 撤回）、agent-status（策略与计划修订都经它，走现有校验）、memory、quotes、理由卡 review-items。**不含** `/brief`、`/conditions`、compare-policies（owner 的配置面）。`owner_write`：authorize、allowances、delegation/refresh、owner 额度路由、handover、pause / resume / cancel、DELETE、share-activity。
+- 白名单工具背后的其它服务（`ThesesService` 的 review-items、`LabService` 的 explain-wait、`/v1/context?taskId=`）同样接入令牌与 op 检查；每个工具在 SEC-02 有一例。
+
+### 12.10 MCP 工具（verify-mcp 追加，51 → 58）
+
+新增：`get_turn_context`、`get_executable_quotes`、`get_task_activity`、`get_task_positions`、`get_task_runs`、`get_delegation_status`、`remember_note`。改：`submit_trade_intent`（`turnVersion`、卖出 `assetKey`、`nextCheckAt`）、`report_agent_status`（`turnVersion`、`clientRequestId`、`nextCheckAt`、`invalidation`；`ended` 描述按 §12.6）、`add_thesis_review_item`（`clientRequestId`）、`execute_trade_intent`（托管执行任务回 `not_applicable`）。`VerifyClient` 支持 `VERIFY_RUN_TOKEN`。
+
+**托管 Agent 暴露给模型的工具（13 个 = 12 个 verify-mcp 工具 + 本地 `fetch_source`）**：`get_turn_context`（含理由卡与相关事件）、`get_executable_quotes`、`get_market_context`、`get_events`、`explain_task_wait`、`get_task_positions`、`get_task_activity`、`add_thesis_review_item`、`submit_trade_intent`、`withdraw_trade_intent`、`report_agent_status`、`remember_note`，加本地 `fetch_source`。**不暴露**：建任务、授权、暂停 / 取消、执行、`watch_thesis`（新建理由卡与失效动作是 owner 的配置）、`get_my_event_impacts`（按 owner 鉴权，相关事件已在决策上下文里）、key、通知、资金组、调仓。工具列表做快照测试（A-15）。
+
+### 12.11 数据表（迁移 `0025_v7_delegation_runtime.sql`，手写 SQL + `verifySchema.ts` + `meta/_journal.json`，沿用 0019～0024 的做法）
+
+| 表 / 列 | 内容 |
+|---|---|
+| `verify_execution_jobs` | `id`(exj_) · `kind` · `task_id` · `mandate_id` · `step_id` UNIQUE · `step_index` · `owner_address` · `token_address` · `payload_json` · `state` · `attempt` · `lease_until` · `claimed_by`（执行者地址）· `instance_id` · `raw_tx` · `raw_tx_hash` · `tx_hash` · `tx_nonce` · `valid_until` · `fault_json` · `result_json` · `error_code` · `error_detail` · 时间戳；索引 `(state, lease_until)`、`(task_id)`、`(mandate_id, step_index)`；**部分唯一** `(owner_address, token_address) WHERE kind='permit' AND state IN ('QUEUED','CLAIMED','SENDING','SENT')` |
+| `verify_permits` | `id`(prm_) · `task_id` · `item_id` · `owner_address` · `token_address` · `spender` · `value` · `nonce` · `deadline` · `typed_data_json` · `signature` · `purpose`(delegation\|reclaim) · `job_id` · `state`(ISSUED\|SUBMITTED\|CONFIRMED\|FAILED\|SUPERSEDED) · `tx_hash` · `allowance_after` · 时间戳 |
+| `verify_agent_runs` | `id`(run_) · `task_id` · `turn_version` · `reason` · `mode` · `state` · `attempt` · `run_token_hash` · `lease_until` · `worker` · `model` · `prompt_hash` · `messages_json` · `action_json` · `decision_summary` · `next_check_at` · `invalidation` · `usage_json` · `cost_usd_micros` · `prev_run_hash` · `run_hash` · `started_at` · `ended_at` · 时间戳；UNIQUE `(task_id, turn_version)` |
+| `verify_agent_run_steps` | `id` bigserial · `run_id` · `attempt` · `seq` · `kind` · `name` · `args_hash` · `result_hash` · `args_preview` · `result_preview` · `tokens_in` · `tokens_out` · `latency_ms` · `error` · `at`；UNIQUE `(run_id, attempt, seq)` |
+| `verify_agent_memory` | `task_id` PK · `notes_json` · `updated_at` |
+| `verify_agent_workers` | `worker` PK · `version` · `model` · `last_heartbeat_at` |
+| `verify_task_timeline` | `id` bigserial · `task_id` · `at` · `actor` · `type` · `ref` · `note` · `data_json`；索引 `(task_id, id)`；迁移内用 `jsonb_array_elements(timeline_json)` 回填旧条目（actor = `system`） |
+| `verify_task_evidence` | `task_id` · `evidence_id` · `kind` · `source`(agent_context\|quotes) · `record_json` · `created_at`；UNIQUE `(task_id, evidence_id)` |
+| `verify_executor_status` | `executor` PK（地址）· `mode` · `active_instance` · `instance_lease_until` · `last_heartbeat_at` · `gas_balance_wei` · `chain_head` · `version` · `updated_at` |
+| `verify_mandate_steps` 改 | 去掉 `verify_mandate_steps_mandate_step_uq`，改为部分唯一索引 `(mandate_id, step_index) WHERE state IN ('PREPARED','SUBMITTED','REORG_PENDING','CONFIRMED','UNKNOWN')`；状态新增 `SUPERSEDED`（列是 text，无需改类型） |
+| `verify_tasks` +列 | `agent_mode` · `executor_mode` · `next_agent_check_at` · `delegation_json`（卖出草案与各项状态）· `sell_steps_confirmed` int default 0 · `paused_by` |
+| `verify_mandates` +列 | `side` text not null default `'buy'` · `asset_key`（= PlanGuard 拉取的代币）· `from_block`；迁移内回填：`side` 取 `mandate_json->>'side'`；`asset_key` 买入取 `mandate_json->>'inputAssetKey'`、卖出取 `mandate_json->'legs'->0->>'outputAssetKey'` |
+| `verify_task_intents` +列 | `asset_key` · `turn_version` · `attempts` int default 1 · `job_id` · `next_check_at`；状态新增 `superseded` |
+| `verify_events` +列 | `outcome_json` · `outcome_hash` · `outcome_revision` int default 0 · `outcome_received_at` |
+
+### 12.12 环境变量（所有新开关缺省关闭，部署验收后由运营者打开）
+
+| 进程 | 变量（缺省） |
+|---|---|
+| verify-service（新增） | 开关：`HOSTED_EXECUTOR_ENABLED=false` · `HOSTED_AGENT_ENABLED=false` · `AGENT_V7_DELEGATION_ENABLED=false` · `AGENT_V7_SELL_ENABLED=false` · `AGENT_V7_OUTCOMES_ENABLED=false` · `AGENT_V7_COMPARE_ENABLED=false` · `FAULT_INJECTION_ENABLED=false`。准入：`HOSTED_OWNER_ALLOWLIST=`（逗号分隔小写地址；空 = 无人；`*` = 所有人）· `HOSTED_SIM_PER_OWNER_PER_DAY=3` · `PERMIT_RELAY_PER_OWNER_PER_HOUR=6` · `PERMIT_RELAY_DAILY_MAX=50`。服务 key：`VERIFY_EXECUTOR_KEY_SHA256=` · `VERIFY_HOSTED_AGENT_KEY_SHA256=`。执行：`PERMIT_DOMAINS_FILE=config/permit-domains.xlayer.json` · `EXECUTION_EXPIRY_MARGIN_S=15` · `EXECUTOR_MIN_CERT_REMAINING_S=8` · `CHAIN_RECONCILE_INTERVAL_MS=30000` · `AUTO_RECERTIFY_MAX=1` · `AUTO_RECERTIFY_WINDOW_S=300` · `POSITION_DUST_RAW=1000000000`。Agent 成本：`AGENT_PRICE_INPUT_PER_MTOK_USD` / `AGENT_PRICE_OUTPUT_PER_MTOK_USD` / `AGENT_PRICE_CACHE_READ_PER_MTOK_USD`（按官方价目填，不写死）· `AGENT_DAILY_USD_CAP_PER_TASK=2` · `AGENT_DAILY_USD_CAP_LIVE_TOTAL=15` · `AGENT_DAILY_USD_CAP_SIM_TOTAL=5` · `AGENT_MIN_RUN_INTERVAL_S=600`。告警：`OPERATOR_TELEGRAM_CHAT_ID=` |
+| verify-executor（新进程） | `VERIFY_SERVICE_URL=http://127.0.0.1:8790` · `VERIFY_EXECUTOR_API_KEY` · `EXECUTOR_MODE=eoa\|okx_agentic` · `EXECUTOR_PRIVATE_KEY`（eoa）· `XLAYER_RPC_URL` · `EXECUTION_CHAIN_ID=196` · `PLANGUARD_ADDRESS` · `REGISTRY_FILE` · `EXECUTOR_MIN_OKB_WEI` · `EXECUTOR_POLL_MS=1000` · `EXECUTOR_MIN_CERT_REMAINING_S=8` · `FORBIDDEN_EXECUTOR_ADDRESSES` · `OKX_AGENTIC_CLI`（okx_agentic 模式） |
+| verify-agent（新进程） | `VERIFY_SERVICE_URL` · `VERIFY_HOSTED_AGENT_API_KEY` · `ANTHROPIC_API_KEY` · `AGENT_MODEL`（运营者设，不写死）· `AGENT_MAX_TOOL_CALLS=12` · `AGENT_MAX_OUTPUT_TOKENS=4000` · `AGENT_RUN_TIMEOUT_MS=180000` · `AGENT_POLL_MS=2000` · `AGENT_FETCH_ALLOWLIST`（逗号分隔主机名）· `VERIFY_MCP_BIN=../../packages/verify-mcp/bin/chaconne-verify-mcp.mjs` |
+| verify-web | `NEXT_PUBLIC_V7_UI=0`（构建期变量，改动需重建网页） |
+
+### 12.13 原因码与通知
+
+原因码新增（进 `REASON_CODES`）：`EXECUTION_IN_FLIGHT`（non-HARD，等到签名 `validUntil + margin`）、`DELEGATION_INCOMPLETE`（阻塞，`userActionRequired`）、`ALLOWANCE_INSUFFICIENT`（阻塞，`userActionRequired`）、`BALANCE_INSUFFICIENT`（阻塞，`userActionRequired`）、`SELL_NOT_DELEGATED`（阻塞）、`SELL_EXCEEDS_TASK_POSITION`（阻塞）、`EXECUTOR_UNAVAILABLE`（信息项）、`AGENT_LIMIT_REACHED`（信息项）、`EVENT_DATA_PENDING`（信息项）。`SELL_MANDATE_REQUIRED` 保留给没有卖出草案的旧任务。
+
+通知新增（进 `NOTIFICATION_TYPES`，幂等键规则不变）：`task.delegation_completed`、`task.needs_owner`、`task.execution_failed`、`task.recertified`、`event.data_arrived`、`agent.run_completed`（缺省不推送，只进夜班日志）、`ops.alert`（只发运营者频道）。载荷照旧不含签名、证书、calldata、原始交易。
+
+### 12.14 决策条目（已追加 the design log；运营者确认前相关开关保持关闭）
+
+| 编号 | 决策 | 默认 |
+|---|---|---|
+| **D-089** | 平台执行身份：新进程 `apps/verify-executor` 持一把只装 gas 的密钥，交易白名单 `(to, selector)`，永不持用户资产；**修订 D-081「不做服务端 relayer」**；用户侧执行（MCP agent-wallet、浏览器逐笔）全部保留 | 采纳；`HOSTED_EXECUTOR_ENABLED` 在运营者确认前为 false |
+| **D-090** | 托管 Chaconne Agent：新进程 `apps/verify-agent` 持模型 API 密钥与受限服务 key；型号由 `AGENT_MODEL` 决定；每轮记录型号、提示词哈希与成本；通过 verify-mcp 使用与自带 Agent 完全相同的工具；成本上限在 verify-service 执行 | 采纳 |
+| **D-091** | 额度 = EIP-2612 permit 签名（执行身份代付上链，有准入与限频）；服务端额度账本；发放值 ≤ 需要量 + 0.5%；不做 approve 交易、不做无限额度；分叉接受失败的代币才回退为一笔用户 approve 并如实计数 | 采纳 |
+| **D-092** | 卖出授权只对目标式买入任务、在委托时按资产各签一份；`recipient == owner`；合约上限 = 预算在价格腰斩时可买份额；服务上限 = 本任务持仓；不卖委托前已有持仓；不做计划驱动的卖出签发；卖出从不触碰资金组账目 | 采纳 |
+| **D-093** | 服务 key 独立鉴权类型 + 默认拒绝路由白名单；托管 Agent 只对令牌绑定的托管任务做 read / agent_write；执行者 key 只访问 `/v1/executor/*`；`isOperator` 不认服务 key；三个进程三个系统用户 | 采纳 |
+| **D-094** | Agent 外部抓取只允许 allowlist 官方源（https、解析后固定 IP 且非私网、无越界跳转、≤ 1 MB、≤ 10 s），正文标 `agent_provided` 并带抓取时间与 sha256；抓到的内容是数据不是指令 | 采纳 |
+| **D-095** | 决赛演示：主网小额真金（演示钱包）；托管能力只对 `HOSTED_OWNER_ALLOWLIST` 开放；故障注入只在运营者 key + `FAULT_INJECTION_ENABLED` 下可用；OKX Agentic Wallet 执行模式跑通主网一笔才展示 | 采纳 |
+| CV-D18 | 任务证据包 v3：多授权 + permit 记录 + 轮次哈希链 + 时间线摘要；v2 包照旧可验 | 记录 |
+| CV-D19 | 事实更新：X Layer 自 2025-10-27 为 OP Stack（op-reth，Prague / Isthmus 创世激活，Jovian 2025-12-02），EIP-7702 协议层可用但无钱包入口；EntryPoint v0.6/0.7/0.8、Safe、Permit2 已部署，无公开 bundler | 记录 |
+| CV-D20 | permit 域配置、分叉接受判据、启动双重比对（§12.3） | 记录 |
+| CV-D21 | 签发闸门 + 链上回填 + `reconcileStep` + 发送提交点 + 作业制任务不交出 READY 体 + 挂任务授权不可绕过（§12.5） | 记录 |
+| CV-D22 | `MarketEvent.outcome` / `dataStatus` 契约与修订号规则（§12.7） | 记录 |
+| CV-D23 | 事实分拣承认任务 15 分钟内的 `verify_task_evidence`（§12.6） | 记录 |
+| CV-D24 | 步骤行 `SUPERSEDED`、部分唯一索引、签名 `validUntil` 判到期、原子取走、回执按证书字段归因（§12.5） | 记录 |
+| CV-D25 | 托管 Agent 轮次令牌、轮次与动作按 `turnVersion` 绑定、每轮一个终结动作、`ended` 内部暂停（§12.6） | 记录 |
+
+### 12.15 实现增补
+
+（各 lane 落地时超出本节的端点与字段，由 Lane I 裁决后追加在这里。）
+
+**2026-10-02 · Lane I 汇总（Lane X / A / R / P 合并时报告的实现增补；以代码为准）**
+
+1. **执行者心跳 `gasLow`**：`POST /v1/executor/heartbeat` 体 `{ executor, instanceId, mode, gasBalanceWei, chainHead, version, gasLow? }`。gas 阈值 `EXECUTOR_MIN_OKB_WEI` 只在执行进程里；`gasLow: true` → 服务端记入内存并在运行态给 `needsOperator: executor_gas_low`；执行进程同时停止领取。响应 204；同地址另一实例 → 409 `executor_instance_conflict`。
+2. **`/healthz` 的 `executor` 段**：`executor: { enabled, address, gasOk, lastHeartbeatAt }`——`enabled = HOSTED_EXECUTOR_ENABLED ∧ PLANGUARD_ADDRESS`；`address` = 最近一次心跳的执行身份地址（链上公开）；`gasOk` = 该地址最近心跳未报 `gasLow`（无心跳为 `null`）；30 s 刷新。托管 Agent 段沿用 `agentHosted`。
+3. **permit 提交的 409 码**（网页向导遇到即自动重新 GET）：`permit_request_expired`（请求状态 ≠ ISSUED，或已到 `deadline − 120 s`）、`permit_nonce_stale`、`permit_pending`、`permit_not_needed`；请求不属于本任务 / owner → 404 `permit_request_not_found`。
+4. **owner 维度额度的响应形状**：`GET /v1/owners/:owner/allowances` → `{ owner, spender, allowances: [{ token, assetKey, symbol, decimals, onchainRaw, requiredRaw, excessRaw, reclaimSuggested, pendingPermit, permitSupported }], note }`；`POST /v1/owners/:owner/allowances/reclaim {token}` → `{ permitRequestId, token, value, valueRaw, typedData, requiredRaw, onchainRaw, note }`（签名后走 `POST /v1/owners/:owner/allowances/submit`，202）。只有该钱包本人（调用方代表该 owner）可读写，否则 403 `owner_forbidden`。
+5. **任务视图 `steps` 形状**（v7 委托任务）：`steps: { planned, confirmed, lastConfirmedAt, buy: { planned, confirmed }, sell: { confirmed } }`；旧任务只有前三个字段。
+6. **建任务的托管准入**：托管 Agent 或平台执行的 LIVE 任务，owner 不在 `HOSTED_OWNER_ALLOWLIST` → 403 `hosted_not_allowed`（接管切换同码）；观察模式（SIMULATION）托管任务每钱包每天 > `HOSTED_SIM_PER_OWNER_PER_DAY` → 429 `hosted_sim_limit`。
+7. **任务证据包 v3 新字段**：`bundleVersion: "task/3"`、`mandates[]`（本任务全部授权段：买 + 各卖，含 SUPERSEDED 步骤与其证书）、`permits[]`（`{ id, itemId, owner, token, spender, value, nonce, deadline, typedData, signature, purpose, state, txHash, allowanceAfter }`）、`agentRuns[]`（轮次摘要，runHash 链；不含 messages）、`timelineDigest: { v: "timeline/1", count, hash }`（覆盖 `verify_task_timeline` 全部行）。v2 字段保留，v2 包照旧可验。
+8. **夜班日志 Recap 的 `agent` 字段**：`recap.agent = { date, tz, window, taskIds, runs{total, byState, byReason, byMode, items}, actions, waits, fills, cost{totalUsdMicros, byMode, inputTokens, outputTokens, cacheReadTokens, runsWithoutCost}, faults, recoveries }`；当天没有托管轮次时不出现。
+9. **活动流限频**：`GET /v1/tasks/:id/activity` 单独计数，每调用方 120 次 / 分钟，不占普通 60 次 / 分钟额度。
+10. **MCP `execute_trade_intent`**：托管执行任务（服务端 `?step=1` 回 409 `platform_executes`）→ 返回 `not_applicable: platform executes`（结构化 `{ status: "not_applicable", reason: "platform executes" }`），不要求 agent-wallet 模式。
+
+#### 12.15.1 执行身份费用预算（D-089 修订，运营者确认 2026-10-02 14:00；分支 v7/fees）
+
+主要保护是**费用（OKB）**而不是笔数。成功、链上回退、permit 代付**全部计入**。verify-service 是权威方；verify-executor 另有每笔上限作为签名前的第一道闸。
+
+**每笔上限（verify-executor，签名前强制）**：`packages/verify-exec/src/fees.ts` `assertFeeCaps`，在 `ExecSender.sign()` 里预估 gas（×1.3）与读费率之后、取 nonce 之前执行；任一超限 → `ExecTxError("fee_cap_exceeded")`，执行者上报 `preflight_failed {code: "fee_cap_exceeded", detail: "<gas_limit|max_fee_per_gas|max_priority_fee_per_gas|tx_fee> … > cap …"}`，不签名、不广播、不消耗 nonce。`SignedTx` 增 `maxFeeWei = gas × maxFeePerGas`（legacy = gasPrice）。
+
+| verify-executor 变量 | 缺省 | 依据 |
+|---|---|---|
+| `EXECUTOR_MAX_GAS_LIMIT` | `1500000` | executeStep ≈ 61 万 gas（运营者简报 / 分叉口径）× 1.3 估算余量后再留约 2 倍 |
+| `EXECUTOR_MAX_FEE_PER_GAS_WEI` | `200000000`（0.2 gwei） | 2026-10-02 只读 RPC 实测 baseFee 0.02 gwei（区块 72145255）的 10 倍 |
+| `EXECUTOR_MAX_PRIORITY_FEE_PER_GAS_WEI` | `20000000` | 实测 `eth_maxPriorityFeePerGas` = 1 wei |
+| `EXECUTOR_MAX_FEE_PER_TX_WEI` | `200000000000000`（0.0002 OKB） | 正常一笔 ≈ 79 万 gas × 0.024 gwei ≈ 0.000019 OKB；OP Stack 回执 `l1Fee` 实测 0 |
+| `EXECUTOR_MIN_OKB_WEI` | **必填**（eoa 模式） | 未配置 / 0 / 非整数 → 拒绝启动 |
+
+**OKB 预算（verify-service）**：
+
+| verify-service 变量 | 缺省 | 含义 |
+|---|---|---|
+| `FEE_BUDGET_PER_OWNER_DAY_WEI` | `5000000000000000`（0.005 OKB） | 每个 owner 每个 UTC 日 |
+| `FEE_BUDGET_PER_TASK_WEI` | `2000000000000000`（0.002 OKB） | 每个任务累计（含该任务的 permit 代付） |
+| `FEE_BUDGET_PLATFORM_DAY_WEI` | `20000000000000000`（0.02 OKB） | 全平台每个 UTC 日 |
+| `FEE_MAX_PER_TX_WEI` | `200000000000000` | 服务侧每笔上限；签名交易解析不了（如 okx_agentic 模式不带 rawTx）时按它预留 |
+| `EXECUTION_PAID_FAILURE_PAUSE_N` | `2` | 连续付费失败暂停阈值（见下） |
+
+四个金额必须 > 0（预算不能关闭；`loadConfig` 拒启）。`GET /v1/ops/status` 增 `feeBudget {day, limits, platformToday {usedWei, usedOkb, limitWei, remainingWei}, todayByState, ownersToday[≤20], pauseAfterPaidFailures}`（只给运营者）。
+
+**账本表（迁移 `0026_v7_fee_budget.sql`，手写 SQL + `verifySchema.ts` + `meta/_journal.json`）**：
+
+| 表 / 列 | 内容 |
+|---|---|
+| `verify_fee_ledger` | `id`(fee_) · `job_id` UNIQUE · `kind`(permit\|execute_step) · `task_id` · `owner_address` · `mandate_id` · `step_index` · `executor` · `day`（预留时的 UTC 日期 YYYY-MM-DD）· `state`(RESERVED\|SETTLED\|HELD\|RELEASED) · `reserved_wei` numeric(78,0) · `actual_wei` numeric(78,0) · `reserve_basis`(raw_tx\|per_tx_cap) · `gas_limit` · `max_fee_per_gas` · `raw_tx_hash` · `tx_hash` · `gas_used` · `effective_gas_price` · `l1_fee` · `outcome`(confirmed\|reverted\|unknown_after_send) · `created_at` · `settled_at` · `updated_at`；索引 `(owner_address, day)`、`(task_id)`、`(day)`、`(state)` |
+| `verify_permits` +列 | `submitted_at`（ISSUED → SUBMITTED 的时刻，代付限频按它计数；迁移内对已有签名的行回填 `updated_at`） |
+
+计入口径：RESERVED / HELD 按 `reserved_wei`，SETTLED 按 `actual_wei`，RELEASED 为 0。
+
+**生命周期**：
+- **预留**＝发送提交点（`CLAIMED → SENDING`）。在原有五项复核通过后，**同一个数据库事务**里：`pg_advisory_xact_lock(726100089)` → 解析 `rawTx`（`maxFeeOfRawTx`：gas × maxFeePerGas）→ 超 `FEE_MAX_PER_TX_WEI` → `fee_cap_exceeded` → 按 owner/日、任务累计、平台/日核对（已用 + 本笔最大费用 ≤ 上限）→ 写 RESERVED → 作业转 SENDING。另外 `rawTxHash` 必须等于 `keccak256(rawTx)`（否则 400 `raw_tx_hash_mismatch`）。崩溃恢复对同一 `rawTxHash` 再发 `sending`（SENDING → SENDING）不新增预留。
+- **结算**：作业从 SENDING / SENT 进入 CONFIRMED / REVERTED → 服务端自己读回执：`gasUsed × effectiveGasPrice + l1Fee` → SETTLED（回执缺 `effectiveGasPrice` 时按预留额结算）。回执暂不可读 → 保持 RESERVED，清扫器（2 s）重试。
+- **结果不明继续占用**：SENDING / SENT 期间保持 RESERVED；广播后被对账判 EXPIRED（或其它非确认终态）→ HELD，按预留额继续计入；48 h 内读到回执（交易后来上链）→ 按实际 SETTLED。
+- **释放**：预留只发生在发送提交点，提交点之前的过期 / 取消（`EXPIRED-before-broadcast` / `CANCELLED`）本来就没有记录、不占预算；已广播的预留不会被自动释放。
+- **超限**：发送提交点回 **409 `fee_budget_exhausted`**（`details: {scope: owner_day|task_total|platform_day, usedWei, limitWei, needWei, jobState: "FAILED"}`）或 **409 `fee_cap_exceeded`**（`scope: per_tx`）；作业当场 FAILED（`error_code` 同名），执行者不得广播（与其它 409 一样退回 nonce）。permit 作业同时把 permit 记录置 FAILED。
+
+**permit 代付受理（`POST /v1/tasks/:id/allowances`、`POST /v1/owners/:owner/allowances/submit`）**：限频计数（每 owner 每小时 `PERMIT_RELAY_PER_OWNER_PER_HOUR`、全局每天 `PERMIT_RELAY_DAILY_MAX`，改按 `submitted_at` 计数）、费用预检（三个预算各留出一笔 `FEE_MAX_PER_TX_WEI` 的余量，否则 409 `fee_budget_exhausted`，owner 无需重签）、permit `ISSUED → SUBMITTED`、建作业，**在同一事务、同一把咨询锁下**完成——修正原来「先查后写」并发可越限的漏洞；任一步失败整笔回滚，permit 保持 ISSUED。
+
+**费用护栏挡下时的表现**（`fee_budget_exhausted` / `fee_cap_exceeded`，含执行者预检报的 `fee_cap_exceeded`）：交易没有发出 → 不开 Agent 轮次、不让 owner 签名；`runtime.needsOperator` 增对应代码（core `NEEDS_OPERATOR_CODES` 追加 `fee_budget_exhausted`、`fee_cap_exceeded`；托管 presence 因此为 `blocked_operator`）；时间线 `execution_blocked_fee`（「没有发出、没有花 gas、你不需要签名，运营者已收到通知；签名范围不变」）；owner 通知 `task.execution_failed`（同样措辞）；运营者频道 `ops.alert`（`NotifyService.operatorAlert`）。这两个代码不再触发 `integrity_alert`。
+
+**连续付费失败暂停**：同一 `(mandateId, stepIndex)` 在**当前意图**创建以来，「到过发送提交点（`raw_tx_hash` / `tx_hash` 非空）且以 REVERTED / EXPIRED / FAILED 结束」的作业数 ≥ `EXECUTION_PAID_FAILURE_PAUSE_N` → 不再自动重签换新交易（`AUTO_RECERTIFY` 不再排队），时间线 `execution_retry_paused`，开 `execution_failed` 轮次（`onExecutionFailed` 的 info 增 `consecutivePaidFailures`、`autoRetryPaused`，轮次摘要写明「自动重试已暂停，先复查报价 / 额度 / 策略」）。Agent 提交新意图即重新计数。网络超时后**查询或原样重播同一笔已签名交易**（执行者 `recover`）不产生新作业、不新增预留、不计入失败次数（测试覆盖）。
+
+#### 12.15.2 permit 发放值复核修正（运营者确认 2026-10-02）
+
+`submitPermit` 原比较 `value > permitValue(max(required, value))` 永不成立。改为 **`value ≤ permitValue(当前需要量)`**（当前需要量 + 0.5%），超出 → **422 `permit_value_too_high`**（`details: {valueRaw, requiredRaw, maxRaw}`），向导重新 GET 取一份按当前账本算的请求。需要量不变或变大时照常 202。
+
+#### 12.15.3 D-092 简化：可卖出全部持仓（运营者确认 2026-10-02）
+
+- 硬边界不变：签名里的 `scope.allowSell` 与可卖股票集合；`recipient == owner` 仍强制。取消「只卖本任务买入的部分」的服务侧限制，无额外开关。
+- **合约上限**：`sellCapRaw = 委托时 owner 链上该股票余额 + ceil(budgetMicroUsd × 2 × 10^tokenDecimals / P6)`（core `sellCapRaw({…, holdingsRaw})`，返回另含 `boughtCapRaw` / `holdingsRaw`）。生成卖出草案时经 RPC 读余额；读不到 → 该项 `failed{balance_unavailable}`，`POST /v1/tasks/:id/delegation/refresh` 重试。permit 额度账本按新的 `budgetCap` 计（卖出 permit 的发放值相应变大）。
+- **服务上限**：`amountInRaw ≤ 链上余额`（以及 ≤ 卖出授权每笔上限 / 剩余 / 步数 / 期限）。超出链上余额 → **`BALANCE_INSUFFICIENT`**（`detail.side = "sell"`、`balanceRaw`、`sellableRaw`）；链上余额读不到 → `SELL_EXCEEDS_TASK_POSITION`（`detail.note = "balance_unavailable…"`）。`SELL_EXCEEDS_TASK_POSITION` 码名保留兼容，**不再因「超出本任务净持仓」出现**。
+- `GET /v1/tasks/:id/positions`：`netRaw`（本任务买入 − 卖出）照旧，仅供参考；**`sellableRaw` = 链上余额**（< `POSITION_DUST_RAW` 视为 0）。完成规则不变（买入授权 COMPLETED 且本任务净持仓 < dust）。
+- 文案：卖出项说明「允许在到期前按策略把 AAPLx 换回 USDG，最多可卖出你的全部持仓；换回的 USDG 只进你的钱包」+ 期限 / 合约上限 / PlanGuard / 可撤销；托管 Agent 提示词第 8 条改为「按策略在签名范围内卖出，最多到全部持仓，绝不超过链上余额 / `sellableRaw`」。

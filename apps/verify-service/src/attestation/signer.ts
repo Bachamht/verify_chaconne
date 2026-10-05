@@ -1,7 +1,7 @@
 /**
  * 证明签名身份（D-080 例外范围内唯一的一把私钥）。
  * 只暴露 signCertificate()：签 EIP-712 VerificationCertificate；不提供任意消息/交易签名接口。
- * 无私钥时 = 禁用签发（服务仍可出报告，但 prepare-execution 返回 503 attestation_disabled）。
+ * 无私钥时 = 禁用签发（服务仍可出报告；PlanGuard 步骤证书不签发）。单笔 Guard 执行（prepare-execution）10/5 起已删除。
  */
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import {
