@@ -9,6 +9,7 @@ import type { Locale } from "./i18n";
 import { groupDecimal, rawToDecimal } from "./numbers";
 import { STATUS_META, taskUiStatus, type Tone } from "./status";
 import { activityCategory, type ActivityCategory } from "./activityCategory";
+import { hasReasonText, reasonText } from "./reasons";
 
 export interface ActivityLike {
   id: string | number;
@@ -81,6 +82,17 @@ function knownSystemNote(note: string, ctx: Ctx): string | null {
   return null;
 }
 
+/**
+ * Agent 回报写进时间线时，服务端在原话后面拼了「 · wants: …」「 · next check <ISO>」（verify-service tasks/service.ts）。
+ * 下次检查时间另有结构化字段（data.nextCheckAt），页面单独显示，不再留在原话里；想要的数据换成本地化的一行。
+ */
+export function agentQuoteText(note: string, locale: Locale): string {
+  let t = note.replace(/\s+·\s+next check \S+\s*$/i, "");
+  const w = t.match(/\s+·\s+wants: (.+)$/i);
+  if (w) t = `${t.slice(0, w.index).trimEnd()}\n${L(locale, "想要的数据：", "Wants: ")}${w[1]!.trim()}`;
+  return t.trim();
+}
+
 export function humanizeActivity(it: ActivityLike, ctx: Ctx): ActivityText {
   const { locale } = ctx;
   const d = (it.data ?? {}) as Record<string, unknown>;
@@ -140,21 +152,36 @@ export function humanizeActivity(it: ActivityLike, ctx: Ctx): ActivityText {
       }
       return { ...base, text: L(locale, "Agent 的意图通过核验，已签发步骤证书", "The agent's intent passed the checks; a step certificate was issued"), tone: "brand" };
     }
+    // 观察任务的意图：核验照做，但不签证书、不交易。note 是系统写的（不是 Agent 原话），不当原话引用（10/5 走查）
+    case "intent_simulated": {
+      if ((m = note.match(/simulated: (buy|sell) (\S+) (\d+)/))) {
+        const out = assetBy(ctx, m[2]);
+        const side = m[1] === "sell";
+        const amt = side ? amount(m[3], out) : amount(m[3], stable(ctx));
+        return { ...base, text: side ? L(locale, `Agent 提出卖出 ${amt ?? m[2]}，核验通过（观察：不签证书、不交易）`, `The agent proposed selling ${amt ?? m[2]}; checks passed (observation: no certificate, no trade)`) : L(locale, `Agent 提出用 ${amt ?? "—"} 买入 ${out?.displaySymbol ?? m[2]}，核验通过（观察：不签证书、不交易）`, `The agent proposed buying ${out?.displaySymbol ?? m[2]} with ${amt ?? "—"}; checks passed (observation: no certificate, no trade)`), tone: "brand", category: m[1] === "sell" ? "intent_sell" : "intent_buy" };
+      }
+      return { ...base, text: L(locale, "Agent 的意图通过核验（观察：不签证书、不交易）", "The agent's intent passed the checks (observation: no certificate, no trade)"), tone: "brand" };
+    }
+    case "intent_rejected": {
+      const codes = (note.match(/\(([A-Z0-9_, ]+)\)\s*$/)?.[1] ?? "").split(/,\s*/).filter(Boolean);
+      const why = codes.map((c) => (hasReasonText(c) ? reasonText(c, locale) : null)).filter(Boolean).join(L(locale, "；", "; "));
+      return { ...base, text: why ? L(locale, `Agent 的意图没通过核验，没有签发：${why}`, `The agent's intent failed the checks; nothing was issued: ${why}`) : L(locale, "Agent 的意图没通过核验，没有签发", "The agent's intent failed the checks; nothing was issued"), tone: "bad", category: "intent_rejected" };
+    }
     case "step_confirmed": {
       const idx = num(d["stepIndex"]);
       const amt = amount(d["spentRaw"], stable(ctx));
       return { ...base, text: L(locale, `${idx !== null ? `第 ${idx + 1} 步` : "一步"}已在链上成交${amt ? `，花费 ${amt}` : ""}`, `${idx !== null ? `Step ${idx + 1}` : "A step"} filled on-chain${amt ? `, spent ${amt}` : ""}`), tone: "ok", category: "fill_confirmed" };
     }
     case "agent_declined":
-      return { ...base, text: L(locale, "Agent 决定这一轮先不交易", "The agent decided not to trade this round"), quote: note || null, category: "waiting" };
+      return { ...base, text: L(locale, "Agent 决定这一轮先不交易", "The agent decided not to trade this round"), quote: agentQuoteText(note, locale) || null, category: "waiting" };
     case "agent_ended":
-      return { ...base, text: L(locale, "Agent 判断任务完成，结束了任务", "The agent judged the task done and ended it"), quote: note || null, tone: "ok", category: "ended" };
+      return { ...base, text: L(locale, "Agent 判断任务完成，结束了任务", "The agent judged the task done and ended it"), quote: agentQuoteText(note, locale) || null, tone: "ok", category: "ended" };
     case "agent_needs_evidence":
-      return { ...base, text: L(locale, "Agent 在等数据，先不行动", "The agent is waiting for data before acting"), quote: note || null, category: "waiting_data" };
+      return { ...base, text: L(locale, "Agent 在等数据，先不行动", "The agent is waiting for data before acting"), quote: agentQuoteText(note, locale) || null, category: "waiting_data" };
   }
   // 兜底：类别文案；Agent 自己写的话作为原话，系统原文不显示
   const fallback = CATEGORY_TEXT[category] ?? CATEGORY_TEXT.other!;
-  return { ...base, text: fallback[locale], quote: agentSpoke && note ? note : null, tone: category === "exec_failed" || category === "intent_rejected" ? "bad" : category === "fill_confirmed" ? "ok" : "neutral" };
+  return { ...base, text: fallback[locale], quote: agentSpoke && note ? agentQuoteText(note, locale) || null : null, tone: category === "exec_failed" || category === "intent_rejected" ? "bad" : category === "fill_confirmed" ? "ok" : "neutral" };
 }
 
 const CATEGORY_TEXT: Partial<Record<ActivityCategory, { zh: string; en: string }>> = {

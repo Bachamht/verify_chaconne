@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { eventName } from "@/components/features/events/eventText";
 import { contextProvenance, marketContext, marketEvents, notReady, type TaskCreated } from "@/lib/api-v2";
 import { lab, type ReplayView } from "../lab/api";
 import { stocksOf, type AssetsLoad } from "@/lib/assets";
@@ -87,7 +88,7 @@ export function FirstMinute({ assets, onRetryAssets }: { assets: AssetsLoad; onR
               {!chosen && <p>{zh ? "先选一个资产（登记表不可达时无法列出）。" : "Pick an asset first (none listed while the registry is unreachable)."}</p>}
               {events.kind === "busy" && <LoadingState />}
               {events.kind === "nr" && (notReady({ status: events.http, data: null }) ? <NotReady what="GET /v1/events" status={events.http} /> : <p>HTTP {events.http}</p>)}
-              {events.kind === "ok" && (relEvents.length === 0 ? <p>{zh ? "没有与这个模板相关的排期事件。" : "No scheduled event relevant to this playbook."}</p> : <ul className="ag-list">{relEvents.slice(0, 5).map((e) => <li key={e.id}><span className="text-sm">{e.name}</span> <span className="mono text-[11px] text-fg-3">{e.dateLocal} · {e.kind}</span> <Pill tone={e.status === "confirmed" ? "ok" : "warn"}>{e.status}</Pill> {e.datePrecision !== "exact" && <Pill tone="neutral">{zh ? `精度 ${e.datePrecision}` : `${e.datePrecision} precision`}</Pill>}</li>)}</ul>)}
+              {events.kind === "ok" && (relEvents.length === 0 ? <p>{zh ? "没有与这个模板相关的排期事件。" : "No scheduled event relevant to this playbook."}</p> : <ul className="ag-list">{relEvents.slice(0, 5).map((e) => <li key={e.id}><span className="text-sm">{eventName(e, locale)}</span> <span className="mono text-[11px] text-fg-3">{e.dateLocal} · {e.kind}</span> <Pill tone={e.status === "confirmed" ? "ok" : "warn"}>{e.status}</Pill> {e.datePrecision !== "exact" && <Pill tone="neutral">{zh ? `精度 ${e.datePrecision}` : `${e.datePrecision} precision`}</Pill>}</li>)}</ul>)}
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-fg-3">{zh ? "条件" : "Conditions"}</p>

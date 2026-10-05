@@ -94,7 +94,7 @@ function ConsoleBody({ id, data, fixture, account, reload }: { id: string; data:
   return (
     <div className="flex flex-col gap-6" data-testid="task-console-v8">
       {fixture ? <p className="rounded-md border border-warn/35 bg-warn/12 px-3 py-2 text-sm text-fg-1">{zh ? "这是示例数据（FIXTURE），不是你的真实任务。" : "This is fixture data, not a real task of yours."}</p> : null}
-      <ConsoleHeader id={id} title={taskTitle(task, view.params, assets, locale)} status={st.status} mode={st.mode} updatedAt={task.updatedAt} primary={primary} stoppable={st.stoppable} paused={st.paused} sim={sim} fixture={fixture} controls={controls} revokeMandate={revokeMandate} onDelegate={focusWizard} hostedExecutor={!sim && runtime?.executorMode === "hosted"} request={request} />
+      <ConsoleHeader id={id} title={taskTitle(task, view.params, assets, locale)} status={st.status} mode={st.mode} updatedAt={task.updatedAt} createdAt={task.createdAt ?? null} primary={primary} stoppable={st.stoppable} paused={st.paused} sim={sim} fixture={fixture} controls={controls} revokeMandate={revokeMandate} onDelegate={focusWizard} hostedExecutor={!sim && runtime?.executorMode === "hosted"} request={request} />
       {!mode ? <p className="text-sm text-warn">{zh ? "任务模式尚未返回，暂时无法确认这是观察任务还是真实资金任务。" : "The task mode has not arrived; we cannot yet confirm whether this is an observation or a live task."}</p> : null}
       <KpiRow>
         <StatTile label={zh ? "已成交步数" : "Steps filled"} value={facts.plannedSteps !== null ? <span>{extras.stepsV7?.buy?.confirmed ?? view.steps?.confirmed ?? "—"} / {facts.plannedSteps}</span> : null} hint={sim ? (zh ? "观察任务不成交" : "Observation does not trade") : undefined} />

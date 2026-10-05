@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Activity, ArrowLeft, ArrowRight, BookOpenCheck, CalendarClock, FlaskConical, LoaderCircle, Scale, ShieldCheck, Target, CircleHelp } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { eventName } from "@/components/features/events/eventText";
 import { assetByKey, defaultStable, loadAssets, stablesOf, stocksOf, type AssetEntry, type AssetsLoad } from "@/lib/assets";
 import { agentTasks, marketContext, type AgentTradeIntent, type CreateTaskBody } from "@/lib/api-v2";
 import { apiError } from "@/lib/errors";
@@ -238,7 +239,7 @@ function OnboardingFlow({ account }: { account: string }) {
         <h2 className="start-section-title">{zh ? "Agent 被叫醒时看到的" : "What the agent sees when woken"}</h2>
         <ul className="start-reasons">
           <li><Target size={18} aria-hidden /><div><strong>{zh ? "这一轮" : "This turn"}</strong><p>{turn?.summary ?? "—"}</p></div></li>
-          <li><CalendarClock size={18} aria-hidden /><div><strong>{zh ? "未来 48 小时关注的事件" : "Watched events in the next 48 hours"}</strong><p>{watched.length ? watched.map(({ e, at }) => `${e.name} (${e.kind}) ${at <= nowMs ? (zh ? "预定时间已到，实际值要自己核实" : "scheduled time passed; verify the actual value yourself") : formatTime(new Date(at).toISOString(), locale)}`).join("；") : (zh ? "窗口内没有关注的事件；到点或改期时会再叫。" : "No watched event in the window; it will be woken when one arrives or is rescheduled.")}</p></div></li>
+          <li><CalendarClock size={18} aria-hidden /><div><strong>{zh ? "未来 48 小时关注的事件" : "Watched events in the next 48 hours"}</strong><p>{watched.length ? watched.map(({ e, at }) => `${eventName(e, locale)} (${e.kind}) ${at <= nowMs ? (zh ? "预定时间已到，实际值要自己核实" : "scheduled time passed; verify the actual value yourself") : formatTime(new Date(at).toISOString(), locale)}`).join("；") : (zh ? "窗口内没有关注的事件；到点或改期时会再叫。" : "No watched event in the window; it will be woken when one arrives or is rescheduled.")}</p></div></li>
           <li><ShieldCheck size={18} aria-hidden /><div><strong>{zh ? "签过的范围" : "Signed scope"}</strong><p>{zh ? `允许 ${cAssets.map((s) => s.displaySymbol).join(" / ")}，总额 ${formatMoney(cTotal)}，每笔 ≤ ${formatMoney(cPer)}，最多 ${cTask.steps} 笔。超出这些的意图会被拒。` : `Allowed ${cAssets.map((s) => s.displaySymbol).join(" / ")}, total ${formatMoney(cTotal)}, ≤ ${formatMoney(cPer)} per tranche, up to ${cTask.steps} tranches. Intents outside this are rejected.`}</p></div></li>
         </ul>
         <h2 className="start-section-title">{zh ? "你的决定（三种都是正常结果，提交后看下方时间线）" : "Your decision (all three are normal outcomes; the timeline below records each one)"}</h2>

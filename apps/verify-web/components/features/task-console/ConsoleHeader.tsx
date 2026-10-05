@@ -26,12 +26,14 @@ import type { useTaskControls } from "./useTaskControls";
 
 type Confirm = "pause" | "cancel" | "delete" | "revoke" | "decide" | null;
 
-export function ConsoleHeader({ id, title, status, mode, updatedAt, primary, stoppable, paused, sim, fixture, controls, revokeMandate, onDelegate, hostedExecutor, request }: {
+export function ConsoleHeader({ id, title, status, mode, updatedAt, createdAt, primary, stoppable, paused, sim, fixture, controls, revokeMandate, onDelegate, hostedExecutor, request }: {
   id: string;
   title: string;
   status: UiStatus;
   mode: UiStatus | null;
   updatedAt: string | null;
+  /** 同名任务靠创建时间区分（目标在签名范围里，改不了名） */
+  createdAt: string | null;
   primary: PrimaryAction;
   stoppable: boolean;
   paused: boolean;
@@ -91,7 +93,13 @@ export function ConsoleHeader({ id, title, status, mode, updatedAt, primary, sto
         breadcrumb={<Link href="/agent/tasks" className="hover:text-fg-1">{zh ? "任务" : "Tasks"}</Link>}
         title={title}
         badges={<><StatusBadge status={status} />{mode ? <StatusBadge status={mode} /> : null}</>}
-        description={updatedAt ? <>{zh ? "更新于 " : "Updated "}<Timestamp at={updatedAt} mode="rel" /></> : undefined}
+        description={updatedAt || createdAt ? (
+          <>
+            {createdAt ? <>{zh ? "创建于 " : "Created "}<Timestamp at={createdAt} mode="abs" /></> : null}
+            {createdAt && updatedAt ? <span aria-hidden="true"> · </span> : null}
+            {updatedAt ? <>{zh ? "更新于 " : "Updated "}<Timestamp at={updatedAt} mode="rel" /></> : null}
+          </>
+        ) : undefined}
         actions={<>
           {primary === "delegate" ? <Button onClick={onDelegate}>{zh ? "完成委托签名" : "Finish delegation"}</Button> : null}
           {primary === "resume" ? <AsyncButton pending={controls.pending === "resume"} pendingLabel={zh ? "恢复中…" : "Resuming…"} disabled={busy} onClick={() => void controls.resume()}>{zh ? "继续运行" : "Resume"}</AsyncButton> : null}

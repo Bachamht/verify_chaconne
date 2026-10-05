@@ -48,7 +48,8 @@ export function taskColumns(locale: Locale): ColumnDef<TaskRow, unknown>[] {
       cell: ({ row }) => (
         <span className="flex min-w-0 flex-col leading-tight">
           <span className="truncate font-medium text-fg-1" title={row.original.title}>{row.original.title}</span>
-          <span className="truncate text-xs text-fg-3">{row.original.stocks.join(" + ") || "—"}</span>
+          {/* 目标写进了签名范围，改不了名；同名任务靠创建时间区分（10/5 走查：两个同名真实任务） */}
+          <span className="truncate text-xs text-fg-3">{row.original.stocks.join(" + ") || "—"} · {L(locale, "创建于 ", "created ")}<Timestamp at={row.original.createdAt} mode="abs" /></span>
         </span>
       ),
     },
@@ -65,7 +66,10 @@ export function TaskCard({ row, locale, onOpen }: { row: TaskRow; locale: Locale
   return (
     <button type="button" onClick={() => onOpen(row.id)} className="flex w-full min-w-0 flex-col gap-2 rounded-md border bg-card p-3 text-left hover:border-line-strong">
       <span className="flex min-w-0 items-start justify-between gap-2">
-        <span className="min-w-0 text-sm font-medium break-words text-fg-1">{row.title}</span>
+        <span className="flex min-w-0 flex-col">
+          <span className="text-sm font-medium break-words text-fg-1">{row.title}</span>
+          <span className="text-xs text-fg-3">{L(locale, "创建于 ", "Created ")}<Timestamp at={row.createdAt} mode="abs" /></span>
+        </span>
         <StatusBadge status={row.status} />
       </span>
       <span className="text-sm"><NextCell row={row} locale={locale} /></span>

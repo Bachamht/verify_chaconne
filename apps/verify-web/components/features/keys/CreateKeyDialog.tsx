@@ -4,7 +4,7 @@
  * 签名与提交逻辑与 v7 ApiKeys 一致（apiKeyIssueMessage + apiKeys.issue）。
  */
 import { useState } from "react";
-import { TriangleAlert } from "lucide-react";
+import { Check, Copy, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { apiKeyIssueMessage, API_KEY_LABEL_MAX_CHARS } from "@chaconne/core/verify";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { AsyncButton } from "@/components/kit/AsyncButton";
 import { CodeBlock } from "@/components/kit/CodeBlock";
 import { FormField } from "@/components/kit/FormField";
-import { Hash } from "@/components/kit/Hash";
+import { useCopy } from "@/components/kit/useCopy";
 import { apiKeys } from "@/lib/api-v2";
 import { useI18n } from "@/lib/i18n";
 import { walletErrorText } from "@/lib/i18n.execute";
@@ -29,6 +29,14 @@ export function CreateKeyDialog({ open, onOpenChange, account, onIssued }: { ope
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fresh, setFresh] = useState<{ apiKey: string; label: string } | null>(null);
+  // 10/5 走查：原来框里只显示截断的 key（和列表里的提示一样）、复制只有一个小图标，用户以为拿不到完整 key。
+  // 现在完整显示、大按钮复制；没复制就点关闭，先提醒一次。
+  const [copiedOnce, setCopiedOnce] = useState(false);
+  const [warnClose, setWarnClose] = useState(false);
+  const { copied, copy } = useCopy({ zh: "key 已复制", en: "Key copied" });
+  async function copyKey() {
+    if (fresh && (await copy(fresh.apiKey))) { setCopiedOnce(true); setWarnClose(false); }
+  }
 
   async function issue() {
     setPending(true);
@@ -55,7 +63,7 @@ export function CreateKeyDialog({ open, onOpenChange, account, onIssued }: { ope
   // 明文 key 显示期间只能点「我已保存」关闭：Esc / 点遮罩 / 右上角关闭都拦掉（onOpenChange 只在外部关闭时触发）。
   function close(o: boolean) {
     if (pending) return;
-    if (!o) { setFresh(null); setError(null); }
+    if (!o) { setFresh(null); setError(null); setCopiedOnce(false); setWarnClose(false); }
     onOpenChange(o);
   }
 
@@ -77,9 +85,12 @@ export function CreateKeyDialog({ open, onOpenChange, account, onIssued }: { ope
               </DialogDescription>
             </DialogHeader>
             <div className="flex min-w-0 flex-col gap-4">
-              <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border bg-surface-2 px-3 py-2">
-                <span className="text-sm text-fg-2">{zh ? "key" : "Key"}</span>
-                <Hash value={fresh.apiKey} kind="id" head={12} tail={6} />
+              <div className="flex min-w-0 flex-col gap-2 rounded-md border bg-surface-2 p-3">
+                <span className="text-xs text-fg-2">{zh ? "完整的 key（点一下全选）" : "Full key (click to select)"}</span>
+                <code className="block cursor-text font-mono text-sm break-all text-fg-1 select-all" translate="no" data-testid="fresh-api-key">{fresh.apiKey}</code>
+                <Button className="self-start" onClick={() => void copyKey()}>
+                  {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? (zh ? "已复制" : "Copied") : (zh ? "复制 key" : "Copy key")}
+                </Button>
               </div>
               <div className="flex min-w-0 flex-col gap-1.5">
                 <p className="text-xs text-fg-2">{zh ? "MCP 客户端配置" : "MCP client config"}</p>
@@ -90,8 +101,9 @@ export function CreateKeyDialog({ open, onOpenChange, account, onIssued }: { ope
                 <CodeBlock code={curlExample(fresh.apiKey, owner)} language="shell" maxHeight="sm" />
               </div>
             </div>
+            {warnClose ? <p role="alert" className="text-sm text-warn">{zh ? "你还没复制 key。关掉之后就再也看不到了；确定已经存好，再点一次关闭。" : "You have not copied the key. Once closed it cannot be shown again; if you have stored it, click close once more."}</p> : null}
             <DialogFooter>
-              <Button onClick={() => close(false)}>{zh ? "我已保存，关闭" : "I saved it, close"}</Button>
+              <Button variant={copiedOnce ? "default" : "outline"} onClick={() => { if (!copiedOnce && !warnClose) { setWarnClose(true); return; } close(false); }}>{zh ? "我已保存，关闭" : "I saved it, close"}</Button>
             </DialogFooter>
           </>
         ) : (

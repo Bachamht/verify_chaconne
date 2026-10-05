@@ -820,6 +820,8 @@ export interface MarketEvent {
   id: string;
   kind: EventKind;
   name: string;
+  /** 英文显示名（可选；2026-10-05 起 crowsnest 都给）。只用于展示：不进证据、不算修订（改它不要求 revision+1） */
+  nameEn?: string;
   /** EARNINGS / CORPORATE_ACTION 必填；宏观为空数组 */
   underlyingIds: string[];
   /** datePrecision='exact' 时必填 */

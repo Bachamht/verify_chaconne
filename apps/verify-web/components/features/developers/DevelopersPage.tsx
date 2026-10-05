@@ -3,7 +3,10 @@
  * /developers（v8，方案 §5.10）：左目录 + 内容区 Tabs（REST / A2MCP / MCP / SDK / 合约，?tab= 写 URL）。
  * 营销壳；只用 kit + shadcn，不引 lib/api、lib/wallet（D6：开发者页不加载 viem）。
  */
+import Link from "next/link";
+import { KeyRound } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/kit/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/lib/i18n";
@@ -51,6 +54,7 @@ function DevelopersBody() {
     <>
       <PageHeader
         title={t("dev_h")}
+        actions={<Button asChild><Link href="/agent/keys"><KeyRound className="size-4" aria-hidden="true" />{zh ? "获取 Agent 接入 key" : "Get an agent API key"}</Link></Button>}
         description={<>{zh ? "机器可读的入口：" : "Machine-readable entry points: "}<a className={`${LINK} font-mono`} href="/openapi.json">/openapi.json</a> · <a className={`${LINK} font-mono`} href="/llms.txt">/llms.txt</a> · <a className={`${LINK} font-mono`} href="/.well-known/agent-card.json">/.well-known/agent-card.json</a>{zh ? "（描述全部端点、哪些免 key、怎么调用）。" : " (every endpoint, which ones need no key, how to call)."}</>}
       />
       <div className="grid min-w-0 gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">

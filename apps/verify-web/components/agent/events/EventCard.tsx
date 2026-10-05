@@ -15,6 +15,7 @@ import { Pill } from "@/components/ui";
 import { copy, reasonText6, type CopyKey } from "./copy";
 import { eventDesk, type ActionResult, type EventDeskItem } from "./api";
 import { primaryActionOf } from "./primaryAction";
+import { eventName } from "@/components/features/events/eventText";
 
 const ACTIONS: ImpactAction[] = ["view_evidence", "create_watch_task", "keep_plan", "wait_by_rule", "pause_issuance", "preview_new_plan"];
 const REL_TONE: Record<string, "ok" | "warn" | "info" | "neutral"> = { company_direct: "info", user_rule: "warn", macro_research: "neutral" };
@@ -60,7 +61,7 @@ export function EventCard({ item, owner, highlighted, tasksReady, assets = [] }:
             <Pill tone={REL_TONE[impact.relation] ?? "neutral"}>{c(relKey)}</Pill>
             <Pill tone="neutral">{c(`rv_${item.relevance}` as CopyKey)}</Pill>
           </div>
-          <h3 className="mt-2 text-base font-semibold">{ev.name}</h3>
+          <h3 className="mt-2 text-base font-semibold">{eventName(ev, locale)}</h3>
           <p className="text-sm text-fg-2">
             {when} · {c(`precision_${ev.datePrecision}` as CopyKey)}
             {ev.sessionHint ? ` · ${c(`hint_${ev.sessionHint}` as CopyKey)}` : ""}

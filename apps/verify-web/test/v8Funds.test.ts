@@ -175,7 +175,10 @@ describe("路由与锚点", () => {
     expect(read("components/features/funds/BudgetGroups.tsx")).toContain('useQueryState("group")');
     const dlg = read("components/features/keys/CreateKeyDialog.tsx");
     expect(dlg).toContain("关掉就再也看不到");
-    expect(dlg).toContain('<Hash value={fresh.apiKey} kind="id"');
+    // 10/5 走查：新 key 必须完整显示并有「复制 key」按钮，不能只给截断的 key（和列表提示一样就等于拿不到）
+    expect(dlg).toContain('data-testid="fresh-api-key">{fresh.apiKey}</code>');
+    expect(dlg).toContain("复制 key");
+    expect(dlg).not.toContain("<Hash value={fresh.apiKey}");
   });
 });
 

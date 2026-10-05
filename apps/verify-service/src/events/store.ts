@@ -91,6 +91,10 @@ export class EventStore {
       const existing = row ? (row.eventJson as MarketEventV7) : null;
       const merged = mergeEventRevision(existing, incoming, receivedAt.toISOString());
       if (!merged) {
+        // 显示名（nameEn）不算修订：revision 没涨但英文名变了 / 第一次给 → 只静默更新展示字段，不记变更、不发通知、不开 Agent 轮次
+        if (existing && incoming.nameEn && existing.nameEn !== incoming.nameEn) {
+          await this.db.update(verifyEvents).set({ eventJson: { ...existing, nameEn: incoming.nameEn } }).where(eq(verifyEvents.id, incoming.id));
+        }
         res.unchanged.push(incoming.id);
         continue;
       }

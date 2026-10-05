@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import sample from "./fixtures/activity-live-task.json";
-import { actorLabel, humanizeActivity, type AssetLite } from "@/lib/activityText";
+import { actorLabel, agentQuoteText, humanizeActivity, type AssetLite } from "@/lib/activityText";
 
 const ASSETS: AssetLite[] = [
   { assetKey: "eip155:196:0x4ae46a509f6b1d9056937ba4500cb143933d2dc8", tokenAddress: "0x4ae46a509f6b1d9056937ba4500cb143933d2dc8", tokenDecimals: 6, displaySymbol: "USDG", role: "stable_input" },
@@ -53,5 +53,33 @@ describe("activity humanizer on a real live task (tsk_c7bc…)", () => {
     expect(t.text).toBe("其它活动");
     expect(t.quote).toBeNull();
     expect(actorLabel("executor:hosted", "zh")).toBe("平台执行");
+  });
+});
+
+describe("agent quote: server suffixes are not part of the agent's words (10/5)", () => {
+  it("drops the raw next-check ISO and localizes wants", () => {
+    const note = "Market closed; holding cash until the open. · next check 2026-10-05T14:30:00.000Z";
+    expect(agentQuoteText(note, "zh")).toBe("Market closed; holding cash until the open.");
+    expect(agentQuoteText("Need the CPI print · wants: CPI actual; core CPI · next check 2026-10-06T12:30:00Z", "zh")).toBe("Need the CPI print\n想要的数据：CPI actual; core CPI");
+    expect(agentQuoteText("No suffix here.", "en")).toBe("No suffix here.");
+    const h = humanizeActivity({ id: 1, at: "2026-10-05T07:00:00Z", actor: "agent:hosted", type: "agent_declined", note }, { locale: "zh", assets: [], stableAssetKey: null });
+    expect(h.quote).not.toContain("next check");
+  });
+});
+
+describe("own-agent intents in observation mode (10/5): system notes are not quoted as the agent's words", () => {
+  const base = { at: "2026-10-05T08:47:20Z", actor: "agent:byo" };
+  it("simulated intent: amount converted, no quote", () => {
+    const h = humanizeActivity({ id: 1, ...base, type: "intent_simulated", note: "intent int_c14222bb4a0b39220f023fa9 simulated: buy AAPLx 20000000" }, { locale: "zh", assets: ASSETS, stableAssetKey: ASSETS[0]!.assetKey });
+    expect(h.text).toContain("Agent 提出用 20 USDG 买入 AAPLx");
+    expect(h.text).toContain("观察");
+    expect(h.quote).toBeNull();
+  });
+  it("rejected intent: reason code translated, no quote, no raw ids", () => {
+    const h = humanizeActivity({ id: 2, ...base, type: "intent_rejected", note: "intent int_c154243fa482edfc899b827d rejected: scope, execution (INTENT_OUT_OF_SCOPE)" }, { locale: "zh", assets: ASSETS, stableAssetKey: ASSETS[0]!.assetKey });
+    expect(h.text).toContain("超出了你签的范围");
+    expect(h.text).not.toMatch(/int_|INTENT_OUT_OF_SCOPE/);
+    expect(h.quote).toBeNull();
+    expect(h.tone).toBe("bad");
   });
 });

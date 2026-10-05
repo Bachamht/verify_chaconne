@@ -11,6 +11,7 @@ import type { ImpactsResponse } from "@/components/agent/events/api";
 import { useI18n } from "@/lib/i18n";
 import { requestIdOf, type Resource } from "@/lib/useResource";
 import { upcomingEvents } from "./model";
+import { eventName } from "@/components/features/events/eventText";
 
 /** 下一个事件：未来 7 天里最近的 3 个（含倒计时）；与你的任务 / 持仓有关的标出来 */
 export function EventsPanel({ res }: { res: Resource<ImpactsResponse> }) {
@@ -35,7 +36,7 @@ export function EventsPanel({ res }: { res: Resource<ImpactsResponse> }) {
               return (
                 <li key={e.id} className="flex min-w-0 flex-col gap-1 py-3">
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <p className="min-w-0 truncate text-sm font-medium text-fg-1" title={e.name}>{e.name}</p>
+                    <p className="min-w-0 truncate text-sm font-medium text-fg-1" title={eventName(e, locale)}>{eventName(e, locale)}</p>
                     <Countdown to={at} className="shrink-0 text-sm text-fg-1" doneLabel={zh ? "进行中" : "Now"} />
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-3">

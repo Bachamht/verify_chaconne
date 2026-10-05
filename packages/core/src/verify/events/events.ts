@@ -33,6 +33,7 @@ export function validateMarketEvent(raw: unknown): EventSchemaResult {
   if (typeof o["id"] !== "string" || !/^[^:\s]+:[A-Z_0-9]+:\d{4}-\d{2}-\d{2}:[^\s]+$/.test(o["id"])) errors.push({ path: "id", code: "expected_source:kind:date:slug" });
   if (!KINDS.has(String(o["kind"]))) errors.push({ path: "kind", code: "unknown_kind" });
   if (typeof o["name"] !== "string") errors.push({ path: "name", code: "expected_string" });
+  if (o["nameEn"] !== undefined && (typeof o["nameEn"] !== "string" || !o["nameEn"].trim() || o["nameEn"].length > 200)) errors.push({ path: "nameEn", code: "expected_string_1_to_200" });
   const underlying = o["underlyingIds"];
   if (!Array.isArray(underlying) || underlying.some((u) => typeof u !== "string")) errors.push({ path: "underlyingIds", code: "expected_string_array" });
   else if (COMPANY_EVENT_KINDS.has(o["kind"] as EventKind) && underlying.length === 0) errors.push({ path: "underlyingIds", code: "required_for_company_event" });
@@ -63,6 +64,7 @@ export function validateMarketEvent(raw: unknown): EventSchemaResult {
     id: o["id"] as string,
     kind: o["kind"] as EventKind,
     name: o["name"] as string,
+    ...(typeof o["nameEn"] === "string" ? { nameEn: (o["nameEn"] as string).trim() } : {}),
     underlyingIds: [...(underlying as string[])],
     scheduledAtUtc: (o["scheduledAtUtc"] as string | null) ?? null,
     dateLocal: o["dateLocal"] as string,
